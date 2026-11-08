@@ -58,7 +58,7 @@ const getContentTypeBadge = (type: ContentType) => {
       return {
         label: 'Карусель',
         icon: Layers,
-        bg: 'bg-slate-100 text-slate-700 border-slate-200/80',
+        bg: 'bg-slate-100 text-slate-700 border-slate-200/60',
       };
     case 'storytell':
       return {
@@ -340,13 +340,13 @@ export default function App() {
   const totalMailingsCount = students.reduce((sum, s) => sum + s.totalMailings, 0);
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800" style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+    <div className="min-h-screen bg-[#fcfdfd] text-slate-800" style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
 
       {/* ─── Sidebar + Main Layout ─── */}
       <div className="flex">
 
         {/* Sidebar */}
-        <aside className="hidden md:flex flex-col w-64 min-h-screen bg-white border-r border-slate-200/70 px-4 py-8 fixed left-0 top-0 z-20">
+        <aside className="hidden md:flex flex-col w-64 min-h-screen bg-white border-r border-slate-200/60 px-4 py-8 fixed left-0 top-0 z-20">
           <div className="px-3 mb-6">
             <div className="text-xs font-medium tracking-wider text-slate-400 uppercase font-mono mb-1">Mentor Hub</div>
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Панель наставника</h1>
@@ -355,7 +355,7 @@ export default function App() {
 
           {/* Active Telegram Bot Indicator */}
           <div className="px-3 mb-5">
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between shadow-xs">
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -499,7 +499,7 @@ export default function App() {
         </aside>
 
         {/* Mobile top bar */}
-        <div className="md:hidden fixed top-0 left-0 right-0 z-20 bg-white border-b border-slate-200/80 px-4 py-3.5">
+        <div className="md:hidden fixed top-0 left-0 right-0 z-20 bg-white border-b border-slate-200/60 px-4 py-3.5">
           <div className="flex items-center justify-between mb-2.5">
             <div>
               <div className="text-xs font-medium tracking-wider text-slate-400 uppercase font-mono">Mentor Hub</div>
@@ -520,7 +520,7 @@ export default function App() {
                 showToast('Активный профиль: Ксения (Главный ментор)');
               }}
               className={`py-1.5 rounded-lg transition cursor-pointer text-center ${
-                activeAdmin === 'Ксения' ? 'bg-white text-slate-900 font-bold shadow-xs' : 'text-slate-500'
+                activeAdmin === 'Ксения' ? 'bg-white text-slate-900 font-bold ' : 'text-slate-500'
               }`}
             >
               Ксения
@@ -531,7 +531,7 @@ export default function App() {
                 showToast('Активный профиль: Катя (Куратор потока)');
               }}
               className={`py-1.5 rounded-lg transition cursor-pointer text-center ${
-                activeAdmin === 'Катя' ? 'bg-white text-slate-900 font-bold shadow-xs' : 'text-slate-500'
+                activeAdmin === 'Катя' ? 'bg-white text-slate-900 font-bold ' : 'text-slate-500'
               }`}
             >
               Катя
@@ -574,14 +574,14 @@ export default function App() {
                       }
                     </p>
                   </div>
-                  <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-slate-600 bg-white border border-slate-200/80 px-3.5 py-2 rounded-xl">
+                  <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-slate-600 bg-white border border-slate-200/60 px-3.5 py-2 rounded-xl">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
                     <span>AI-выжимка рефлексий активна</span>
                   </div>
                 </div>
 
                 {reports.length === 0 ? (
-                  <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/70 p-8">
+                  <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/60 p-8">
                     <PartyPopper className="w-10 h-10 text-slate-400 mx-auto mb-3" strokeWidth={1.5} />
                     <p className="text-lg font-bold text-slate-800">Все черновики проверены</p>
                     <p className="text-sm text-slate-500 mt-1">Всё проверено. Ученицы получили обратную связь в чатах.</p>
@@ -596,7 +596,7 @@ export default function App() {
                 ) : (
                   <div className="space-y-5">
                     {reports.map((r) => (
-                      <div key={r.id} className="bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
+                      <div key={r.id} className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
                         {/* Header */}
                         <div className="px-6 py-4.5 flex items-center justify-between border-b border-slate-100">
                           <div className="flex items-center gap-3.5">
@@ -622,7 +622,7 @@ export default function App() {
                             href={`https://t.me/${r.tgUsername}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 px-3.5 py-1.5 rounded-xl transition"
+                            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200/60 px-3.5 py-1.5 rounded-xl transition"
                           >
                             <span>В Telegram</span>
                             <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.8} />
@@ -693,7 +693,7 @@ export default function App() {
 
                           {/* AI Reflection Summary (3 Bullets) */}
                           {r.reflectionSummary && (
-                            <div className="py-4 px-5 rounded-xl bg-slate-50/70 border border-slate-200/80 text-sm space-y-2.5">
+                            <div className="py-4 px-5 rounded-xl bg-slate-50/70 border border-slate-200/60 text-sm space-y-2.5">
                               <div className="flex items-center justify-between">
                                 <span className="text-slate-900 font-semibold text-xs uppercase tracking-wider flex items-center gap-2">
                                   <Sparkles className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
@@ -942,7 +942,7 @@ export default function App() {
                       <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-neutral-200"></span>выходной</span>
                     </div>
 
-                    <div className="bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
+                    <div className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
                       <div className="overflow-x-auto">
                         <table className="w-full text-left">
                           <thead>
@@ -1029,7 +1029,7 @@ export default function App() {
                                                       : 'bg-slate-100 text-slate-400 border-slate-200'
                                                   }`}
                                                 >
-                                                  {isDone ? '✔' : num}
+                                                  {isDone ? <Check className="w-2.5 h-2.5 text-emerald-700 stroke-[3]" /> : num}
                                                 </span>
                                               );
                                             })}
@@ -1128,7 +1128,7 @@ export default function App() {
                 {/* VIEW 2: DEDICATED ZOOM CALLS TRACKER BOARD (8 STAGES) */}
                 {studentsViewMode === 'zooms' && (
                   <div className="space-y-6">
-                    <div className="bg-white rounded-2xl border border-slate-200/70 p-5 flex items-center justify-between">
+                    <div className="bg-white rounded-2xl border border-slate-200/60 p-5 flex items-center justify-between">
                       <div>
                         <h3 className="text-lg font-bold text-slate-900">Мастер-трекер Zoom-созвонов потока</h3>
                         <p className="text-xs sm:text-sm text-slate-500 mt-0.5">8 обязательных модульных созвонов для каждой ученицы (проведенные отмечены зелёным)</p>
@@ -1155,7 +1155,7 @@ export default function App() {
                         ];
 
                         return (
-                          <div key={s.id} className="bg-white rounded-2xl border border-slate-200/70 p-6">
+                          <div key={s.id} className="bg-white rounded-2xl border border-slate-200/60 p-6">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 mb-4">
                               <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-800 flex items-center justify-center font-bold text-sm">
@@ -1210,7 +1210,7 @@ export default function App() {
                                         ? 'bg-emerald-50/60 border-emerald-200 text-slate-800'
                                         : isNext
                                         ? 'bg-indigo-50/50 border-indigo-200 text-slate-800'
-                                        : 'bg-slate-50 border-slate-200/70 text-slate-400'
+                                        : 'bg-slate-50 border-slate-200/60 text-slate-400'
                                     }`}
                                   >
                                     <div className="flex items-center justify-between mb-1.5">
@@ -1265,7 +1265,7 @@ export default function App() {
                   </div>
 
                   {/* Period Switcher */}
-                  <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200/80 rounded-xl shadow-xs self-start lg:self-auto">
+                  <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200/60 rounded-xl self-start lg:self-auto">
                     {[
                       { id: 'week', label: 'За неделю' },
                       { id: 'month', label: 'За месяц' },
@@ -1318,12 +1318,12 @@ export default function App() {
                     {/* Compact KPI strip (Behance Minimal - no screen hogging) */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                       {/* Metric 1: Revenue */}
-                      <div className="bg-white rounded-2xl border border-slate-200/70 p-5">
+                      <div className="bg-white rounded-2xl border border-slate-200/60 p-5">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Выручка потока</span>
                           <TrendingUp className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
                         </div>
-                        <div className="text-2xl font-bold text-slate-900 mt-2">
+                        <div className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">
                           {analyticsPeriod === 'week' ? '223 000 ₽' : analyticsPeriod === 'month' ? '742 000 ₽' : '895 000 ₽'}
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
@@ -1332,12 +1332,12 @@ export default function App() {
                       </div>
 
                       {/* Metric 2: Reels */}
-                      <div className="bg-white rounded-2xl border border-slate-200/70 p-5">
+                      <div className="bg-white rounded-2xl border border-slate-200/60 p-5">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Reels проверено</span>
                           <Video className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
                         </div>
-                        <div className="text-2xl font-bold text-slate-900 mt-2">
+                        <div className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">
                           {analyticsPeriod === 'week' ? '17' : analyticsPeriod === 'month' ? '57' : (totalReelsCount || '66')}
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
@@ -1346,17 +1346,17 @@ export default function App() {
                       </div>
 
                       {/* Metric 3: Average Ticket */}
-                      <div className="bg-white rounded-2xl border border-slate-200/70 p-5">
+                      <div className="bg-white rounded-2xl border border-slate-200/60 p-5">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Средний чек</span>
                           <BarChart3 className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
                         </div>
-                        <div className="text-2xl font-bold text-slate-900 mt-2">40 600 ₽</div>
+                        <div className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">40 600 ₽</div>
                         <div className="text-xs text-slate-500 mt-1">вырос с 4 800 ₽ на старте</div>
                       </div>
 
                       {/* Metric 4: Direct Mailings */}
-                      <div className="bg-white rounded-2xl border border-slate-200/70 p-5">
+                      <div className="bg-white rounded-2xl border border-slate-200/60 p-5">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Рассылок (Direct)</span>
                           <MessageSquare className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
@@ -1371,7 +1371,7 @@ export default function App() {
                     </div>
 
                     {/* Secondary Inline Bar: Carousels, Storytells, New Clients */}
-                    <div className="bg-white rounded-2xl border border-slate-200/70 p-4 px-6 flex flex-wrap items-center justify-between gap-4 text-sm">
+                    <div className="bg-white rounded-2xl border border-slate-200/60 p-4 px-6 flex flex-wrap items-center justify-between gap-4 text-sm">
                       <div className="flex items-center gap-2">
                         <Layers className="w-4 h-4 text-slate-400" strokeWidth={1.8} />
                         <span className="text-slate-500">Карусели:</span>
@@ -1400,7 +1400,7 @@ export default function App() {
                     </div>
 
                     {/* Telegram Ingestion Status Notice */}
-                    <div className="bg-slate-50 border border-slate-200/70 rounded-2xl p-4.5 flex items-start gap-3.5">
+                    <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4.5 flex items-start gap-3.5">
                       <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0 mt-0.5">
                         <Sparkles className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
                       </div>
@@ -1410,7 +1410,7 @@ export default function App() {
                     </div>
 
                     {/* Cohort Performance Breakdown Table */}
-                    <div className="bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
+                    <div className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
                       <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                         <div className="text-sm font-bold text-slate-900 uppercase tracking-wider">Сводная динамика учениц потока</div>
                         <div className="text-xs text-slate-500">Нажмите на строку для детального разбора</div>
@@ -1420,7 +1420,7 @@ export default function App() {
                           <thead>
                             <tr className="bg-slate-50/70 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-100">
                               <th className="px-6 py-3.5">Ученица</th>
-                              <th className="px-4 py-3.5">Доход {analyticsPeriod === 'week' ? '(неделя)' : analyticsPeriod === 'month' ? '(месяц)' : '(Точка А ➔ Б)'}</th>
+                              <th className="px-4 py-3.5">Доход {analyticsPeriod === 'week' ? '(неделя)' : analyticsPeriod === 'month' ? '(месяц)' : '(Точка А → Б)'}</th>
                               <th className="px-4 py-3.5">Средний чек</th>
                               <th className="px-4 py-3.5">Контент (Р/К/С)</th>
                               <th className="px-4 py-3.5">Рассылки</th>
@@ -1433,7 +1433,7 @@ export default function App() {
                             {students.map(s => {
                               const period = s.periodStats?.[analyticsPeriod];
                               const incomeDisplay = analyticsPeriod === 'all'
-                                ? `${s.initialIncome.toLocaleString('ru-RU')} ➔ ${s.currentIncome.toLocaleString('ru-RU')} ₽`
+                                ? `${s.initialIncome.toLocaleString('ru-RU')} → ${s.currentIncome.toLocaleString('ru-RU')} ₽`
                                 : `${(period?.income ?? s.currentIncome).toLocaleString('ru-RU')} ₽`;
                               const reelsDisp = period?.reels ?? s.totalReels;
                               const carouselsDisp = period?.carousels ?? s.totalCarousels;
@@ -1529,7 +1529,7 @@ export default function App() {
                     </div>
 
                     {/* Detailed Student Analytics Dossier */}
-                    <div className="bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
+                    <div className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
                       {/* Student Card Top Bar */}
                       <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
@@ -1596,7 +1596,7 @@ export default function App() {
                           Контент и активность из Telegram ({analyticsPeriod === 'week' ? 'за неделю' : analyticsPeriod === 'month' ? 'за месяц' : 'за весь период'}):
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-6 gap-4">
-                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/70">
+                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/60">
                             <div className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                               <Video className="w-3.5 h-3.5 text-indigo-500" />
                               <span>Reels</span>
@@ -1607,7 +1607,7 @@ export default function App() {
                             <div className="text-xs text-slate-400">из {selectedStudent.totalReels} за поток</div>
                           </div>
 
-                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/70">
+                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/60">
                             <div className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                               <Layers className="w-3.5 h-3.5 text-indigo-500" />
                               <span>Карусели</span>
@@ -1618,7 +1618,7 @@ export default function App() {
                             <div className="text-xs text-slate-400">из {selectedStudent.totalCarousels} за поток</div>
                           </div>
 
-                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/70">
+                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/60">
                             <div className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                               <Smartphone className="w-3.5 h-3.5 text-indigo-500" />
                               <span>Сторителлы</span>
@@ -1629,7 +1629,7 @@ export default function App() {
                             <div className="text-xs text-slate-400">из {selectedStudent.totalStorytells} за поток</div>
                           </div>
 
-                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/70">
+                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/60">
                             <div className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                               <MessageSquare className="w-3.5 h-3.5 text-indigo-500" />
                               <span>Рассылки</span>
@@ -1640,7 +1640,7 @@ export default function App() {
                             <div className="text-xs text-slate-400">из {selectedStudent.totalMailings} за поток</div>
                           </div>
 
-                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/70">
+                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/60">
                             <div className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                               <Users className="w-3.5 h-3.5 text-indigo-500" />
                               <span>Новые клиенты</span>
@@ -1651,7 +1651,7 @@ export default function App() {
                             <div className="text-xs text-slate-400">из {selectedStudent.totalNewClients} за поток</div>
                           </div>
 
-                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/70">
+                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/60">
                             <div className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                               <CheckCheck className="w-3.5 h-3.5 text-emerald-500" />
                               <span>Дисциплина</span>
@@ -1752,7 +1752,7 @@ export default function App() {
                         <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
                           Предпросмотр кейса для Instagram Stories:
                         </div>
-                        <div className="bg-white border border-slate-200/80 rounded-xl p-4 font-mono text-xs sm:text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+                        <div className="bg-white border border-slate-200/60 rounded-xl p-4 font-mono text-xs sm:text-sm text-slate-700 whitespace-pre-line leading-relaxed">
                           {`КЕЙС ПОТОКА: ${selectedStudent.fullName}\n` +
                           `Ниша: ${selectedStudent.niche}\n\n` +
                           `Точка А: ${selectedStudent.initialIncome.toLocaleString('ru-RU')} ₽ -> Точка Б: ${selectedStudent.currentIncome.toLocaleString('ru-RU')} ₽ (РОСТ x${calculateMultiplier(selectedStudent.currentIncome, selectedStudent.initialIncome)}!)\n` +
@@ -1783,7 +1783,7 @@ export default function App() {
                   <div className="flex items-center gap-2.5 self-start sm:self-auto">
                     <button
                       onClick={() => showToast('Регламент синхронизирован с Telegram-ботом')}
-                      className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                      className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5"
                       title="Синхронизировать правила с Telegram-ботом"
                     >
                       <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
@@ -1796,7 +1796,7 @@ export default function App() {
                           setNewRule({ hashtag: '#', title: '', description: '', required: false, example: '' });
                           setIsAddingRule(true);
                         }}
-                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Добавить хэштег</span>
@@ -1810,7 +1810,7 @@ export default function App() {
                           setNewScript({ title: '', description: '', text: '' });
                           setIsAddingScript(true);
                         }}
-                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Добавить скрипт</span>
@@ -1820,12 +1820,12 @@ export default function App() {
                 </div>
 
                 {/* Subtab Segmented Bar (Full width, zero wrapping) */}
-                <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200/80 rounded-xl shadow-xs mb-7 overflow-x-auto">
+                <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200/60 rounded-xl mb-7 overflow-x-auto">
                   <button
                     onClick={() => setTasksSubTab('hashtags')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
                       tasksSubTab === 'hashtags'
-                        ? 'bg-slate-900 text-white shadow-xs'
+                        ? 'bg-slate-900 text-white '
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
@@ -1836,7 +1836,7 @@ export default function App() {
                     onClick={() => setTasksSubTab('scripts')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
                       tasksSubTab === 'scripts'
-                        ? 'bg-slate-900 text-white shadow-xs'
+                        ? 'bg-slate-900 text-white '
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
@@ -1847,7 +1847,7 @@ export default function App() {
                     onClick={() => setTasksSubTab('system')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
                       tasksSubTab === 'system'
-                        ? 'bg-slate-900 text-white shadow-xs'
+                        ? 'bg-slate-900 text-white '
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
@@ -1863,8 +1863,8 @@ export default function App() {
                       {rules.map(rule => (
                         <div
                           key={rule.id}
-                          className={`bg-white rounded-2xl border border-slate-200/80 p-6 transition-all hover:border-slate-300 space-y-3.5 group ${
-                            rule.enabled === false ? 'opacity-50 bg-slate-50/60 border-dashed' : ''
+                          className={`bg-white rounded-2xl border border-slate-100 p-6 sm:p-7 space-y-3.5 transition group hover:border-slate-200 ${
+                            rule.enabled === false ? 'opacity-60 bg-slate-50/50' : ''
                           }`}
                         >
                           <div className="flex items-center justify-between">
@@ -1878,8 +1878,8 @@ export default function App() {
                             </div>
 
                             <div className="flex items-center gap-2">
-                              {/* Hover quick action buttons: Pencil & Trash */}
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 mr-1">
+                              {/* Hover quick action buttons: Pencil, Trash & Toggle Switch (hidden in resting state) */}
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 mr-1">
                                 <button
                                   onClick={() => setEditingRule(rule)}
                                   title="Редактировать регламент хэштега"
@@ -1894,41 +1894,39 @@ export default function App() {
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
+                                <button
+                                  onClick={() => toggleRuleEnabled(rule.id)}
+                                  title={rule.enabled !== false ? 'Выключить приём хэштега в Telegram-боте' : 'Включить приём хэштега'}
+                                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ml-1 ${
+                                    rule.enabled !== false ? 'bg-indigo-600' : 'bg-slate-200'
+                                  }`}
+                                >
+                                  <span
+                                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                                      rule.enabled !== false ? 'translate-x-4' : 'translate-x-0'
+                                    }`}
+                                  />
+                                </button>
                               </div>
 
-                              {/* Required / Optional pill badge - 100% matches Behance design */}
+                              {/* Required / Optional pill badge - ALWAYS VISIBLE, 100% matches Behance design */}
                               <button
                                 onClick={() => toggleRuleRequired(rule.id)}
                                 title="Нажмите для смены статуса (обязательно / по факту)"
-                                className={`text-xs px-3 py-1 rounded-full font-medium transition cursor-pointer ${
+                                className={`text-xs px-3 py-1 rounded-full font-medium transition cursor-pointer select-none ${
                                   rule.required
-                                    ? 'bg-rose-50 text-rose-500 border border-rose-100 hover:bg-rose-100/80'
-                                    : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200/70'
+                                    ? 'bg-rose-50 text-rose-500 hover:bg-rose-100/80'
+                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200/70'
                                 }`}
                               >
                                 {rule.required ? 'обязательно' : 'по факту'}
                               </button>
-
-                              {/* Clean, quiet toggle switch */}
-                              <button
-                                onClick={() => toggleRuleEnabled(rule.id)}
-                                title={rule.enabled !== false ? 'Выключить приём хэштега в Telegram-боте' : 'Включить приём хэштега'}
-                                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                  rule.enabled !== false ? 'bg-indigo-600' : 'bg-slate-200'
-                                }`}
-                              >
-                                <span
-                                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                                    rule.enabled !== false ? 'translate-x-4' : 'translate-x-0'
-                                  }`}
-                                />
-                              </button>
                             </div>
                           </div>
 
-                          <p className="text-sm sm:text-base text-slate-600 leading-relaxed">{rule.description}</p>
+                          <p className="text-sm text-slate-500 leading-relaxed font-normal">{rule.description}</p>
 
-                          <div className="text-xs sm:text-sm text-slate-500 font-mono bg-slate-50/70 border border-slate-100 rounded-xl px-4 py-3 flex items-center gap-2">
+                          <div className="text-xs sm:text-sm text-slate-500 font-mono bg-[#F8FAFC] border border-slate-100/80 rounded-xl px-5 py-3.5 flex items-center gap-2">
                             <span className="text-slate-400 font-normal">Пример:</span>
                             <span className="text-slate-800 font-semibold">{rule.example}</span>
                           </div>
@@ -1942,7 +1940,7 @@ export default function App() {
                 {tasksSubTab === 'scripts' && (
                   <div className="space-y-4">
                     {/* Category Filter Bar */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/60">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {['Все', 'Кураторские', 'Продажи', 'Удержание'].map(cat => (
                           <button
@@ -1967,7 +1965,7 @@ export default function App() {
                         .map((sc, idx) => (
                         <div
                           key={idx}
-                          className="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4 flex flex-col justify-between hover:border-slate-300 transition group shadow-xs"
+                          className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 flex flex-col justify-between hover:border-slate-300 transition group"
                         >
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between gap-2">
@@ -2035,7 +2033,7 @@ export default function App() {
                 {tasksSubTab === 'system' && (
                   <div className="space-y-6">
                     {/* Schedule & Deadlines Card */}
-                    <div className="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4 hover:border-slate-300 transition shadow-xs">
+                    <div className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 hover:border-slate-300 transition">
                       <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                         <Clock className="w-5 h-5 text-indigo-600" />
                         <div>
@@ -2067,7 +2065,7 @@ export default function App() {
                                 systemSettings.morningPushEnabled ? 'bg-indigo-600' : 'bg-slate-200'
                               }`}
                             >
-                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
                                 systemSettings.morningPushEnabled ? 'translate-x-4' : 'translate-x-0'
                               }`} />
                             </button>
@@ -2096,7 +2094,7 @@ export default function App() {
                                 systemSettings.eveningReminderEnabled ? 'bg-indigo-600' : 'bg-slate-200'
                               }`}
                             >
-                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
                                 systemSettings.eveningReminderEnabled ? 'translate-x-4' : 'translate-x-0'
                               }`} />
                             </button>
@@ -2125,7 +2123,7 @@ export default function App() {
                                 systemSettings.strictDeadlineEnabled ? 'bg-indigo-600' : 'bg-slate-200'
                               }`}
                             >
-                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
                                 systemSettings.strictDeadlineEnabled ? 'translate-x-4' : 'translate-x-0'
                               }`} />
                             </button>
@@ -2154,7 +2152,7 @@ export default function App() {
                                 systemSettings.saturdayPollEnabled ? 'bg-indigo-600' : 'bg-slate-200'
                               }`}
                             >
-                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
                                 systemSettings.saturdayPollEnabled ? 'translate-x-4' : 'translate-x-0'
                               }`} />
                             </button>
@@ -2173,7 +2171,7 @@ export default function App() {
                               systemSettings.sundayRestEnabled ? 'bg-indigo-600' : 'bg-slate-200'
                             }`}
                           >
-                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
                               systemSettings.sundayRestEnabled ? 'translate-x-4' : 'translate-x-0'
                             }`} />
                           </button>
@@ -2182,7 +2180,7 @@ export default function App() {
                     </div>
 
                     {/* AI Engine & Anti-Fraud Protection */}
-                    <div className="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4 hover:border-slate-300 transition shadow-xs">
+                    <div className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 hover:border-slate-300 transition">
                       <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                         <ShieldCheck className="w-5 h-5 text-indigo-600" />
                         <div>
@@ -2204,7 +2202,7 @@ export default function App() {
                               systemSettings.aiWhisperEnabled ? 'bg-indigo-600' : 'bg-slate-200'
                             }`}
                           >
-                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
                               systemSettings.aiWhisperEnabled ? 'translate-x-4' : 'translate-x-0'
                             }`} />
                           </button>
@@ -2222,7 +2220,7 @@ export default function App() {
                               systemSettings.aiSummaryEnabled ? 'bg-indigo-600' : 'bg-slate-200'
                             }`}
                           >
-                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
                               systemSettings.aiSummaryEnabled ? 'translate-x-4' : 'translate-x-0'
                             }`} />
                           </button>
@@ -2240,7 +2238,7 @@ export default function App() {
                               systemSettings.antiFraudDedupEnabled ? 'bg-indigo-600' : 'bg-slate-200'
                             }`}
                           >
-                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
                               systemSettings.antiFraudDedupEnabled ? 'translate-x-4' : 'translate-x-0'
                             }`} />
                           </button>
@@ -2258,7 +2256,7 @@ export default function App() {
                               systemSettings.zoomAutoDetectEnabled ? 'bg-indigo-600' : 'bg-slate-200'
                             }`}
                           >
-                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
                               systemSettings.zoomAutoDetectEnabled ? 'translate-x-4' : 'translate-x-0'
                             }`} />
                           </button>
@@ -2277,7 +2275,7 @@ export default function App() {
 {/* ─── MODAL 1: DAY STATUS & DETAILS EDITOR ─── */}
       {editingDay && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Редактировать статус дня</h3>
@@ -2381,7 +2379,7 @@ export default function App() {
       {/* ─── MODAL 2: STUDENT PROFILE & FINANCIALS EDITOR ─── */}
       {editingStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Редактирование профиля ученицы</h3>
@@ -2541,7 +2539,7 @@ export default function App() {
       {/* ─── MODAL 3: SCRIPT EDITOR / CREATOR ─── */}
       {(editingScript || isAddingScript) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
@@ -2651,7 +2649,7 @@ export default function App() {
       {/* ─── MODAL 4: HASHTAG RULE EDITOR / CREATOR ─── */}
       {(editingRule || isAddingRule) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
@@ -2791,7 +2789,7 @@ export default function App() {
       {/* ─── MODAL 5: SCHEDULE TIME EDITOR ─── */}
       {editingScheduleTime && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Изменить время расписания</h3>
@@ -2842,7 +2840,7 @@ export default function App() {
 
       {/* Toast */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl text-sm font-semibold shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl text-sm font-semibold">
           {toastMessage}
         </div>
       )}
