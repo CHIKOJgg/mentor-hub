@@ -1,0 +1,1805 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mentor Hub — Панель наставника</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 antialiased min-h-screen text-[15px]">
+
+  <div class="flex">
+    <!-- Desktop Sidebar -->
+    <aside class="hidden md:flex flex-col w-64 min-h-screen bg-white border-r border-slate-200/70 px-4 py-8 fixed left-0 top-0 z-20">
+      <div class="px-3 mb-6">
+        <div class="text-[11px] font-medium tracking-wider text-slate-400 uppercase font-mono mb-1">Mentor Hub</div>
+        <h1 class="text-xl font-bold text-slate-900 tracking-tight">Панель наставника</h1>
+        <p class="text-xs text-slate-500 mt-0.5">Рабочий трекер куратора</p>
+      </div>
+
+      <!-- Bot Status Widget -->
+      <div class="px-3 mb-5">
+        <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2">
+          <div class="flex items-center justify-between text-xs font-semibold text-slate-700">
+            <span class="flex items-center gap-1.5">
+              <span class="relative flex h-2 w-2">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>Telegram-бот</span>
+            </span>
+            <span class="text-[10px] text-emerald-600 font-bold uppercase bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">онлайн</span>
+          </div>
+          <div class="text-[11px] font-mono text-slate-500 truncate">@nastav_beauty_bot</div>
+        </div>
+      </div>
+
+      <nav class="flex-1 space-y-1">
+        <button onclick="switchTab('inbox')" id="side-inbox" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm bg-neutral-900 text-white font-medium transition cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+          <span class="font-medium text-[15px]">На проверку</span>
+          <span id="badge-count" class="ml-auto text-xs font-bold px-2 py-0.5 rounded-md bg-white/20 text-white">3</span>
+        </button>
+
+        <button onclick="switchTab('students')" id="side-students" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm text-neutral-500 hover:text-neutral-900 hover:bg-slate-50 transition cursor-pointer font-medium">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          <span class="font-medium text-[15px]">Ученицы</span>
+        </button>
+
+        <button onclick="switchTab('analytics')" id="side-analytics" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm text-neutral-500 hover:text-neutral-900 hover:bg-slate-50 transition cursor-pointer font-medium">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          <span class="font-medium text-[15px]">Аналитика</span>
+        </button>
+
+        <button onclick="switchTab('tasks')" id="side-tasks" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm text-neutral-500 hover:text-neutral-900 hover:bg-slate-50 transition cursor-pointer font-medium">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/></svg>
+          <span class="font-medium text-[15px]">Хэштеги</span>
+        </button>
+      </nav>
+
+      <!-- Quick Curator Tools -->
+      <div class="px-3 pt-3 border-t border-slate-100 space-y-1.5">
+        <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Инструменты куратора:</div>
+        <button onclick="switchTab('students')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer flex items-center justify-between">
+          <span>Zoom-созвоны (8 этапов)</span>
+          <span class="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-mono font-bold">Zoom</span>
+        </button>
+        <button onclick="switchTab('students')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer flex items-center justify-between">
+          <span>Радар удержания (риски)</span>
+          <span class="text-[10px] bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded font-mono font-bold">Риски</span>
+        </button>
+        <button onclick="switchTab('tasks')" class="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer flex items-center justify-between">
+          <span>Шпаргалки и скрипты</span>
+          <span class="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono font-bold">5 шт</span>
+        </button>
+      </div>
+
+      <!-- 2 Admins Session Switcher -->
+      <div class="px-3 pt-5 border-t border-slate-100 mt-4 space-y-3.5">
+        <div class="flex items-center justify-between text-xs text-slate-400 font-medium uppercase tracking-wider">
+          <span>Доступ админа:</span>
+          <span class="text-emerald-600 font-medium normal-case flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>онлайн
+          </span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-1.5 bg-slate-100/80 p-1 rounded-xl text-xs font-medium">
+          <button onclick="setAdmin('Ксения')" id="admin-ksenia" class="py-1.5 rounded-lg transition cursor-pointer text-center bg-white text-slate-900 font-bold">
+            Ксения
+          </button>
+          <button onclick="setAdmin('Катя')" id="admin-katya" class="py-1.5 rounded-lg transition cursor-pointer text-center text-slate-500 hover:text-slate-900">
+            Катя
+          </button>
+        </div>
+
+        <div class="flex items-center gap-3 pt-1">
+          <div id="admin-avatar" class="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">К</div>
+          <div>
+            <div id="admin-name" class="text-sm font-semibold text-slate-900">Ксения</div>
+            <div id="admin-role" class="text-xs text-slate-500">Главный наставник</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Mobile Header -->
+    <div class="md:hidden fixed top-0 left-0 right-0 z-20 bg-white border-b border-slate-200/80 px-4 py-3.5">
+      <div class="flex items-center justify-between mb-2.5">
+        <div>
+          <div class="text-[10px] font-medium tracking-wider text-slate-400 uppercase font-mono">Mentor Hub</div>
+          <h1 class="text-base font-bold text-slate-900 tracking-tight">Панель наставника</h1>
+          <div id="mob-admin-label" class="text-xs text-slate-500">Ксения · Поток Ноябрь</div>
+        </div>
+        <button onclick="showToast('Синхронизировано')" class="text-slate-500 hover:text-slate-900 transition p-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </button>
+      </div>
+
+
+      <div class="flex gap-2 overflow-x-auto pb-1">
+        <button onclick="switchTab('inbox')" class="mob-tab px-3.5 py-2 rounded-lg text-xs font-semibold bg-neutral-900 text-white">На проверку</button>
+        <button onclick="switchTab('students')" class="mob-tab px-3.5 py-2 rounded-lg text-xs font-semibold text-neutral-500 hover:text-neutral-900 hover:bg-slate-100">Ученицы</button>
+        <button onclick="switchTab('analytics')" class="mob-tab px-3.5 py-2 rounded-lg text-xs font-semibold text-neutral-500 hover:text-neutral-900 hover:bg-slate-100">Аналитика</button>
+        <button onclick="switchTab('tasks')" class="mob-tab px-3.5 py-2 rounded-lg text-xs font-semibold text-neutral-500 hover:text-neutral-900 hover:bg-slate-100">Хэштеги</button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="flex-1 md:ml-64 pt-28 md:pt-0">
+      <div class="max-w-5xl mx-auto px-6 sm:px-10 py-10">
+
+        <!-- TAB: INBOX -->
+        <section id="tab-inbox" class="space-y-5">
+          <div class="mb-8 flex items-center justify-between">
+            <div>
+              <h2 class="text-2xl font-bold tracking-tight text-slate-900">На проверку</h2>
+              <p id="inbox-subtitle" class="text-sm sm:text-base text-slate-500 mt-1">3 отчёта ожидают проверки</p>
+            </div>
+            <div class="hidden sm:flex items-center gap-2 text-xs font-medium text-slate-600 bg-white border border-slate-200/80 px-3.5 py-2 rounded-xl">
+              <svg class="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+              <span>AI-выжимка рефлексий активна</span>
+            </div>
+          </div>
+
+          <div id="cards-container" class="space-y-5">
+            <!-- Card 1 -->
+            <div id="card-1" class="bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
+              <div class="px-6 py-4.5 flex items-center justify-between border-b border-slate-100">
+                <div class="flex items-center gap-3.5">
+                  <div class="w-10 h-10 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold shrink-0">МГ</div>
+                  <div>
+                    <div class="text-base sm:text-lg font-bold text-slate-900">Милана Горохова</div>
+                    <div class="flex items-center gap-2.5 mt-0.5">
+                      <span class="text-xs sm:text-sm text-slate-500">@milana_gorohova</span>
+                      <span class="text-xs font-medium px-2 py-0.5 rounded-md border bg-emerald-50 text-emerald-700 border-emerald-100">в срок</span>
+                    </div>
+                  </div>
+                </div>
+                <a href="https://t.me/milana_gorohova" target="_blank" class="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 px-3.5 py-1.5 rounded-xl transition">
+                  <span>В Telegram</span>
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                </a>
+              </div>
+
+              <div class="px-6 py-5 space-y-4.5">
+                <!-- Content drafts -->
+                <div class="space-y-2">
+                  <div class="text-xs font-medium text-slate-400 uppercase tracking-wider">Сдано на проверку:</div>
+                  <div class="flex items-center justify-between py-2.5 px-3.5 rounded-xl bg-slate-50 border border-slate-100 text-[15px]">
+                    <div class="flex items-center gap-2.5 truncate mr-2">
+                      <span class="text-xs font-semibold px-2.5 py-1 rounded-md border shrink-0 inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border-indigo-100/80">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                        <span>Reels</span>
+                      </span>
+                      <span class="text-slate-800 font-medium truncate">Reels #14 — продающий хук для стилиста</span>
+                    </div>
+                    <span class="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold shrink-0 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                      <span>черновик</span>
+                    </span>
+                  </div>
+                  <div class="flex items-center justify-between py-2.5 px-3.5 rounded-xl bg-slate-50 border border-slate-100 text-[15px]">
+                    <div class="flex items-center gap-2.5 truncate mr-2">
+                      <span class="text-xs font-semibold px-2.5 py-1 rounded-md border shrink-0 inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 border-slate-200/80">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                        <span>Карусель</span>
+                      </span>
+                      <span class="text-slate-800 font-medium truncate">Карусель: 5 ошибок при подборе капсулы (PDF)</span>
+                    </div>
+                    <span class="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold shrink-0 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                      <span>черновик</span>
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Metrics -->
+                <div class="flex flex-wrap gap-8 text-[15px] py-2 border-y border-slate-100">
+                  <div>
+                    <span class="text-slate-400 block text-xs font-medium uppercase tracking-wider">Продажи</span>
+                    <span class="font-bold text-slate-900 text-lg">45 000 ₽</span>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 block text-xs font-medium uppercase tracking-wider">Рассылки:</span>
+                    <span class="font-bold text-slate-900 text-lg">25 шт</span>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 block text-xs font-medium uppercase tracking-wider">Новые клиенты:</span>
+                    <span class="font-bold text-indigo-600 text-lg">+2</span>
+                  </div>
+                </div>
+
+                <!-- AI Reflection Summary -->
+                <div class="py-4 px-5 rounded-xl bg-slate-50/70 border border-slate-200/80 text-[15px] space-y-2.5">
+                  <div class="flex items-center justify-between">
+                    <span class="text-slate-900 font-semibold text-xs uppercase tracking-wider flex items-center gap-2">
+                      <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                      <span>Выжимка рефлексии (AI)</span>
+                    </span>
+                    <a href="https://t.me/milana_gorohova" target="_blank" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-1">
+                      <span>Перейти к аудио в TG</span>
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 17L17 7m0 0H7m10 0v10"/></svg>
+                    </a>
+                  </div>
+                  <div class="space-y-1.5 text-slate-700 leading-relaxed">
+                    <div class="flex items-start gap-2.5">
+                      <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 shrink-0"></span>
+                      <span><strong class="text-slate-900 font-semibold">Эмоции / состояние:</strong> Бодрое состояние, вдохновлена первой крупной продажей за неделю</span>
+                    </div>
+                    <div class="flex items-start gap-2.5">
+                      <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 shrink-0"></span>
+                      <span><strong class="text-slate-900 font-semibold">Действия:</strong> Отправлено 25 рассылок по скрипту #3, смонтирован черновик Reels и карусель на 5 слайдов</span>
+                    </div>
+                    <div class="flex items-start gap-2.5 bg-indigo-50/80 border border-indigo-100 p-3 rounded-lg mt-2 text-indigo-950 font-medium">
+                      <svg class="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                      <span>Клиентка хочет рассрочку на 3 месяца через банк, предложить внутреннюю рассрочку?</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex gap-2.5 pt-2">
+                  <input type="text" id="reply-1" placeholder="Написать правки ученице..." class="flex-1 text-[15px] px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-500 transition placeholder:text-slate-400">
+                  <button onclick="approveReport('card-1', 'Милана Горохова', 'reply-1')" class="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition cursor-pointer">
+                    Одобрить
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 2 -->
+            <div id="card-2" class="bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
+              <div class="px-6 py-4.5 flex items-center justify-between border-b border-slate-100">
+                <div class="flex items-center gap-3.5">
+                  <div class="w-10 h-10 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold shrink-0">АП</div>
+                  <div>
+                    <div class="text-base sm:text-lg font-bold text-slate-900">Аня Петрова</div>
+                    <div class="flex items-center gap-2.5 mt-0.5">
+                      <span class="text-xs sm:text-sm text-slate-500">@anya_petrova_style</span>
+                      <span class="text-xs font-medium px-2 py-0.5 rounded-md border bg-amber-50 text-amber-700 border-amber-100">опоздание 15м</span>
+                    </div>
+                  </div>
+                </div>
+                <a href="https://t.me/anya_petrova_style" target="_blank" class="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 px-3.5 py-1.5 rounded-xl transition">
+                  <span>В Telegram</span>
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                </a>
+              </div>
+
+              <div class="px-6 py-5 space-y-4.5">
+                <div class="space-y-2">
+                  <div class="text-xs font-medium text-slate-400 uppercase tracking-wider">Сдано на проверку:</div>
+                  <div class="flex items-center justify-between py-2.5 px-3.5 rounded-xl bg-slate-50 border border-slate-100 text-[15px]">
+                    <div class="flex items-center gap-2.5 truncate mr-2">
+                      <span class="text-xs font-semibold px-2.5 py-1 rounded-md border shrink-0 inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border-indigo-100/80">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                        <span>Reels</span>
+                      </span>
+                      <span class="text-slate-800 font-medium truncate">Reels #8 — разбор страха продаж</span>
+                    </div>
+                    <span class="flex items-center gap-1.5 text-rose-600 text-xs font-semibold shrink-0 bg-rose-50 border border-rose-100 px-2.5 py-1 rounded-md">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                      <span>дубликат (04 ноября)</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap gap-8 text-[15px] py-2 border-y border-slate-100">
+                  <div>
+                    <span class="text-slate-400 block text-xs font-medium uppercase tracking-wider">Продажи</span>
+                    <span class="font-bold text-slate-900 text-lg">0 ₽</span>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 block text-xs font-medium uppercase tracking-wider">Рассылки:</span>
+                    <span class="font-bold text-slate-900 text-lg">12 шт</span>
+                  </div>
+                </div>
+
+                <!-- AI Reflection Summary -->
+                <div class="py-4 px-5 rounded-xl bg-slate-50/70 border border-slate-200/80 text-[15px] space-y-2.5">
+                  <div class="flex items-center justify-between">
+                    <span class="text-slate-900 font-semibold text-xs uppercase tracking-wider flex items-center gap-2">
+                      <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                      <span>Выжимка рефлексии (AI)</span>
+                    </span>
+                    <a href="https://t.me/anya_petrova_style" target="_blank" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-1">
+                      <span>Перейти к аудио в TG</span>
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 17L17 7m0 0H7m10 0v10"/></svg>
+                    </a>
+                  </div>
+                  <div class="space-y-1.5 text-slate-700 leading-relaxed">
+                    <div class="flex items-start gap-2.5">
+                      <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 shrink-0"></span>
+                      <span><strong className="text-slate-900 font-semibold">Эмоции / состояние:</strong> Сильный спад энергии и выгорание, тяжело выходить на связь после отказов</span>
+                    </div>
+                    <div class="flex items-start gap-2.5">
+                      <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 shrink-0"></span>
+                      <span><strong className="text-slate-900 font-semibold">Действия:</strong> 12 рассылок, черновой перемонтаж старых исходников видео</span>
+                    </div>
+                    <div class="flex items-start gap-2.5 bg-indigo-50/80 border border-indigo-100 p-3 rounded-lg mt-2 text-indigo-950 font-medium">
+                      <svg class="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                      <span>Как преодолеть ступор перед новыми контактами?</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex gap-2.5 pt-2">
+                  <input type="text" id="reply-2" placeholder="Написать поддержку или разбор..." class="flex-1 text-[15px] px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-500 transition placeholder:text-slate-400">
+                  <button onclick="approveReport('card-2', 'Аня Петрова', 'reply-2')" class="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition cursor-pointer">
+                    Одобрить
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3 -->
+            <div id="card-3" class="bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
+              <div class="px-6 py-4.5 flex items-center justify-between border-b border-slate-100">
+                <div class="flex items-center gap-3.5">
+                  <div class="w-10 h-10 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold shrink-0">КВ</div>
+                  <div>
+                    <div class="text-base sm:text-lg font-bold text-slate-900">Карина Волкова</div>
+                    <div class="flex items-center gap-2.5 mt-0.5">
+                      <span class="text-xs sm:text-sm text-slate-500">@volkova_coach</span>
+                      <span class="text-xs font-medium px-2 py-0.5 rounded-md border bg-emerald-50 text-emerald-700 border-emerald-100">в срок</span>
+                    </div>
+                  </div>
+                </div>
+                <a href="https://t.me/volkova_coach" target="_blank" class="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 px-3.5 py-1.5 rounded-xl transition">
+                  <span>В Telegram</span>
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                </a>
+              </div>
+
+              <div class="px-6 py-5 space-y-4.5">
+                <div class="space-y-2">
+                  <div class="text-xs font-medium text-slate-400 uppercase tracking-wider">Сдано на проверку:</div>
+                  <div class="flex items-center justify-between py-2.5 px-3.5 rounded-xl bg-slate-50 border border-slate-100 text-[15px]">
+                    <div class="flex items-center gap-2.5 truncate mr-2">
+                      <span class="text-xs font-semibold px-2.5 py-1 rounded-md border shrink-0 inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border-indigo-100/80">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                        <span>Сторителл</span>
+                      </span>
+                      <span class="text-slate-800 font-medium truncate">Сторителл: Прогрев на высокий чек (12 историй)</span>
+                    </div>
+                    <span class="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold shrink-0 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                      <span>черновик</span>
+                    </span>
+                  </div>
+                  <div class="flex items-center justify-between py-2.5 px-3.5 rounded-xl bg-slate-50 border border-slate-100 text-[15px]">
+                    <div class="flex items-center gap-2.5 truncate mr-2">
+                      <span class="text-xs font-semibold px-2.5 py-1 rounded-md border shrink-0 inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 border-slate-200/80">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                        <span>Карусель</span>
+                      </span>
+                      <span class="text-slate-800 font-medium truncate">Карусель: Кейс ученицы Марии (+120 000 ₽)</span>
+                    </div>
+                    <span class="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold shrink-0 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                      <span>черновик</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap gap-8 text-[15px] py-2 border-y border-slate-100">
+                  <div>
+                    <span class="text-slate-400 block text-xs font-medium uppercase tracking-wider">Продажи</span>
+                    <span class="font-bold text-slate-900 text-lg">80 000 ₽</span>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 block text-xs font-medium uppercase tracking-wider">Рассылки:</span>
+                    <span class="font-bold text-slate-900 text-lg">30 шт</span>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 block text-xs font-medium uppercase tracking-wider">Новые клиенты:</span>
+                    <span class="font-bold text-indigo-600 text-lg">+3</span>
+                  </div>
+                </div>
+
+                <div class="flex gap-2.5 pt-2">
+                  <input type="text" id="reply-3" placeholder="Написать комментарий..." class="flex-1 text-[15px] px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-500 transition placeholder:text-slate-400">
+                  <button onclick="approveReport('card-3', 'Карина Волкова', 'reply-3')" class="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition cursor-pointer">
+                    Одобрить
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB: STUDENTS -->
+        <section id="tab-students" class="hidden space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
+            <div>
+              <h2 class="text-2xl font-bold tracking-tight text-slate-900">Ученицы</h2>
+              <p class="text-sm sm:text-base text-slate-500 mt-1">Календарь дисциплины и расписание созвонов</p>
+            </div>
+          </div>
+
+          <!-- RETENTION RADAR 360° (ДЛЯ КСЕНИИ: РАДАР УДЕРЖАНИЯ) -->
+          <div class="bg-white rounded-2xl border border-rose-200/80 p-5 sm:p-6 mb-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-rose-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-sm shrink-0">
+                  <svg class="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-sm font-bold text-slate-900 uppercase tracking-wider">Радар удержания (Retention Radar 360°)</span>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+                      Риск слёта: 78% (Высокий)
+                    </span>
+                  </div>
+                  <div class="text-xs text-slate-500 mt-0.5">
+                    Ученица: <strong>Аня Петрова</strong> · Ниша: Психолог для экспертов · Сигналы: 2 пропуска, сдача глубокой ночью (23:15)
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                <button id="demo-rehab-btn" onclick="offerStreakRehab()" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition cursor-pointer flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                  <span id="demo-rehab-text">Предложить амнистию стрика</span>
+                </button>
+                <button onclick="navigator.clipboard?.writeText('@anya_psy_coach'); showToast('Юзернейм @anya_psy_coach скопирован для связи в TG');" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                  <span>Написать в TG</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+              <!-- Left: AI Diagnosis -->
+              <div class="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                  <span>AI-диагноз психологического барьера (Whisper)</span>
+                </div>
+                <p class="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">
+                  Аня на грани выгорания из-за попытки совместить полный рабочий день и 25 рассылок. Синдром самозванца при чеке 15 000 ₽. Сдаёт отчёты глубокой ночью (23:15). Высокий риск схода.
+                </p>
+              </div>
+
+              <!-- Right: Mentor Action Items -->
+              <div class="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <span>План действий Ксении к созвону 12.11 (19:00)</span>
+                </div>
+                <ul class="text-xs text-slate-700 space-y-1">
+                  <li class="flex items-start gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    <span>Сократить дневную норму рассылок с 25 до 15 целевых контактов</span>
+                  </li>
+                  <li class="flex items-start gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    <span>Дать готовый конструктор сценариев Reels на 20 минут съемки</span>
+                  </li>
+                  <li class="flex items-start gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    <span>Отработать на созвоне 12.11 страх отказа: продажа за 15 000 ₽ уже состоялась!</span>
+                  </li>
+                  <li class="flex items-start gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    <span>Предложить субботнюю амнистию стрика (Reels + 15 рассылок)</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-x-6 gap-y-2 mb-4 text-xs font-medium text-slate-500">
+            <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>в срок (до 21:00)</span>
+            <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>опоздание</span>
+            <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-red-400"></span>пропуск</span>
+            <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-neutral-300"></span>пауза / болезнь</span>
+            <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-neutral-200"></span>выходной</span>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left">
+                <thead>
+                  <tr class="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-100 bg-slate-50/50">
+                    <th class="py-4 px-6">Ученица & Созвон</th>
+                    <th class="py-4 px-2 text-center w-12">Пн</th>
+                    <th class="py-4 px-2 text-center w-12">Вт</th>
+                    <th class="py-4 px-2 text-center w-12">Ср</th>
+                    <th class="py-4 px-2 text-center w-12">Чт</th>
+                    <th class="py-4 px-2 text-center w-12">Пт</th>
+                    <th class="py-4 px-2 text-center w-12">Сб</th>
+                    <th class="py-4 px-2 text-center w-12">Вс</th>
+                    <th class="py-4 px-4 text-center">Статус</th>
+                    <th class="py-4 px-6 text-right">Дисциплина</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-[15px]">
+                  <!-- Student 1 -->
+                  <tr class="hover:bg-slate-50/70 transition">
+                    <td class="py-4.5 px-6">
+                      <div class="flex items-center gap-3.5">
+                        <div class="w-9 h-9 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold">МГ</div>
+                        <div>
+                          <div class="font-bold text-slate-900">Милана Горохова</div>
+                          <div class="text-xs sm:text-sm text-slate-500">Стилист-имиджмейкер</div>
+                          <div class="text-xs text-slate-600 mt-1 inline-flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                            <span>Созвон: <strong>11.11 в 17:00</strong> (4 проведено)</span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-emerald-500"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Reels #11, 20 рассылок, +1 клиент</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-emerald-500"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Карусель #5, 25 рассылок</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-emerald-500"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Сторителл #3, 20 рассылок</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-emerald-500"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Reels #12, 25 рассылок</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-amber-400"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Сдано в 22:40 (опоздание 1ч 40м)</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-emerald-500"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Reels #14, +2 новых клиента</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-neutral-200"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Воскресенье — общий выходной потока</div>
+                    </td>
+                    <td class="text-center py-4.5 px-4">
+                      <button onclick="showToast('Милана Горохова в активном треке')" class="text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-medium inline-flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/></svg>
+                        <span>В строю</span>
+                      </button>
+                    </td>
+                    <td class="py-4.5 px-6 text-right font-bold text-emerald-600">95%</td>
+                  </tr>
+
+                  <!-- Student 2 -->
+                  <tr class="hover:bg-slate-50/70 transition">
+                    <td class="py-4.5 px-6">
+                      <div class="flex items-center gap-3.5">
+                        <div class="w-9 h-9 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold">АП</div>
+                        <div>
+                          <div class="flex items-center gap-2">
+                            <span class="font-bold text-slate-900">Аня Петрова</span>
+                            <button onclick="navigator.clipboard?.writeText('@anya_psy_coach'); showToast('Юзернейм @anya_psy_coach скопирован для связи в TG');" class="text-[11px] font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition cursor-pointer" title="Написать ученице в Telegram">
+                              <svg class="w-3 h-3 text-indigo-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                              <span>@anya_psy_coach</span>
+                            </button>
+                          </div>
+                          <div class="text-xs sm:text-sm text-slate-500">Психолог для экспертов</div>
+                          <div class="text-xs text-slate-600 mt-1 inline-flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                            <span>Созвон: <strong>12.11 в 19:00</strong> (3 проведено)</span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-emerald-500"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Reels #6, 15 рассылок</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-red-400"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Пропуск: не сдан черновик Reels</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-amber-400"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Сдано в 23:15: карусель</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-emerald-500"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Сторителл, +1 клиент</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-red-400"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Пропуск: отчёт не сдан до 21:00</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-amber-400"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Сдано в 21:15: повторный рилс</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-neutral-200"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Воскресенье — общий выходной потока</div>
+                    </td>
+                    <td class="text-center py-4.5 px-4">
+                      <button onclick="showToast('Аня Петрова в активном треке')" class="text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-medium inline-flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/></svg>
+                        <span>В строю</span>
+                      </button>
+                    </td>
+                    <td class="py-4.5 px-6 text-right font-bold text-amber-600">64%</td>
+                  </tr>
+
+                  <!-- Student 3 (Victoria - On Pause) -->
+                  <tr class="hover:bg-slate-50/70 transition bg-slate-50/30">
+                    <td class="py-4.5 px-6">
+                      <div class="flex items-center gap-3.5">
+                        <div class="w-9 h-9 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold">ВЛ</div>
+                        <div>
+                          <div class="flex items-center gap-2">
+                            <span class="font-bold text-slate-900">Виктория Лебедева</span>
+                            <span class="text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8zM6 1v3M10 1v3M14 1v3"/></svg>
+                              <span>на паузе</span>
+                            </span>
+                          </div>
+                          <div class="text-xs sm:text-sm text-slate-500">Фитнес-тренер онлайн</div>
+                          <div class="text-xs text-slate-600 mt-1 inline-flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                            <span>Созвон: <strong>14.11 в 16:00</strong> (3 проведено)</span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-emerald-500"></span>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-emerald-500"></span>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-emerald-500"></span>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-amber-400"></span>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-neutral-300"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Режим паузы: болезнь, стрик заморожен</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-neutral-300"></span>
+                      <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-30 w-52 p-2.5 bg-slate-900 text-white text-xs rounded-xl text-center">Режим паузы: болезнь, стрик заморожен</div>
+                    </td>
+                    <td class="text-center py-4.5 px-2 relative group cursor-pointer">
+                      <span class="inline-block w-3.5 h-3.5 rounded-full bg-neutral-200"></span>
+                    </td>
+                    <td class="text-center py-4.5 px-4">
+                      <button onclick="showToast('Виктория поставлена на паузу (болезнь ОРВИ)')" class="text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium inline-flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8zM6 1v3M10 1v3M14 1v3"/></svg>
+                        <span>Болеет</span>
+                      </button>
+                    </td>
+                    <td class="py-4.5 px-6 text-right font-bold text-emerald-600">88%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB: ANALYTICS -->
+        <section id="tab-analytics" class="hidden space-y-7">
+          <!-- Header with Category and Period Controls -->
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <h2 class="text-2xl font-bold tracking-tight text-slate-900">Аналитика</h2>
+              <p class="text-sm text-slate-500 mt-0.5">Показатели потока и персональные данные учениц из Telegram</p>
+            </div>
+
+            <!-- Period Switcher -->
+            <div class="flex items-center gap-1.5 p-1 bg-white border border-slate-200/80 rounded-xl shadow-xs self-start lg:self-auto">
+              <button onclick="setAnalyticsPeriod('week')" id="period-btn-week" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer">За неделю</button>
+              <button onclick="setAnalyticsPeriod('month')" id="period-btn-month" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer">За месяц</button>
+              <button onclick="setAnalyticsPeriod('all')" id="period-btn-all" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white transition cursor-pointer">За весь период</button>
+            </div>
+          </div>
+
+          <!-- Sub-Category Switcher: Поток vs По ученицам -->
+          <div class="flex items-center gap-2 border-b border-slate-200 pb-4">
+            <button onclick="setAnalyticsCategory('cohort')" id="cat-btn-cohort" class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white transition cursor-pointer">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+              <span>Общая аналитика потока</span>
+            </button>
+            <button onclick="setAnalyticsCategory('students')" id="cat-btn-students" class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+              <span>По ученицам (5)</span>
+            </button>
+          </div>
+
+          <!-- CATEGORY 1: COHORT OVERVIEW -->
+          <div id="analytics-cohort-view" class="space-y-6">
+            <!-- Compact KPI strip -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div class="bg-white rounded-2xl border border-slate-200/70 p-5">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Выручка потока</span>
+                  <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                </div>
+                <div id="kpi-revenue" class="text-2xl font-bold text-slate-900 mt-2">895 000 ₽</div>
+                <div id="kpi-revenue-sub" class="text-xs text-slate-500 mt-1">+490% с момента старта</div>
+              </div>
+
+              <div class="bg-white rounded-2xl border border-slate-200/70 p-5">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Reels проверено</span>
+                  <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                </div>
+                <div id="kpi-reels" class="text-2xl font-bold text-slate-900 mt-2">66</div>
+                <div id="kpi-reels-sub" class="text-xs text-slate-500 mt-1">66 черновиков за поток</div>
+              </div>
+
+              <div class="bg-white rounded-2xl border border-slate-200/70 p-5">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Средний чек</span>
+                  <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                </div>
+                <div class="text-2xl font-bold text-slate-900 mt-2">40 600 ₽</div>
+                <div class="text-xs text-slate-500 mt-1">вырос с 4 800 ₽ на старте</div>
+              </div>
+
+              <div class="bg-white rounded-2xl border border-slate-200/70 p-5">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Рассылок (Direct)</span>
+                  <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                </div>
+                <div id="kpi-mailings" class="text-2xl font-bold text-slate-900 mt-2">702</div>
+                <div id="kpi-mailings-sub" class="text-xs text-slate-500 mt-1">702 за поток</div>
+              </div>
+            </div>
+
+            <!-- Secondary Metrics Bar -->
+            <div class="bg-white rounded-2xl border border-slate-200/70 p-4 px-6 flex flex-wrap items-center justify-between gap-4 text-sm">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                <span class="text-slate-500">Карусели:</span>
+                <span id="kpi-carousels" class="font-bold text-slate-900">38</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                <span class="text-slate-500">Сторителлы:</span>
+                <span id="kpi-storytells" class="font-bold text-slate-900">47</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                <span class="text-slate-500">Новые клиенты:</span>
+                <span id="kpi-clients" class="font-bold text-indigo-600">+33</span>
+                <span class="text-xs text-slate-400">(субботний опрос)</span>
+              </div>
+              <div class="text-xs text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                Фильтр периода: <span id="kpi-period-label" class="font-semibold text-slate-800">Весь период</span>
+              </div>
+            </div>
+
+            <!-- Telegram Ingestion Banner -->
+            <div class="bg-slate-50 border border-slate-200/70 rounded-2xl p-4.5 flex items-start gap-3.5">
+              <div class="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+              </div>
+              <div class="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                <strong class="font-semibold text-slate-900">Автоматическая агрегация из Telegram:</strong> Все метрики поступают непрерывно из персональных чатов учениц по хэштегам <code class="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#рилс</code>, <code class="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#карусель</code>, <code class="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#сторителл</code>, <code class="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#рассылки</code>, <code class="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#продажи</code> и субботним опросам <code class="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#клиенты</code>. Войсы рефлексии анализируются через Whisper AI.
+              </div>
+            </div>
+
+            <!-- Cohort Table -->
+            <div class="bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
+              <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div class="text-sm font-bold text-slate-900 uppercase tracking-wider">Сводная динамика учениц потока</div>
+                <div class="text-xs text-slate-500">Нажмите на строку для детального разбора</div>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                  <thead>
+                    <tr class="bg-slate-50/70 text-slate-400 text-[11px] uppercase tracking-wider font-semibold border-b border-slate-100">
+                      <th class="px-6 py-3.5">Ученица</th>
+                      <th class="px-4 py-3.5">Доход (Точка А ➔ Б)</th>
+                      <th class="px-4 py-3.5">Средний чек</th>
+                      <th class="px-4 py-3.5">Контент (Р/К/С)</th>
+                      <th class="px-4 py-3.5">Рассылки</th>
+                      <th class="px-4 py-3.5">Клиенты</th>
+                      <th class="px-4 py-3.5">Дисциплина</th>
+                      <th class="px-6 py-3.5 text-right">Разбор</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    <tr onclick="selectStudentForAnalytics(0)" class="hover:bg-slate-50/80 transition cursor-pointer group">
+                      <td class="px-6 py-4">
+                        <div class="font-semibold text-slate-900 group-hover:text-indigo-600 transition">Милана Горохова</div>
+                        <div class="text-xs text-slate-500">Стилист-имиджмейкер</div>
+                      </td>
+                      <td class="px-4 py-4 font-semibold text-slate-900">
+                        30 000 ➔ 180 000 ₽ <span class="ml-1 text-xs text-emerald-600 font-bold">×6.0</span>
+                      </td>
+                      <td class="px-4 py-4 text-slate-700 font-medium">45 000 ₽</td>
+                      <td class="px-4 py-4 font-mono text-xs text-slate-700">14 / 8 / 10</td>
+                      <td class="px-4 py-4 text-slate-700 font-semibold">145</td>
+                      <td class="px-4 py-4 text-indigo-600 font-bold">+7</td>
+                      <td class="px-4 py-4"><span class="inline-flex px-2 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700">95%</span></td>
+                      <td class="px-6 py-4 text-right text-xs font-semibold text-indigo-600">Подробнее ↗</td>
+                    </tr>
+                    <tr onclick="selectStudentForAnalytics(1)" class="hover:bg-slate-50/80 transition cursor-pointer group">
+                      <td class="px-6 py-4">
+                        <div class="font-semibold text-slate-900 group-hover:text-indigo-600 transition">Аня Петрова</div>
+                        <div class="text-xs text-slate-500">Психолог для экспертов</div>
+                      </td>
+                      <td class="px-4 py-4 font-semibold text-slate-900">
+                        25 000 ➔ 45 000 ₽ <span class="ml-1 text-xs text-emerald-600 font-bold">×1.8</span>
+                      </td>
+                      <td class="px-4 py-4 text-slate-700 font-medium">15 000 ₽</td>
+                      <td class="px-4 py-4 font-mono text-xs text-slate-700">7 / 3 / 4</td>
+                      <td class="px-4 py-4 text-slate-700 font-semibold">72</td>
+                      <td class="px-4 py-4 text-indigo-600 font-bold">+2</td>
+                      <td class="px-4 py-4"><span class="inline-flex px-2 py-0.5 rounded-md text-xs font-semibold bg-rose-50 text-rose-700">64%</span></td>
+                      <td class="px-6 py-4 text-right text-xs font-semibold text-indigo-600">Подробнее ↗</td>
+                    </tr>
+                    <tr onclick="selectStudentForAnalytics(2)" class="hover:bg-slate-50/80 transition cursor-pointer group">
+                      <td class="px-6 py-4">
+                        <div class="font-semibold text-slate-900 group-hover:text-indigo-600 transition">Карина Волкова</div>
+                        <div class="text-xs text-slate-500">Наставник бьюти-мастеров</div>
+                      </td>
+                      <td class="px-4 py-4 font-semibold text-slate-900">
+                        50 000 ➔ 310 000 ₽ <span class="ml-1 text-xs text-emerald-600 font-bold">×6.2</span>
+                      </td>
+                      <td class="px-4 py-4 text-slate-700 font-medium">60 000 ₽</td>
+                      <td class="px-4 py-4 font-mono text-xs text-slate-700">18 / 12 / 14</td>
+                      <td class="px-4 py-4 text-slate-700 font-semibold">210</td>
+                      <td class="px-4 py-4 text-indigo-600 font-bold">+11</td>
+                      <td class="px-4 py-4"><span class="inline-flex px-2 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700">100%</span></td>
+                      <td class="px-6 py-4 text-right text-xs font-semibold text-indigo-600">Подробнее ↗</td>
+                    </tr>
+                    <tr onclick="selectStudentForAnalytics(3)" class="hover:bg-slate-50/80 transition cursor-pointer group">
+                      <td class="px-6 py-4">
+                        <div class="font-semibold text-slate-900 group-hover:text-indigo-600 transition">Виктория Лебедева</div>
+                        <div class="text-xs text-slate-500">Фитнес-тренер онлайн (на паузе)</div>
+                      </td>
+                      <td class="px-4 py-4 font-semibold text-slate-900">
+                        35 000 ➔ 140 000 ₽ <span class="ml-1 text-xs text-emerald-600 font-bold">×4.0</span>
+                      </td>
+                      <td class="px-4 py-4 text-slate-700 font-medium">28 000 ₽</td>
+                      <td class="px-4 py-4 font-mono text-xs text-slate-700">12 / 6 / 8</td>
+                      <td class="px-4 py-4 text-slate-700 font-semibold">115</td>
+                      <td class="px-4 py-4 text-indigo-600 font-bold">+5</td>
+                      <td class="px-4 py-4"><span class="inline-flex px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-700">88%</span></td>
+                      <td class="px-6 py-4 text-right text-xs font-semibold text-indigo-600">Подробнее ↗</td>
+                    </tr>
+                    <tr onclick="selectStudentForAnalytics(4)" class="hover:bg-slate-50/80 transition cursor-pointer group">
+                      <td class="px-6 py-4">
+                        <div class="font-semibold text-slate-900 group-hover:text-indigo-600 transition">Полина Соколова</div>
+                        <div class="text-xs text-slate-500">SMM-маркетолог</div>
+                      </td>
+                      <td class="px-4 py-4 font-semibold text-slate-900">
+                        40 000 ➔ 220 000 ₽ <span class="ml-1 text-xs text-emerald-600 font-bold">×5.5</span>
+                      </td>
+                      <td class="px-4 py-4 text-slate-700 font-medium">55 000 ₽</td>
+                      <td class="px-4 py-4 font-mono text-xs text-slate-700">15 / 9 / 11</td>
+                      <td class="px-4 py-4 text-slate-700 font-semibold">160</td>
+                      <td class="px-4 py-4 text-indigo-600 font-bold">+8</td>
+                      <td class="px-4 py-4"><span class="inline-flex px-2 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700">92%</span></td>
+                      <td class="px-6 py-4 text-right text-xs font-semibold text-indigo-600">Подробнее ↗</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- CATEGORY 2: INDIVIDUAL STUDENT ANALYTICS -->
+          <div id="analytics-students-view" class="hidden space-y-6">
+            <!-- Selector pills -->
+            <div>
+              <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">Выберите ученицу для персонального анализа:</div>
+              <div class="flex flex-wrap gap-2.5">
+                <button onclick="selectStudentForAnalytics(0)" id="stud-btn-0" class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-900 text-white transition cursor-pointer">
+                  <span>Милана Горохова</span>
+                  <span class="text-xs px-1.5 py-0.5 rounded font-mono bg-slate-800 text-indigo-200">×6.0</span>
+                </button>
+                <button onclick="selectStudentForAnalytics(1)" id="stud-btn-1" class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition cursor-pointer">
+                  <span>Аня Петрова</span>
+                  <span class="text-xs px-1.5 py-0.5 rounded font-mono bg-slate-100 text-slate-600">×1.8</span>
+                </button>
+                <button onclick="selectStudentForAnalytics(2)" id="stud-btn-2" class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition cursor-pointer">
+                  <span>Карина Волкова</span>
+                  <span class="text-xs px-1.5 py-0.5 rounded font-mono bg-slate-100 text-slate-600">×6.2</span>
+                </button>
+                <button onclick="selectStudentForAnalytics(3)" id="stud-btn-3" class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition cursor-pointer">
+                  <span>Виктория Лебедева</span>
+                  <span class="text-xs px-1.5 py-0.5 rounded font-mono bg-slate-100 text-slate-600">×4.0</span>
+                </button>
+                <button onclick="selectStudentForAnalytics(4)" id="stud-btn-4" class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition cursor-pointer">
+                  <span>Полина Соколова</span>
+                  <span class="text-xs px-1.5 py-0.5 rounded font-mono bg-slate-100 text-slate-600">×5.5</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Student Card -->
+            <div class="bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
+              <div class="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div class="flex items-center gap-3">
+                    <h3 id="stud-card-name" class="text-xl font-bold text-slate-900">Милана Горохова</h3>
+                    <span id="stud-card-badge" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Активный трек</span>
+                  </div>
+                  <div id="stud-card-niche" class="text-xs sm:text-sm text-slate-500 mt-1">Стилист-имиджмейкер · Telegram данные синхронизированы</div>
+                </div>
+
+                <button onclick="copyCaseText()" class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition cursor-pointer self-start sm:self-auto shrink-0">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                  <span>Скопировать кейс для сторис</span>
+                </button>
+              </div>
+
+              <!-- Metrics A -> B -->
+              <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
+                <div class="px-6 py-5">
+                  <div class="text-[11px] text-slate-400 uppercase font-semibold mb-1">Точка А</div>
+                  <div id="stud-pt-a" class="text-xl sm:text-2xl font-bold text-slate-900">30 000 ₽</div>
+                  <div id="stud-pt-a-sub" class="text-xs text-slate-500 mt-0.5">чек: 3 000 ₽</div>
+                </div>
+                <div class="px-6 py-5">
+                  <div class="text-[11px] text-slate-400 uppercase font-semibold mb-1">Точка Б (текущий)</div>
+                  <div id="stud-pt-b" class="text-xl sm:text-2xl font-bold text-emerald-600">180 000 ₽</div>
+                  <div id="stud-pt-b-sub" class="text-xs text-slate-500 mt-0.5">чек: 45 000 ₽</div>
+                </div>
+                <div class="px-6 py-5">
+                  <div class="text-[11px] text-slate-400 uppercase font-semibold mb-1">Рост дохода</div>
+                  <div class="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-1.5">
+                    <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                    <span id="stud-growth">×6.0</span>
+                  </div>
+                  <div id="stud-growth-sub" class="text-xs text-indigo-600 font-medium mt-0.5">+150 000 ₽ к старту</div>
+                </div>
+                <div class="px-6 py-5">
+                  <div class="text-[11px] text-slate-400 uppercase font-semibold mb-1">Доход за период</div>
+                  <div id="stud-period-income" class="text-xl sm:text-2xl font-bold text-slate-900">180 000 ₽</div>
+                  <div id="stud-period-sub" class="text-xs text-slate-500 mt-0.5">весь период обучения</div>
+                </div>
+              </div>
+
+              <!-- Content and Direct breakdown -->
+              <div class="px-6 py-5 bg-slate-50/50 border-b border-slate-100">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+                  Контент и активность из Telegram:
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-6 gap-4">
+                  <div class="bg-white p-3.5 rounded-xl border border-slate-200/70">
+                    <div class="text-xs text-slate-400 mb-1">Reels</div>
+                    <div id="stud-reels" class="text-lg font-bold text-slate-900">14</div>
+                    <div class="text-[11px] text-slate-400">проверено ботом</div>
+                  </div>
+                  <div class="bg-white p-3.5 rounded-xl border border-slate-200/70">
+                    <div class="text-xs text-slate-400 mb-1">Карусели</div>
+                    <div id="stud-carousels" class="text-lg font-bold text-slate-900">8</div>
+                    <div class="text-[11px] text-slate-400">слайдов / PDF</div>
+                  </div>
+                  <div class="bg-white p-3.5 rounded-xl border border-slate-200/70">
+                    <div class="text-xs text-slate-400 mb-1">Сторителлы</div>
+                    <div id="stud-storytells" class="text-lg font-bold text-slate-900">10</div>
+                    <div class="text-[11px] text-slate-400">сценариев</div>
+                  </div>
+                  <div class="bg-white p-3.5 rounded-xl border border-slate-200/70">
+                    <div class="text-xs text-slate-400 mb-1">Рассылки</div>
+                    <div id="stud-mailings" class="text-lg font-bold text-slate-900">145</div>
+                    <div class="text-[11px] text-slate-400">Direct по скрипту</div>
+                  </div>
+                  <div class="bg-white p-3.5 rounded-xl border border-slate-200/70">
+                    <div class="text-xs text-slate-400 mb-1">Новые клиенты</div>
+                    <div id="stud-clients" class="text-lg font-bold text-indigo-600">+7</div>
+                    <div class="text-[11px] text-slate-400">субботний опрос</div>
+                  </div>
+                  <div class="bg-white p-3.5 rounded-xl border border-slate-200/70">
+                    <div class="text-xs text-slate-400 mb-1">Дисциплина</div>
+                    <div id="stud-disc" class="text-lg font-bold text-slate-900">95%</div>
+                    <div class="text-[11px] text-slate-400">сдача до 21:00</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- AI Reflection -->
+              <div class="px-6 py-5 border-b border-slate-100 space-y-3">
+                <div class="flex items-center gap-2">
+                  <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                  <span class="text-xs font-semibold text-slate-900 uppercase tracking-wider">AI-выжимка рефлексии из Telegram-войсов</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
+                    <div class="text-xs font-medium text-slate-400 mb-1">Эмоциональный трек & затыки</div>
+                    <div id="stud-refl-sentiment" class="text-slate-800 leading-relaxed font-medium">Высокая мотивация, нащупала работающую связку в Reels</div>
+                  </div>
+                  <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
+                    <div class="text-xs font-medium text-slate-400 mb-1">Ключевая победа периода</div>
+                    <div id="stud-refl-win" class="text-slate-800 leading-relaxed font-medium">Продала разбор гардероба за 45 000 ₽ через Direct</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Case Story Box -->
+              <div class="px-6 py-5 bg-slate-50/70">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Предпросмотр кейса для Instagram Stories:</div>
+                <div id="stud-case-preview" class="bg-white border border-slate-200/80 rounded-xl p-4 font-mono text-xs sm:text-sm text-slate-700 whitespace-pre-line leading-relaxed">КЕЙС ПОТОКА: Милана Горохова
+Ниша: Стилист-имиджмейкер
+
+Точка А: 30 000 ₽ -> Точка Б: 180 000 ₽ (РОСТ x6.0!)
+Средний чек: вырос с 3 000 ₽ до 45 000 ₽
+Проверено: 14 Reels, 8 каруселей, 10 сторителлов
+Исходящий трафик: 145 рассылок по скрипту
+Прирост новых клиентов: +7
+Дисциплина сдачи: 95%
+
+«Она просто перестала сливать дедлайны и внедрила ежедневный трекинг ключевых действий»</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB: TASKS / HASHTAGS & SETTINGS -->
+        <section id="tab-tasks" class="hidden space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 class="text-2xl font-bold tracking-tight text-slate-900">Хэштеги и Регламент</h2>
+              <p class="text-sm sm:text-base text-slate-500 mt-1">Правила сдачи отчётов в рабочих чатах наставничества</p>
+            </div>
+
+            <!-- Subtab switcher -->
+            <div class="flex items-center gap-1.5 p-1 bg-white border border-slate-200/80 rounded-xl shadow-xs self-start sm:self-auto">
+              <button onclick="switchTasksSubTab('hashtags')" id="tasks-subtab-hashtags" class="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white transition cursor-pointer">
+                <span>Хэштеги (7/7)</span>
+              </button>
+              <button onclick="switchTasksSubTab('system')" id="tasks-subtab-system" class="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer">
+                <span>Системные тумблеры & AI</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- SUBTAB 1: HASHTAGS -->
+          <div id="tasks-view-hashtags" class="space-y-4">
+            <div class="bg-slate-50 border border-slate-200/70 rounded-2xl p-4 px-5 flex items-center justify-between gap-3 text-xs sm:text-sm text-slate-600">
+              <span>Нажмите на тумблер справа, чтобы включить/отключить приём хэштега ботом в чатах потока. Клик по бейджу меняет статус обязательности.</span>
+              <button onclick="showToast('Регламент синхронизирован с Telegram-ботом')" class="px-3.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-100 transition shrink-0 cursor-pointer">
+                Синхронизировать
+              </button>
+            </div>
+
+            <div class="space-y-3">
+              <!-- Rule 1: Reels -->
+              <div id="rule-card-reels" class="bg-white rounded-2xl border border-slate-200/70 px-6 py-5.5 transition">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-3 flex-wrap">
+                    <code class="text-base font-bold text-slate-900 font-mono">#рилс</code>
+                    <button onclick="toggleRuleReqDemo('rule-req-reels')" id="rule-req-reels" class="text-xs px-2.5 py-0.5 rounded-full font-medium border bg-rose-50 text-rose-500 border-rose-100 transition cursor-pointer">
+                      обязательно
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span id="rule-label-reels" class="text-xs text-slate-400 font-medium">ВКЛ</span>
+                    <button onclick="toggleRuleEnabledDemo('rule-card-reels', 'rule-btn-reels', 'rule-dot-reels', 'rule-label-reels', '#рилс')" id="rule-btn-reels" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors duration-200 ease-in-out">
+                      <span id="rule-dot-reels" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out translate-x-5"></span>
+                    </button>
+                  </div>
+                </div>
+                <div class="text-[15px] sm:text-base text-slate-700 leading-relaxed mb-3">Видеофайл или черновик Reels на проверку перед публикацией. Защита от сдачи повторных роликов.</div>
+                <div class="text-xs sm:text-sm text-slate-500 font-mono bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+                  Пример: <span class="text-slate-800 font-semibold">#рилс видео/ссылка на черновик</span>
+                </div>
+              </div>
+
+              <!-- Rule 2: Carousel -->
+              <div id="rule-card-carousel" class="bg-white rounded-2xl border border-slate-200/70 px-6 py-5.5 transition">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-3 flex-wrap">
+                    <code class="text-base font-bold text-slate-900 font-mono">#карусель</code>
+                    <button onclick="toggleRuleReqDemo('rule-req-carousel')" id="rule-req-carousel" class="text-xs px-2.5 py-0.5 rounded-full font-medium border bg-slate-100 text-slate-500 border-slate-200 transition cursor-pointer">
+                      по факту
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span id="rule-label-carousel" class="text-xs text-slate-400 font-medium">ВКЛ</span>
+                    <button onclick="toggleRuleEnabledDemo('rule-card-carousel', 'rule-btn-carousel', 'rule-dot-carousel', 'rule-label-carousel', '#карусель')" id="rule-btn-carousel" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors duration-200 ease-in-out">
+                      <span id="rule-dot-carousel" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out translate-x-5"></span>
+                    </button>
+                  </div>
+                </div>
+                <div class="text-[15px] sm:text-base text-slate-700 leading-relaxed mb-3">Текст слайдов, фото-подборка или PDF-файл карусели для проверки смыслов и оферты.</div>
+                <div class="text-xs sm:text-sm text-slate-500 font-mono bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+                  Пример: <span class="text-slate-800 font-semibold">#карусель 5 ошибок при подборе капсулы (слайды 1-5)</span>
+                </div>
+              </div>
+
+              <!-- Rule 3: Storytell -->
+              <div id="rule-card-storytell" class="bg-white rounded-2xl border border-slate-200/70 px-6 py-5.5 transition">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-3 flex-wrap">
+                    <code class="text-base font-bold text-slate-900 font-mono">#сторителл</code>
+                    <button onclick="toggleRuleReqDemo('rule-req-storytell')" id="rule-req-storytell" class="text-xs px-2.5 py-0.5 rounded-full font-medium border bg-slate-100 text-slate-500 border-slate-200 transition cursor-pointer">
+                      по факту
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span id="rule-label-storytell" class="text-xs text-slate-400 font-medium">ВКЛ</span>
+                    <button onclick="toggleRuleEnabledDemo('rule-card-storytell', 'rule-btn-storytell', 'rule-dot-storytell', 'rule-label-storytell', '#сторителл')" id="rule-btn-storytell" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors duration-200 ease-in-out">
+                      <span id="rule-dot-storytell" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out translate-x-5"></span>
+                    </button>
+                  </div>
+                </div>
+                <div class="text-[15px] sm:text-base text-slate-700 leading-relaxed mb-3">Сценарий серии Instagram Stories: вовлечение, смысловая связка и подводка к продаже.</div>
+                <div class="text-xs sm:text-sm text-slate-500 font-mono bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+                  Пример: <span class="text-slate-800 font-semibold">#сторителл прогрев на консультацию (10 историй)</span>
+                </div>
+              </div>
+
+              <!-- Rule 4: Mailings -->
+              <div id="rule-card-mailings" class="bg-white rounded-2xl border border-slate-200/70 px-6 py-5.5 transition">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-3 flex-wrap">
+                    <code class="text-base font-bold text-slate-900 font-mono">#рассылки</code>
+                    <button onclick="toggleRuleReqDemo('rule-req-mailings')" id="rule-req-mailings" class="text-xs px-2.5 py-0.5 rounded-full font-medium border bg-rose-50 text-rose-500 border-rose-100 transition cursor-pointer">
+                      обязательно
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span id="rule-label-mailings" class="text-xs text-slate-400 font-medium">ВКЛ</span>
+                    <button onclick="toggleRuleEnabledDemo('rule-card-mailings', 'rule-btn-mailings', 'rule-dot-mailings', 'rule-label-mailings', '#рассылки')" id="rule-btn-mailings" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors duration-200 ease-in-out">
+                      <span id="rule-dot-mailings" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out translate-x-5"></span>
+                    </button>
+                  </div>
+                </div>
+                <div class="text-[15px] sm:text-base text-slate-700 leading-relaxed mb-3">Количество отправленных сообщений целевой аудитории по утвержденному скрипту.</div>
+                <div class="text-xs sm:text-sm text-slate-500 font-mono bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+                  Пример: <span class="text-slate-800 font-semibold">#рассылки 25 (по скрипту холодного контакта)</span>
+                </div>
+              </div>
+
+              <!-- Rule 5: Sales -->
+              <div id="rule-card-sales" class="bg-white rounded-2xl border border-slate-200/70 px-6 py-5.5 transition">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-3 flex-wrap">
+                    <code class="text-base font-bold text-slate-900 font-mono">#продажи</code>
+                    <button onclick="toggleRuleReqDemo('rule-req-sales')" id="rule-req-sales" class="text-xs font-semibold px-2.5 py-0.5 rounded-md border bg-slate-100 text-slate-600 border-slate-200 transition cursor-pointer">
+                      по факту
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span id="rule-label-sales" class="text-xs text-slate-400 font-medium">ВКЛ</span>
+                    <button onclick="toggleRuleEnabledDemo('rule-card-sales', 'rule-btn-sales', 'rule-dot-sales', 'rule-label-sales', '#продажи')" id="rule-btn-sales" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors duration-200 ease-in-out">
+                      <span id="rule-dot-sales" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out translate-x-5"></span>
+                    </button>
+                  </div>
+                </div>
+                <div class="text-[15px] sm:text-base text-slate-700 leading-relaxed mb-3">Фиксация оплат и предоплат. Суммирует доход, обновляет средний чек и Точку Б.</div>
+                <div class="text-xs sm:text-sm text-slate-500 font-mono bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+                  Пример: <span class="text-slate-800 font-semibold">#продажи 45000 (оплата за пакет)</span>
+                </div>
+              </div>
+
+              <!-- Rule 6: Reflection / Question -->
+              <div id="rule-card-question" class="bg-white rounded-2xl border border-slate-200/70 px-6 py-5.5 transition">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-3 flex-wrap">
+                    <code class="text-base font-bold text-slate-900 font-mono">#вопрос / рефлексия</code>
+                    <button onclick="toggleRuleReqDemo('rule-req-question')" id="rule-req-question" class="text-xs font-semibold px-2.5 py-0.5 rounded-md border bg-slate-100 text-slate-600 border-slate-200 transition cursor-pointer">
+                      по факту
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span id="rule-label-question" class="text-xs text-slate-400 font-medium">ВКЛ</span>
+                    <button onclick="toggleRuleEnabledDemo('rule-card-question', 'rule-btn-question', 'rule-dot-question', 'rule-label-question', '#вопрос')" id="rule-btn-question" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors duration-200 ease-in-out">
+                      <span id="rule-dot-question" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out translate-x-5"></span>
+                    </button>
+                  </div>
+                </div>
+                <div class="text-[15px] sm:text-base text-slate-700 leading-relaxed mb-3">Мысли, эмоциональное состояние, затыки дня или вопрос к Ксении (текстом или войсом). AI формирует краткую выжимку.</div>
+                <div class="text-xs sm:text-sm text-slate-500 font-mono bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+                  Пример: <span class="text-slate-800 font-semibold">#вопрос клиентка просит скидку 30%, как отработать?</span>
+                </div>
+              </div>
+
+              <!-- Rule 7: Clients -->
+              <div id="rule-card-clients" class="bg-white rounded-2xl border border-slate-200/70 px-6 py-5.5 transition">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-3 flex-wrap">
+                    <code class="text-base font-bold text-slate-900 font-mono">#клиенты</code>
+                    <button onclick="toggleRuleReqDemo('rule-req-clients')" id="rule-req-clients" class="text-xs font-semibold px-2.5 py-0.5 rounded-md border bg-slate-100 text-slate-600 border-slate-200 transition cursor-pointer">
+                      по факту
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span id="rule-label-clients" class="text-xs text-slate-400 font-medium">ВКЛ</span>
+                    <button onclick="toggleRuleEnabledDemo('rule-card-clients', 'rule-btn-clients', 'rule-dot-clients', 'rule-label-clients', '#клиенты')" id="rule-btn-clients" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors duration-200 ease-in-out">
+                      <span id="rule-dot-clients" class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out translate-x-5"></span>
+                    </button>
+                  </div>
+                </div>
+                <div class="text-[15px] sm:text-base text-slate-700 leading-relaxed mb-3">Бот каждую субботу в 18:00 автоматически опрашивает учениц инлайн-кнопками: сколько новых клиентов закрыто за неделю.</div>
+                <div class="text-xs sm:text-sm text-slate-500 font-mono bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+                  Пример: <span class="text-slate-800 font-semibold">Автоопрос бота в 18:00: кнопки [0] [1] [2] [3] [4] [5+]</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SUBTAB 2: SYSTEM TOGGLES & AI -->
+          <div id="tasks-view-system" class="hidden space-y-6">
+            <!-- Schedule Settings -->
+            <div class="bg-white rounded-2xl border border-slate-200/70 p-6 space-y-4">
+              <div class="flex items-center gap-2 pb-3 border-b border-slate-100">
+                <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <div>
+                  <h3 class="text-base font-bold text-slate-900">Расписание и дедлайны бота</h3>
+                  <p class="text-xs text-slate-500">Автоматические триггеры рассылок, напоминаний и выходных</p>
+                </div>
+              </div>
+
+              <div class="divide-y divide-slate-100">
+                <div class="py-3.5 flex items-center justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-slate-900">Утренний мотивационный пуш (09:00)</div>
+                    <div class="text-xs text-slate-500">Бот отправляет напоминание о фокусе дня в мини-группы учениц (Пн-Сб)</div>
+                  </div>
+                  <button onclick="toggleGenericSwitch(this, 'Утренний пуш 09:00')" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors">
+                    <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition translate-x-5"></span>
+                  </button>
+                </div>
+
+                <div class="py-3.5 flex items-center justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-slate-900">Вечернее напоминание должникам (20:00)</div>
+                    <div class="text-xs text-slate-500">Автопуш тем, кто еще не сдал отчёт за 1 час до дедлайна</div>
+                  </div>
+                  <button onclick="toggleGenericSwitch(this, 'Вечернее напоминание 20:00')" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors">
+                    <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition translate-x-5"></span>
+                  </button>
+                </div>
+
+                <div class="py-3.5 flex items-center justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-slate-900">Строгий дедлайн сдачи (21:00)</div>
+                    <div class="text-xs text-slate-500">Отчёты, присланные после 21:00, помечаются желтым кружком (опоздание)</div>
+                  </div>
+                  <button onclick="toggleGenericSwitch(this, 'Строгий дедлайн 21:00')" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors">
+                    <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition translate-x-5"></span>
+                  </button>
+                </div>
+
+                <div class="py-3.5 flex items-center justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-slate-900">Субботний автоопрос по новым клиентам (18:00)</div>
+                    <div class="text-xs text-slate-500">Инлайн-кнопки [0] [1] [2] [3] [4] [5+] для фиксации прироста клиентов</div>
+                  </div>
+                  <button onclick="toggleGenericSwitch(this, 'Субботний автоопрос 18:00')" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors">
+                    <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition translate-x-5"></span>
+                  </button>
+                </div>
+
+                <div class="py-3.5 flex items-center justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-slate-900">Воскресная пауза (официальный выходной)</div>
+                    <div class="text-xs text-slate-500">Бот полностью молчит по воскресеньям, стрик не штрафуется</div>
+                  </div>
+                  <button onclick="toggleGenericSwitch(this, 'Воскресный выходной')" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors">
+                    <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition translate-x-5"></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Settings -->
+            <div class="bg-white rounded-2xl border border-slate-200/70 p-6 space-y-4">
+              <div class="flex items-center gap-2 pb-3 border-b border-slate-100">
+                <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                <div>
+                  <h3 class="text-base font-bold text-slate-900">AI-автоматизации и защита от фрода</h3>
+                  <p class="text-xs text-slate-500">Транскрибация аудио, суммаризация LLM и проверка повторов</p>
+                </div>
+              </div>
+
+              <div class="divide-y divide-slate-100">
+                <div class="py-3.5 flex items-center justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-slate-900">Whisper AI: транскрибация голосовых и кружочков</div>
+                    <div class="text-xs text-slate-500">Автоматический перевод войсов учениц с #вопрос в читаемый текст</div>
+                  </div>
+                  <button onclick="toggleGenericSwitch(this, 'Whisper AI транскрибация')" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors">
+                    <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition translate-x-5"></span>
+                  </button>
+                </div>
+
+                <div class="py-3.5 flex items-center justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-slate-900">LLM-выжимка рефлексии (3 буллета)</div>
+                    <div class="text-xs text-slate-500">Выделение эмоций, действий и ключевого вопроса к Ксении</div>
+                  </div>
+                  <button onclick="toggleGenericSwitch(this, 'LLM выжимка рефлексии')" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors">
+                    <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition translate-x-5"></span>
+                  </button>
+                </div>
+
+                <div class="py-3.5 flex items-center justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-slate-900">Анти-фрод: дедупликация Reels и медиафайлов</div>
+                    <div class="text-xs text-slate-500">Защита от повторной сдачи уже опубликованных роликов (SHA-256 + shortcode)</div>
+                  </div>
+                  <button onclick="toggleGenericSwitch(this, 'Анти-фрод дедупликация')" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors">
+                    <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition translate-x-5"></span>
+                  </button>
+                </div>
+
+                <div class="py-3.5 flex items-center justify-between">
+                  <div>
+                    <div class="text-sm font-semibold text-slate-900">Zoom-трекер: авто-детект ссылок и подсчет созвонов</div>
+                    <div class="text-xs text-slate-500">Автоматически инкрементирует счетчик встреч при отправке Zoom-ссылки в чат</div>
+                  </div>
+                  <button onclick="toggleGenericSwitch(this, 'Авто-детект Zoom')" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-indigo-600 transition-colors">
+                    <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition translate-x-5"></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast Element -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl text-sm font-semibold shadow-lg hidden"></div>
+
+  <script>
+    let currentTab = 'inbox';
+    let pendingCount = 3;
+
+    let currentAnalyticsCategory = 'cohort';
+    let currentAnalyticsPeriod = 'all';
+    let currentStudentIndex = 0;
+
+    const demoStudentsData = [
+      {
+        name: 'Милана Горохова',
+        niche: 'Стилист-имиджмейкер',
+        ptA: '30 000 ₽',
+        ptB: '180 000 ₽',
+        ticketA: '3 000 ₽',
+        ticketB: '45 000 ₽',
+        growth: '×6.0',
+        growthDiff: '+150 000 ₽ к старту',
+        incomeWeek: '45 000 ₽',
+        incomeMonth: '150 000 ₽',
+        incomeAll: '180 000 ₽',
+        reels: 14, reelsW: 4, reelsM: 12,
+        carousels: 8, carouselsW: 2, carouselsM: 7,
+        storytells: 10, storytellsW: 3, storytellsM: 9,
+        mailings: 145, mailingsW: 45, mailingsM: 125,
+        clients: 7, clientsW: 2, clientsM: 6,
+        disc: 95,
+        pause: false,
+        sentiment: 'Высокая мотивация, нащупала работающую связку в Reels',
+        win: 'Продала разбор гардероба за 45 000 ₽ через Direct'
+      },
+      {
+        name: 'Аня Петрова',
+        niche: 'Психолог для экспертов',
+        ptA: '25 000 ₽',
+        ptB: '45 000 ₽',
+        ticketA: '2 500 ₽',
+        ticketB: '15 000 ₽',
+        growth: '×1.8',
+        growthDiff: '+20 000 ₽ к старту',
+        incomeWeek: '15 000 ₽',
+        incomeMonth: '40 000 ₽',
+        incomeAll: '45 000 ₽',
+        reels: 7, reelsW: 2, reelsM: 6,
+        carousels: 3, carouselsW: 1, carouselsM: 3,
+        storytells: 4, storytellsW: 1, storytellsM: 3,
+        mailings: 72, mailingsW: 24, mailingsM: 60,
+        clients: 2, clientsW: 1, clientsM: 2,
+        disc: 64,
+        pause: false,
+        sentiment: 'Эмоциональные качели, сложно совмещать с основной работой',
+        win: 'Закрыла первую платную консультацию за 15 000 ₽'
+      },
+      {
+        name: 'Карина Волкова',
+        niche: 'Наставник бьюти-мастеров',
+        ptA: '50 000 ₽',
+        ptB: '310 000 ₽',
+        ticketA: '5 000 ₽',
+        ticketB: '60 000 ₽',
+        growth: '×6.2',
+        growthDiff: '+260 000 ₽ к старту',
+        incomeWeek: '80 000 ₽',
+        incomeMonth: '260 000 ₽',
+        incomeAll: '310 000 ₽',
+        reels: 18, reelsW: 5, reelsM: 16,
+        carousels: 12, carouselsW: 4, carouselsM: 10,
+        storytells: 14, storytellsW: 4, storytellsM: 12,
+        mailings: 210, mailingsW: 60, mailingsM: 180,
+        clients: 11, clientsW: 3, clientsM: 9,
+        disc: 100,
+        pause: false,
+        sentiment: 'Состояние потока, скрипты закрытия работают безотказно',
+        win: 'Внесла предоплату VIP-ученица на 80 000 ₽'
+      },
+      {
+        name: 'Виктория Лебедева',
+        niche: 'Фитнес-тренер онлайн',
+        ptA: '35 000 ₽',
+        ptB: '140 000 ₽',
+        ticketA: '3 500 ₽',
+        ticketB: '28 000 ₽',
+        growth: '×4.0',
+        growthDiff: '+105 000 ₽ к старту',
+        incomeWeek: '28 000 ₽',
+        incomeMonth: '112 000 ₽',
+        incomeAll: '140 000 ₽',
+        reels: 12, reelsW: 2, reelsM: 10,
+        carousels: 6, carouselsW: 1, carouselsM: 5,
+        storytells: 8, storytellsW: 2, storytellsM: 7,
+        mailings: 115, mailingsW: 25, mailingsM: 95,
+        clients: 5, clientsW: 1, clientsM: 4,
+        disc: 88,
+        pause: true,
+        sentiment: 'Временный спад из-за ОРВИ, активирован режим паузы',
+        win: 'Продала абонемент на 3 месяца за 28 000 ₽'
+      },
+      {
+        name: 'Полина Соколова',
+        niche: 'SMM-маркетолог',
+        ptA: '40 000 ₽',
+        ptB: '220 000 ₽',
+        ticketA: '10 000 ₽',
+        ticketB: '55 000 ₽',
+        growth: '×5.5',
+        growthDiff: '+180 000 ₽ к старту',
+        incomeWeek: '55 000 ₽',
+        incomeMonth: '180 000 ₽',
+        incomeAll: '220 000 ₽',
+        reels: 15, reelsW: 4, reelsM: 13,
+        carousels: 9, carouselsW: 3, carouselsM: 8,
+        storytells: 11, storytellsW: 3, storytellsM: 9,
+        mailings: 160, mailingsW: 50, mailingsM: 135,
+        clients: 8, clientsW: 2, clientsM: 7,
+        disc: 92,
+        pause: false,
+        sentiment: 'Уверенность в переговорах, клиенты соглашаются на чек 55к',
+        win: 'Взяла проект на комплексное ведение за 55 000 ₽/мес'
+      }
+    ];
+
+    function setAnalyticsCategory(cat) {
+      currentAnalyticsCategory = cat;
+      const isCohort = cat === 'cohort';
+      document.getElementById('analytics-cohort-view').classList.toggle('hidden', !isCohort);
+      document.getElementById('analytics-students-view').classList.toggle('hidden', isCohort);
+      
+      document.getElementById('cat-btn-cohort').className = isCohort
+        ? 'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white transition cursor-pointer'
+        : 'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer';
+
+      document.getElementById('cat-btn-students').className = !isCohort
+        ? 'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white transition cursor-pointer'
+        : 'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer';
+    }
+
+    function setAnalyticsPeriod(period) {
+      currentAnalyticsPeriod = period;
+      ['week', 'month', 'all'].forEach(p => {
+        const btn = document.getElementById('period-btn-' + p);
+        if (btn) {
+          btn.className = p === period
+            ? 'px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white transition cursor-pointer'
+            : 'px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer';
+        }
+      });
+
+      // Update Cohort aggregate numbers
+      const revElem = document.getElementById('kpi-revenue');
+      const revSubElem = document.getElementById('kpi-revenue-sub');
+      const reelsElem = document.getElementById('kpi-reels');
+      const reelsSubElem = document.getElementById('kpi-reels-sub');
+      const mailElem = document.getElementById('kpi-mailings');
+      const mailSubElem = document.getElementById('kpi-mailings-sub');
+      const carElem = document.getElementById('kpi-carousels');
+      const storyElem = document.getElementById('kpi-storytells');
+      const clientElem = document.getElementById('kpi-clients');
+      const periodLabel = document.getElementById('kpi-period-label');
+
+      if (period === 'week') {
+        revElem.innerText = '223 000 ₽';
+        revSubElem.innerText = '+223 000 ₽ за 7 дней';
+        reelsElem.innerText = '17';
+        reelsSubElem.innerText = '17 черновиков за неделю';
+        mailElem.innerText = '204';
+        mailSubElem.innerText = '204 рассылки за 7 дней';
+        carElem.innerText = '11';
+        storyElem.innerText = '13';
+        clientElem.innerText = '+9';
+        periodLabel.innerText = '7 дней';
+      } else if (period === 'month') {
+        revElem.innerText = '742 000 ₽';
+        revSubElem.innerText = '+310% за 30 дней';
+        reelsElem.innerText = '57';
+        reelsSubElem.innerText = '57 черновиков за 30 дней';
+        mailElem.innerText = '590';
+        mailSubElem.innerText = '590 рассылок за месяц';
+        carElem.innerText = '33';
+        storyElem.innerText = '40';
+        clientElem.innerText = '+28';
+        periodLabel.innerText = '30 дней';
+      } else {
+        revElem.innerText = '895 000 ₽';
+        revSubElem.innerText = '+490% с момента старта';
+        reelsElem.innerText = '66';
+        reelsSubElem.innerText = '66 черновиков за поток';
+        mailElem.innerText = '702';
+        mailSubElem.innerText = '702 за поток';
+        carElem.innerText = '38';
+        storyElem.innerText = '47';
+        clientElem.innerText = '+33';
+        periodLabel.innerText = 'Весь период';
+      }
+
+      // Re-render selected student with period metrics
+      selectStudentForAnalytics(currentStudentIndex);
+    }
+
+    function selectStudentForAnalytics(index) {
+      currentStudentIndex = index;
+      setAnalyticsCategory('students');
+
+      for (let i = 0; i < 5; i++) {
+        const btn = document.getElementById('stud-btn-' + i);
+        if (btn) {
+          btn.className = i === index
+            ? 'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-900 text-white transition cursor-pointer'
+            : 'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition cursor-pointer';
+        }
+      }
+
+      const s = demoStudentsData[index];
+      document.getElementById('stud-card-name').innerText = s.name;
+      document.getElementById('stud-card-badge').innerText = s.pause ? 'На паузе (болезнь)' : 'Активный трек';
+      document.getElementById('stud-card-badge').className = s.pause 
+        ? 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600'
+        : 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700';
+      document.getElementById('stud-card-niche').innerText = s.niche + ' · Telegram данные синхронизированы';
+
+      document.getElementById('stud-pt-a').innerText = s.ptA;
+      document.getElementById('stud-pt-a-sub').innerText = 'чек: ' + s.ticketA;
+      document.getElementById('stud-pt-b').innerText = s.ptB;
+      document.getElementById('stud-pt-b-sub').innerText = 'чек: ' + s.ticketB;
+      document.getElementById('stud-growth').innerText = s.growth;
+      document.getElementById('stud-growth-sub').innerText = s.growthDiff;
+
+      const period = currentAnalyticsPeriod;
+      const incomePeriodVal = period === 'week' ? s.incomeWeek : period === 'month' ? s.incomeMonth : s.incomeAll;
+      document.getElementById('stud-period-income').innerText = incomePeriodVal;
+      document.getElementById('stud-period-sub').innerText = period === 'week' ? 'за 7 дней' : period === 'month' ? 'за 30 дней' : 'весь период обучения';
+
+      const reelsVal = period === 'week' ? s.reelsW : period === 'month' ? s.reelsM : s.reels;
+      const carVal = period === 'week' ? s.carouselsW : period === 'month' ? s.carouselsM : s.carousels;
+      const storyVal = period === 'week' ? s.storytellsW : period === 'month' ? s.storytellsM : s.storytells;
+      const mailVal = period === 'week' ? s.mailingsW : period === 'month' ? s.mailingsM : s.mailings;
+      const clientVal = period === 'week' ? s.clientsW : period === 'month' ? s.clientsM : s.clients;
+
+      document.getElementById('stud-reels').innerText = reelsVal;
+      document.getElementById('stud-carousels').innerText = carVal;
+      document.getElementById('stud-storytells').innerText = storyVal;
+      document.getElementById('stud-mailings').innerText = mailVal;
+      document.getElementById('stud-clients').innerText = '+' + clientVal;
+      document.getElementById('stud-disc').innerText = s.disc + '%';
+
+      document.getElementById('stud-refl-sentiment').innerText = s.sentiment;
+      document.getElementById('stud-refl-win').innerText = s.win;
+
+      const caseTxt = `КЕЙС ПОТОКА: ${s.name}\nНиша: ${s.niche}\n\nТочка А: ${s.ptA} -> Точка Б: ${s.ptB} (РОСТ ${s.growth}!)\nСредний чек: вырос с ${s.ticketA} до ${s.ticketB}\nПроверено: ${s.reels} Reels, ${s.carousels} каруселей, ${s.storytells} сторителлов\nИсходящий трафик: ${s.mailings} рассылок по скрипту\nПрирост новых клиентов: +${s.clients}\nДисциплина сдачи: ${s.disc}%\n\n«Она просто перестала сливать дедлайны и внедрила ежедневный трекинг ключевых действий»`;
+      document.getElementById('stud-case-preview').innerText = caseTxt;
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.classList.remove('hidden');
+      setTimeout(() => toast.classList.add('hidden'), 3000);
+    }
+
+    function switchTab(tabId) {
+      currentTab = tabId;
+      ['inbox', 'students', 'analytics', 'tasks'].forEach(t => {
+        const sec = document.getElementById('tab-' + t);
+        const sideBtn = document.getElementById('side-' + t);
+        if (t === tabId) {
+          sec.classList.remove('hidden');
+          sideBtn.className = "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm bg-neutral-900 text-white font-medium transition cursor-pointer";
+        } else {
+          sec.classList.add('hidden');
+          sideBtn.className = "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm text-neutral-500 hover:text-neutral-900 hover:bg-slate-50 transition cursor-pointer font-medium";
+        }
+      });
+    }
+
+    function setAdmin(name) {
+      const isKsenia = name === 'Ксения';
+      document.getElementById('admin-ksenia').className = isKsenia 
+        ? 'py-1.5 rounded-lg transition cursor-pointer text-center bg-white text-slate-900 font-bold'
+        : 'py-1.5 rounded-lg transition cursor-pointer text-center text-slate-500 hover:text-slate-900';
+      document.getElementById('admin-katya').className = !isKsenia 
+        ? 'py-1.5 rounded-lg transition cursor-pointer text-center bg-white text-slate-900 font-bold'
+        : 'py-1.5 rounded-lg transition cursor-pointer text-center text-slate-500 hover:text-slate-900';
+      
+      document.getElementById('admin-avatar').innerText = name[0];
+      document.getElementById('admin-name').innerText = name;
+      document.getElementById('admin-role').innerText = isKsenia ? 'Главный наставник' : 'Куратор потока';
+      document.getElementById('mob-admin-label').innerText = name + ' · Поток Ноябрь';
+      showToast('Активный профиль: ' + name);
+    }
+
+    function approveReport(cardId, name, inputId) {
+      const card = document.getElementById(cardId);
+      const input = document.getElementById(inputId);
+      const text = input ? input.value.trim() : '';
+      if (card) {
+        card.remove();
+        pendingCount = Math.max(0, pendingCount - 1);
+        document.getElementById('badge-count').innerText = pendingCount;
+        document.getElementById('inbox-subtitle').innerText = pendingCount > 0 
+          ? pendingCount + ' отчёта ожидают проверки'
+          : 'Все черновики проверены';
+        showToast(text ? 'Ответ отправлен ' + name : 'Отчёт ' + name + ' одобрен к публикации');
+      }
+    }
+
+    function switchTasksSubTab(tab) {
+      const isHashtags = tab === 'hashtags';
+      document.getElementById('tasks-view-hashtags').classList.toggle('hidden', !isHashtags);
+      document.getElementById('tasks-view-system').classList.toggle('hidden', isHashtags);
+
+      document.getElementById('tasks-subtab-hashtags').className = isHashtags
+        ? 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white transition cursor-pointer'
+        : 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer';
+
+      document.getElementById('tasks-subtab-system').className = !isHashtags
+        ? 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white transition cursor-pointer'
+        : 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer';
+    }
+
+    function toggleRuleReqDemo(badgeId) {
+      const el = document.getElementById(badgeId);
+      const isReq = el.innerText.trim() === 'обязательно';
+      if (isReq) {
+        el.innerText = 'по факту';
+        el.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-md border bg-slate-100 text-slate-600 border-slate-200 transition cursor-pointer';
+        showToast('Статус изменен на: по факту');
+      } else {
+        el.innerText = 'обязательно';
+        el.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-md border bg-rose-50 text-rose-700 border-rose-100 transition cursor-pointer';
+        showToast('Статус изменен на: обязательно');
+      }
+    }
+
+    function toggleRuleEnabledDemo(cardId, btnId, dotId, labelId, tag) {
+      const btn = document.getElementById(btnId);
+      const dot = document.getElementById(dotId);
+      const card = document.getElementById(cardId);
+      const label = document.getElementById(labelId);
+      const isOn = btn.classList.contains('bg-indigo-600');
+
+      if (isOn) {
+        btn.classList.remove('bg-indigo-600');
+        btn.classList.add('bg-slate-300');
+        dot.classList.remove('translate-x-5');
+        dot.classList.add('translate-x-0');
+        card.classList.add('opacity-50', 'bg-slate-50/70', 'border-dashed');
+        if (label) label.innerText = 'ВЫКЛ';
+        showToast(`Хэштег ${tag} отключен в боте`);
+      } else {
+        btn.classList.remove('bg-slate-300');
+        btn.classList.add('bg-indigo-600');
+        dot.classList.remove('translate-x-0');
+        dot.classList.add('translate-x-5');
+        card.classList.remove('opacity-50', 'bg-slate-50/70', 'border-dashed');
+        if (label) label.innerText = 'ВКЛ';
+        showToast(`Хэштег ${tag} включен в боте`);
+      }
+    }
+
+    function toggleGenericSwitch(btn, title) {
+      const dot = btn.querySelector('span');
+      const isOn = btn.classList.contains('bg-indigo-600');
+      if (isOn) {
+        btn.classList.remove('bg-indigo-600');
+        btn.classList.add('bg-slate-300');
+        dot.classList.remove('translate-x-5');
+        dot.classList.add('translate-x-0');
+        showToast(`${title}: отключено`);
+      } else {
+        btn.classList.remove('bg-slate-300');
+        btn.classList.add('bg-indigo-600');
+        dot.classList.remove('translate-x-0');
+        dot.classList.add('translate-x-5');
+        showToast(`${title}: включено`);
+      }
+    }
+
+    function copyCaseText() {
+      const text = `КЕЙС ПОТОКА: Милана Горохова\nНиша: Стилист-имиджмейкер\n\nТочка А: 30 000 ₽ -> Точка Б: 180 000 ₽ (РОСТ x6.0!)\nСредний чек: вырос с 3 000 ₽ до 45 000 ₽\nПроверено: 14 Reels, 8 каруселей, 10 сторителлов\nИсходящий трафик: 145 рассылок по скрипту\nПрирост новых клиентов: +7\nДисциплина сдачи: 95%\n\n«Она просто перестала сливать дедлайны и внедрила ежедневный трекинг ключевых действий»`;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Кейс скопирован для Instagram Stories');
+      }).catch(() => {
+        showToast('Кейс скопирован');
+      });
+    }
+
+    let currentViewMode = 'mentor';
+    let anyaMailingsDone = 8;
+    let streakRehabOffered = false;
+
+    function switchViewMode(mode) {
+      showToast('Сайт настроен исключительно для наставника Ксении и куратора Кати. Ученицы сдают отчёты через бота @nastav_beauty_bot');
+    }
+        if (btnMobMentor) {
+          btnMobMentor.className = 'flex-1 py-1.5 px-2 rounded-lg text-center transition bg-white text-slate-900 font-bold shadow-xs';
+        }
+        if (btnMobStudent) {
+          btnMobStudent.className = 'flex-1 py-1.5 px-2 rounded-lg text-center transition flex items-center justify-center gap-1 text-slate-500';
+        }
+        showToast('Панель наставника (Ксения / Катя)');
+      }
+    }
+
+    function incrementAnyaMailings() {
+      if (anyaMailingsDone < 15) {
+        anyaMailingsDone++;
+        const pct = Math.round((anyaMailingsDone / 15) * 100);
+        document.getElementById('anya-mailings-badge').innerText = `${anyaMailingsDone} / 15 отправлено`;
+        document.getElementById('anya-mailings-bar').style.width = `${pct}%`;
+        document.getElementById('anya-mailings-pct').innerText = `Прогресс: ${pct}%`;
+        document.getElementById('anya-mailings-btn-label').innerText = `+1 контакт (${anyaMailingsDone}/15)`;
+        showToast(`Зачтено Direct-касание: ${anyaMailingsDone}/15 контактов`);
+      } else {
+        showToast('Цель дня по рассылкам выполнена: 15/15 контактов!');
+      }
+    }
+
+    function offerStreakRehab() {
+      streakRehabOffered = true;
+      const btn = document.getElementById('demo-rehab-btn');
+      const text = document.getElementById('demo-rehab-text');
+      const banner = document.getElementById('anya-rehab-banner');
+      if (btn) {
+        btn.className = 'px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 transition cursor-default';
+      }
+      if (text) {
+        text.innerText = 'Амнистия предложена в чате';
+      }
+      if (banner) {
+        banner.classList.remove('hidden');
+      }
+      showToast('Офер амнистии стрика отправлен Ане в Telegram: 1 Reels + 15 рассылок вернут дисциплину до 92%');
+    }
+
+    function copyAnyaScript(idx) {
+      let text = '';
+      if (idx === 1) {
+        text = 'Привет, [Имя]! Увидела твой сторителл про запуск — очень откликается глубина. Заметила, что многие сильные эксперты на масштабе ловят выгорание и синдром самозванца. Я клинический психолог, помогаю экспертам пробить плато дохода без надрыва. Хочу подарить 15-минутный экспресс-разбор: где сейчас утекает энергия. Актуально на этой неделе?';
+      } else {
+        text = 'Мы вскрыли корень: страх отказа и обесценивание своего опыта. Чтобы убрать это системно за 3 недели и зафиксировать чек, предлагаю пакет из 4 сессий с моим личным сопровождением в Telegram между встречами. Стоимость — 15 000 ₽. Стартуем в четверг?';
+      }
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(idx === 1 ? 'Скрипт первого касания скопирован' : 'Офер пакета на 15 000 ₽ скопирован');
+      }).catch(() => {
+        showToast('Скрипт скопирован');
+      });
+    }
+  </script>
+</body>
+</html>

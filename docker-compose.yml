@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mentor_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mentor_hub
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mentor_hub"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mentor-network
+
+  backend:
+    build: .
+    container_name: mentor_backend
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mentor_hub
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_FLYWAY_ENABLED: "true"
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-mock-token}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-MentorHubBot}
+      AI_API_KEY: ${AI_API_KEY:-mock-key}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mentor-network
+
+  frontend:
+    build: ./frontend
+    container_name: mentor_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - mentor-network
+
+volumes:
+  pgdata:
+
+networks:
+  mentor-network:
+    driver: bridge
