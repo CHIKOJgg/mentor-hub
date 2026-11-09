@@ -6,6 +6,7 @@ import com.mentorhub.dto.UpdateTaskRuleRequest;
 import com.mentorhub.service.TaskRuleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,6 +24,7 @@ public class TaskRulesController {
         return ResponseEntity.ok(rules);
     }
 
+    @PreAuthorize("hasRole('MENTOR')")
     @PostMapping("/rules")
     public ResponseEntity<TaskRuleResponse> createRule(@RequestBody @jakarta.validation.Valid CreateTaskRuleRequest request) {
         return ResponseEntity.status(201).body(taskRuleService.createRule(request));
@@ -45,6 +47,7 @@ public class TaskRulesController {
         return ResponseEntity.ok(updated);
     }
 
+    @PreAuthorize("hasRole('MENTOR')")
     @DeleteMapping("/rules/{id}")
     public ResponseEntity<Void> deleteRule(@PathVariable String id) {
         taskRuleService.deleteRule(parseId(id));

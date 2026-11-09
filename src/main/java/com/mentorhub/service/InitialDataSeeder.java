@@ -33,6 +33,10 @@ public class InitialDataSeeder {
 
         // 1. Update next_zoom_at on students if null
         Student milana = studentRepository.findByTgUsername("milana_gorohova").orElse(null);
+        if (milana == null) {
+            log.info("Non-demo dataset detected (no demo students found). Skipping mock data seeding.");
+            return;
+        }
         Student anya = studentRepository.findByTgUsername("anya_petrova_style").orElse(null);
         Student karina = studentRepository.findByTgUsername("volkova_coach").orElse(null);
         Student victoria = studentRepository.findByTgUsername("v_lebedeva_fit").orElse(null);

@@ -8,4 +8,6 @@ import java.util.Optional;
 
 public interface StudentDayOverrideRepository extends JpaRepository<StudentDayOverride, Long> {
     Optional<StudentDayOverride> findByStudentIdAndDayDate(Long studentId, LocalDate dayDate);
+
+    java.util.List<StudentDayOverride> findByStudentIdInAndDayDateBetween(java.util.List<Long> studentIds, LocalDate startDate, LocalDate endDate);
 }

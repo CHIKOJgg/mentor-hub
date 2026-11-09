@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -49,6 +50,7 @@ public class SystemController {
         return ResponseEntity.ok(systemService.getSettings());
     }
 
+    @PreAuthorize("hasRole('MENTOR')")
     @PutMapping("/settings")
     public ResponseEntity<SystemSettingsDto> updateSettings(@Valid @RequestBody SystemSettingsDto request) {
         return ResponseEntity.ok(systemService.updateSettings(request));
@@ -74,6 +76,7 @@ public class SystemController {
         return ResponseEntity.ok(systemService.updateZoomMeeting(meetingId, request));
     }
 
+    @PreAuthorize("hasRole('MENTOR')")
     @DeleteMapping("/zoom-tracker/{meetingId}")
     public ResponseEntity<Void> deleteZoomMeeting(@PathVariable Long meetingId) {
         systemService.deleteZoomMeeting(meetingId);

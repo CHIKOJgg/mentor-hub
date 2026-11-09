@@ -45,12 +45,15 @@ public class AdminTokenAuthenticationFilter extends OncePerRequestFilter {
                 if (adminToken.getExpiresAt() != null && adminToken.getExpiresAt().isBefore(Instant.now())) {
                     log.warn("Admin token expired for user: {}", adminToken.getAdminName());
                 } else {
-                    // Update last used timestamp
-                    adminToken.setLastUsedAt(Instant.now());
-                    try {
-                        adminTokenRepository.save(adminToken);
-                    } catch (Exception e) {
-                        log.debug("Could not update lastUsedAt for admin token: {}", e.getMessage());
+                    // Throttle lastUsedAt updates (at most once every 5 minutes) to eliminate database row-lock contention
+                    Instant now = Instant.now();
+                    if (adminToken.getLastUsedAt() == null || adminToken.getLastUsedAt().isBefore(now.minus(5, java.time.temporal.ChronoUnit.MINUTES))) {
+                        adminToken.setLastUsedAt(now);
+                        try {
+                            adminTokenRepository.save(adminToken);
+                        } catch (Exception e) {
+                            log.debug("Could not update lastUsedAt for admin token: {}", e.getMessage());
+                        }
                     }
 
                     // Format authority role
@@ -90,6 +93,7 @@ public class AdminTokenAuthenticationFilter extends OncePerRequestFilter {
 
         String paramToken = request.getParameter("token");
         if (StringUtils.hasText(paramToken)) {
+            log.warn("Security notice: Admin token received via URL query parameter. Header 'X-Admin-Token' or 'Authorization: Bearer' is strongly recommended.");
             return paramToken.trim();
         }
 

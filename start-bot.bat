@@ -5,8 +5,21 @@ echo   Mentor Hub — Запуск Telegram-бота @nastav_beauty_bot
 echo =====================================================================
 echo.
 
-if "%TELEGRAM_BOT_TOKEN%"=="" set TELEGRAM_BOT_TOKEN=9082484274:AAGIHVmoY5T3xfX-cbF3h37BOhSHckKq4_w
-if "%TELEGRAM_BOT_USERNAME%"=="" set TELEGRAM_BOT_USERNAME=nastav_beauty_bot
+if "%TELEGRAM_BOT_TOKEN%"=="" (
+    if exist .env (
+        for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
+            if "%%A"=="TELEGRAM_BOT_TOKEN" set TELEGRAM_BOT_TOKEN=%%B
+            if "%%A"=="TELEGRAM_BOT_USERNAME" set TELEGRAM_BOT_USERNAME=%%B
+        )
+    )
+)
+if "%TELEGRAM_BOT_TOKEN%"=="" (
+    echo [ERROR] TELEGRAM_BOT_TOKEN is not set.
+    echo Please set it in your environment or create a .env file based on .env.example.
+    pause
+    exit /b 1
+)
+if "%TELEGRAM_BOT_USERNAME%"=="" set TELEGRAM_BOT_USERNAME=MentorHubBot
 
 echo [INFO] Подключение к Telegram боту @%TELEGRAM_BOT_USERNAME%...
 

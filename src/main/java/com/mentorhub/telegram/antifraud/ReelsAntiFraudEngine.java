@@ -87,7 +87,8 @@ public class ReelsAntiFraudEngine {
         String reelHash = calculateHash(shortcode);
 
         Optional<ReelSubmission> existingOpt = deduplicationEnabled
-                ? reelSubmissionRepository.findByReelHash(reelHash)
+                ? reelSubmissionRepository.findFirstByReelHashOrderByCheckedAtAsc(reelHash)
+                        .or(() -> reelSubmissionRepository.findByReelHash(reelHash))
                 : Optional.empty();
 
         boolean isDuplicate = false;

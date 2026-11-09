@@ -9,6 +9,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -20,6 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Transactional
 class SecurityIntegrationTest {
 
     @Autowired
@@ -93,5 +95,21 @@ class SecurityIntegrationTest {
         mockMvc.perform(get("/api/inbox")
                         .header("X-Admin-Token", expiredTokenStr))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Curator role cannot access Mentor-only deleteStudent endpoint (returns 403 Forbidden)")
+    void testCuratorCannotDeleteStudent() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/students/1")
+                        .header("X-Admin-Token", "magic-katya-curator-token-112233"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Mentor role is authorized to access deleteStudent endpoint")
+    void testMentorCanDeleteStudent() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/students/1")
+                        .header("X-Admin-Token", "magic-ksenia-mentor-token-998877"))
+                .andExpect(status().isNoContent());
     }
 }

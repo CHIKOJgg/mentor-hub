@@ -18,7 +18,13 @@ public class ReelsAccessibilityProbe {
     private final RestClient restClient;
 
     public ReelsAccessibilityProbe() {
+        org.springframework.http.client.SimpleClientHttpRequestFactory requestFactory =
+                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(java.time.Duration.ofSeconds(3));
+        requestFactory.setReadTimeout(java.time.Duration.ofSeconds(4));
+
         this.restClient = RestClient.builder()
+                .requestFactory(requestFactory)
                 .defaultHeader(HttpHeaders.USER_AGENT, BROWSER_USER_AGENT)
                 .defaultHeader(HttpHeaders.ACCEPT_LANGUAGE, "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7")
                 .build();

@@ -133,4 +133,40 @@ class ReelsAntiFraudEngineTest {
                 .contains("ФРОД: ролик сдан ученицей Милана Горохова")
                 .contains("04");
     }
+
+    @Test
+    @DisplayName("Multiple duplicates in database safely resolve earliest submission without IncorrectResultSizeDataAccessException")
+    void evaluateReel_multipleDuplicatesInDbSafelyHandled() {
+        ReelSubmissionRepository repo = mock(ReelSubmissionRepository.class);
+
+        Student originalStudent = Student.builder().id(1L).fullName("Милана Горохова").build();
+        Student student3 = Student.builder().id(3L).fullName("Карина Волкова").build();
+
+        DailyReport originalReport = DailyReport.builder()
+                .id(10L)
+                .student(originalStudent)
+                .reportDate(LocalDate.of(2026, 11, 4))
+                .build();
+
+        ReelSubmission earliestSubmission = ReelSubmission.builder()
+                .id(100L)
+                .report(originalReport)
+                .shortcode("DC194kaP91m")
+                .reelHash("somehash")
+                .build();
+
+        when(repo.findFirstByReelHashOrderByCheckedAtAsc(anyString())).thenReturn(Optional.of(earliestSubmission));
+
+        ReelsAntiFraudEngine engine = new ReelsAntiFraudEngine(repo, stubProbe);
+        ReelsAntiFraudEngine.AntiFraudEvaluation eval = engine.evaluateReel(
+                "https://www.instagram.com/reel/DC194kaP91m/",
+                "DC194kaP91m",
+                "https://www.instagram.com/reel/DC194kaP91m/",
+                student3
+        );
+
+        assertThat(eval.isDuplicate()).isTrue();
+        assertThat(eval.isCrossStudentFraud()).isTrue();
+        assertThat(eval.duplicateOf()).isEqualTo(earliestSubmission);
+    }
 }

@@ -21,7 +21,8 @@ import java.util.concurrent.*;
 @Service
 public class SpringAiReportExtractor {
 
-    private static final long AI_TIMEOUT_MS = 3000L;
+    private static final long AI_CHAT_TIMEOUT_MS = 3500L;
+    private static final long AI_WHISPER_TIMEOUT_MS = 15000L;
 
     private final DeterministicAiFallbackService fallbackService;
     private final ChatClient chatClient;
@@ -76,6 +77,7 @@ public class SpringAiReportExtractor {
             return "[Голосовое сообщение / кружочек: расшифровка в офлайн-режиме]";
         }
 
+        Future<String> future = null;
         try {
             Resource resource = new ByteArrayResource(audioBytes) {
                 @Override
@@ -91,7 +93,7 @@ public class SpringAiReportExtractor {
 
             AudioTranscriptionPrompt prompt = new AudioTranscriptionPrompt(resource, options);
 
-            Future<String> future = aiExecutor.submit(() -> {
+            future = aiExecutor.submit(() -> {
                 AudioTranscriptionResponse response = transcriptionModel.call(prompt);
                 if (response != null && response.getResult() != null) {
                     return response.getResult().getOutput();
@@ -99,9 +101,10 @@ public class SpringAiReportExtractor {
                 return "";
             });
 
-            return future.get(AI_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            return future.get(AI_WHISPER_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (TimeoutException te) {
-            log.warn("Whisper STT timed out (>{} ms) for {}", AI_TIMEOUT_MS, filename);
+            if (future != null) future.cancel(true);
+            log.warn("Whisper STT timed out (>{} ms) for {}", AI_WHISPER_TIMEOUT_MS, filename);
             return "[Таймаут транскрибации Whisper: отчёт сохранён]";
         } catch (Exception ex) {
             log.warn("Whisper STT failed for {}: {}", filename, ex.getMessage());
@@ -119,12 +122,14 @@ public class SpringAiReportExtractor {
             return fallbackService.extractFacts(rawMessage, studentName);
         }
 
+        Future<ExtractedReportDto> future = null;
         try {
-            Future<ExtractedReportDto> future = aiExecutor.submit(() -> callChatClient(rawMessage, studentName));
-            return future.get(AI_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            future = aiExecutor.submit(() -> callChatClient(rawMessage, studentName));
+            return future.get(AI_CHAT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (TimeoutException te) {
+            if (future != null) future.cancel(true);
             log.warn("Spring AI ChatClient timed out (>{} ms) for student '{}'. Falling back to deterministic parser.",
-                    AI_TIMEOUT_MS, studentName);
+                    AI_CHAT_TIMEOUT_MS, studentName);
             return fallbackService.extractFacts(rawMessage, studentName);
         } catch (Exception ex) {
             log.warn("Spring AI ChatClient error for student '{}': {}. Falling back to deterministic parser.",

@@ -57,8 +57,26 @@ public class StudentService {
             students = studentRepository.findAllWithZoomMeetings();
         }
 
+        List<Long> studentIds = students.stream().map(Student::getId).toList();
+        LocalDate today = LocalDate.now(MINSK_ZONE);
+        LocalDate monday = resolveVisibleWeekMonday(today);
+        LocalDate sunday = monday.plusDays(6);
+
+        Map<Long, Map<LocalDate, StudentDayOverride>> overridesByStudent = new HashMap<>();
+        Map<Long, Map<LocalDate, DailyReport>> reportsByStudent = new HashMap<>();
+
+        if (!studentIds.isEmpty()) {
+            studentDayOverrideRepository.findByStudentIdInAndDayDateBetween(studentIds, monday, sunday)
+                    .forEach(o -> overridesByStudent.computeIfAbsent(o.getStudent().getId(), k -> new HashMap<>()).put(o.getDayDate(), o));
+
+            dailyReportRepository.findByStudentIdInAndReportDateBetween(studentIds, monday, sunday)
+                    .forEach(r -> reportsByStudent.computeIfAbsent(r.getStudent().getId(), k -> new HashMap<>()).put(r.getReportDate(), r));
+        }
+
         return students.stream()
-                .map(this::mapToDisciplineResponse)
+                .map(s -> mapToDisciplineResponse(s,
+                        overridesByStudent.getOrDefault(s.getId(), Collections.emptyMap()),
+                        reportsByStudent.getOrDefault(s.getId(), Collections.emptyMap())))
                 .toList();
     }
 
@@ -218,7 +236,15 @@ public class StudentService {
     }
 
     public StudentDisciplineResponse mapToDisciplineResponse(Student student) {
-        List<DayInfoResponse> weekDays = buildWeeklyCalendar(student);
+        return mapToDisciplineResponse(student, null, null);
+    }
+
+    public StudentDisciplineResponse mapToDisciplineResponse(
+            Student student,
+            Map<LocalDate, StudentDayOverride> overrides,
+            Map<LocalDate, DailyReport> reports
+    ) {
+        List<DayInfoResponse> weekDays = buildWeeklyCalendar(student, overrides, reports);
         int disciplineRate = calculateDisciplineRate(student, weekDays);
 
         String nextZoomDate = null;
@@ -317,6 +343,14 @@ public class StudentService {
     }
 
     private List<DayInfoResponse> buildWeeklyCalendar(Student student) {
+        return buildWeeklyCalendar(student, null, null);
+    }
+
+    private List<DayInfoResponse> buildWeeklyCalendar(
+            Student student,
+            Map<LocalDate, StudentDayOverride> overrides,
+            Map<LocalDate, DailyReport> reports
+    ) {
         List<DayInfoResponse> calendar = new ArrayList<>();
         LocalDate today = LocalDate.now(MINSK_ZONE);
         LocalDate monday = resolveVisibleWeekMonday(today);
@@ -328,7 +362,9 @@ public class StudentService {
             String dayName = RU_DAY_NAMES[i];
             String dateFormatted = DAY_DATE_FORMATTER.format(dayDate);
 
-            Optional<StudentDayOverride> override = studentDayOverrideRepository.findByStudentIdAndDayDate(student.getId(), dayDate);
+            Optional<StudentDayOverride> override = overrides != null
+                    ? Optional.ofNullable(overrides.get(dayDate))
+                    : studentDayOverrideRepository.findByStudentIdAndDayDate(student.getId(), dayDate);
             if (override.isPresent()) {
                 calendar.add(new DayInfoResponse(dayName, dateFormatted, override.get().getStatus(), override.get().getDetails(), dayDate));
                 continue;
@@ -347,7 +383,9 @@ public class StudentService {
             }
 
             // 2. Query database for authentic daily report
-            Optional<DailyReport> reportOpt = dailyReportRepository.findByStudentIdAndReportDate(student.getId(), dayDate);
+            Optional<DailyReport> reportOpt = reports != null
+                    ? Optional.ofNullable(reports.get(dayDate))
+                    : dailyReportRepository.findByStudentIdAndReportDate(student.getId(), dayDate);
             if (reportOpt.isPresent()) {
                 DailyReport report = reportOpt.get();
                 if (Boolean.TRUE.equals(report.getIsOnTime())) {

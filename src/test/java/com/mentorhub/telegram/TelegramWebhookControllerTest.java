@@ -57,4 +57,27 @@ class TelegramWebhookControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(routedUpdate[0]).isNull();
     }
+
+    @Test
+    @DisplayName("Webhook with unconfigured secret token rejects requests (returns 403 Forbidden)")
+    void handleWebhook_missingConfiguredSecret() {
+        final Update[] routedUpdate = new Update[1];
+        TelegramMessageRouter stubRouter = new TelegramMessageRouter(null, null, null, null, null, null) {
+            @Override
+            public void routeUpdate(Update update) {
+                routedUpdate[0] = update;
+            }
+        };
+
+        TelegramWebhookController controller = new TelegramWebhookController(stubRouter);
+        ReflectionTestUtils.setField(controller, "configuredSecretToken", "");
+
+        Update update = new Update();
+        update.setUpdateId(103);
+
+        ResponseEntity<Void> response = controller.handleWebhook(null, update);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(routedUpdate[0]).isNull();
+    }
 }

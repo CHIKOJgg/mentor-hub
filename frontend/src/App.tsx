@@ -3118,7 +3118,7 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setEditingDay(prev =>
-                        prev ? { ...prev, day: { ...prev.day, status: opt.status as any } } : null
+                        prev ? { ...prev, day: { ...prev.day, status: opt.status as DayInfo['status'] } } : null
                       );
                     }}
                     className={`text-xs font-semibold p-2.5 rounded-xl border text-left transition cursor-pointer flex items-center gap-2 ${

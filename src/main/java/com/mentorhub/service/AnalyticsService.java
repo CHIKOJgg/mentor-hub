@@ -88,10 +88,8 @@ public class AnalyticsService {
                 .filter(r -> "BURNOUT_ALERT".equalsIgnoreCase(r.getEmotionalStatus()))
                 .count();
 
-        // AI reflection processed count
-        long aiReflectionCount = dailyReportRepository.findAll().stream()
-                .filter(r -> r.getReflectionEmotions() != null || r.getReflectionActions() != null || r.getReflectionQuestion() != null)
-                .count();
+        // AI reflection processed count (single indexed DB query instead of loading whole table)
+        long aiReflectionCount = dailyReportRepository.countByAnyReflectionNotNull();
 
         return new AnalyticsSummaryResponse(
                 totalEarned,

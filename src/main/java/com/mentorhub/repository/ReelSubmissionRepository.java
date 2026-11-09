@@ -10,6 +10,8 @@ import java.util.Optional;
 @Repository
 public interface ReelSubmissionRepository extends JpaRepository<ReelSubmission, Long> {
 
+    Optional<ReelSubmission> findFirstByReelHashOrderByCheckedAtAsc(String reelHash);
+
     Optional<ReelSubmission> findByReelHash(String reelHash);
 
     Optional<ReelSubmission> findByShortcode(String shortcode);

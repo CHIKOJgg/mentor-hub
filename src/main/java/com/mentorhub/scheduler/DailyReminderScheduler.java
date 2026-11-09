@@ -99,18 +99,34 @@ public class DailyReminderScheduler {
             return List.of();
         }
 
-        return studentRepository.findByIsActiveTrue().stream()
-                // Strictly exclude sick/paused students
+        List<Student> activeStudents = studentRepository.findByIsActiveTrue().stream()
                 .filter(s -> !Boolean.TRUE.equals(s.getIsPaused()))
-                // Exclude students who already submitted a report today
-                .filter(s -> {
-                    Optional<DailyReport> reportOpt = dailyReportRepository.findByStudentIdAndReportDate(s.getId(), date);
-                    if (reportOpt.isEmpty()) {
-                        return true;
-                    }
-                    String status = reportOpt.get().getStatus();
-                    return !"PENDING".equalsIgnoreCase(status) && !"APPROVED".equalsIgnoreCase(status);
-                })
+                .toList();
+
+        if (activeStudents.isEmpty()) {
+            return List.of();
+        }
+
+        java.util.List<DailyReport> batchReports = dailyReportRepository.findByReportDate(date);
+        java.util.Set<Long> submittedStudentIds;
+        if (batchReports != null && !batchReports.isEmpty()) {
+            submittedStudentIds = batchReports.stream()
+                    .filter(r -> "PENDING".equalsIgnoreCase(r.getStatus()) || "APPROVED".equalsIgnoreCase(r.getStatus()))
+                    .filter(r -> r.getStudent() != null && r.getStudent().getId() != null)
+                    .map(r -> r.getStudent().getId())
+                    .collect(java.util.stream.Collectors.toSet());
+        } else {
+            // Fallback for isolated mocks or environments where findByReportDate is not populated
+            submittedStudentIds = activeStudents.stream()
+                    .filter(s -> dailyReportRepository.findByStudentIdAndReportDate(s.getId(), date)
+                            .map(r -> "PENDING".equalsIgnoreCase(r.getStatus()) || "APPROVED".equalsIgnoreCase(r.getStatus()))
+                            .orElse(false))
+                    .map(Student::getId)
+                    .collect(java.util.stream.Collectors.toSet());
+        }
+
+        return activeStudents.stream()
+                .filter(s -> !submittedStudentIds.contains(s.getId()))
                 .toList();
     }
 
@@ -145,6 +161,15 @@ public class DailyReminderScheduler {
             String text = student.getFullName() + ", доброе утро. Выберите один главный результат на сегодня и не забывайте отметить отчет до "
                     + (settings.getDeadlineTime() == null ? "21:00" : settings.getDeadlineTime()) + ".";
             telegramSenderService.sendStudentMessage(student.getTgChatId(), businessConnectionId, text);
+            if (rateLimitMs > 0) {
+                try {
+                    Thread.sleep(rateLimitMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Morning focus loop interrupted");
+                    break;
+                }
+            }
         }
     }
 }

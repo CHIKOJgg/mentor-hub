@@ -38,6 +38,15 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
+                                "/",
+                                "/index.html",
+                                "/favicon.svg",
+                                "/assets/**",
+                                "/*.js",
+                                "/*.css",
+                                "/*.svg",
+                                "/*.png",
+                                "/*.ico",
                                 "/api/system/status",
                                 "/api/telegram/**",
                                 "/actuator/health",
@@ -65,12 +74,28 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(java.util.Arrays.stream(allowedOrigins.split(","))
+        List<String> origins = java.util.Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isEmpty())
-                .toList());
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Admin-Token", "X-Telegram-Bot-Api-Secret-Token"));
+                .toList();
+
+        if (origins.isEmpty() || origins.contains("*")) {
+            config.addAllowedOriginPattern("*");
+        } else {
+            for (String origin : origins) {
+                if (origin.contains("*")) {
+                    config.addAllowedOriginPattern(origin);
+                } else {
+                    config.addAllowedOrigin(origin);
+                }
+            }
+            config.addAllowedOriginPattern("https://*.railway.app");
+            config.addAllowedOriginPattern("https://*.up.railway.app");
+        }
+
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setExposedHeaders(List.of("Authorization", "X-Admin-Token"));
         config.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

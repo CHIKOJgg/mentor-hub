@@ -22,7 +22,14 @@ public interface DailyReportRepository extends JpaRepository<DailyReport, Long> 
 
     List<DailyReport> findByReportDateBetweenOrderByReportDateAsc(LocalDate startDate, LocalDate endDate);
 
+    List<DailyReport> findByStudentIdInAndReportDateBetween(List<Long> studentIds, LocalDate startDate, LocalDate endDate);
+
+    List<DailyReport> findByReportDate(LocalDate reportDate);
+
     long countByStatus(String status);
+
+    @Query("SELECT COUNT(r) FROM DailyReport r WHERE r.reflectionEmotions IS NOT NULL OR r.reflectionActions IS NOT NULL OR r.reflectionQuestion IS NOT NULL")
+    long countByAnyReflectionNotNull();
 
     @Query("SELECT MAX(r.reportDate) FROM DailyReport r")
     LocalDate findMaxReportDate();

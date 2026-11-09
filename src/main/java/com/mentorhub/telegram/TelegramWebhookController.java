@@ -26,11 +26,9 @@ public class TelegramWebhookController {
             @RequestHeader(value = "X-Telegram-Bot-Api-Secret-Token", required = false) String secretToken,
             @RequestBody Update update
     ) {
-        if (StringUtils.hasText(configuredSecretToken)) {
-            if (!configuredSecretToken.equals(secretToken)) {
-                log.warn("Unauthorized webhook request: secret token mismatch");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-            }
+        if (!StringUtils.hasText(configuredSecretToken) || !configuredSecretToken.equals(secretToken)) {
+            log.warn("Unauthorized webhook request: missing or mismatched secret token");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
         if (update != null) {

@@ -35,7 +35,7 @@ public class ZoomMeeting {
     @Column(name = "recording_url", columnDefinition = "TEXT")
     private String recordingUrl;
 
-    @Column(name = "scheduled_at", nullable = false)
+    @Column(name = "scheduled_at")
     private Instant scheduledAt;
 
     @Column(name = "completed_at")

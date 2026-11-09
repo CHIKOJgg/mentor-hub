@@ -327,11 +327,9 @@ public class TelegramReportHandler {
         boolean isDuplicate = false;
         String duplicateDate = null;
 
-        if (deduplicationEnabled && StringUtils.hasText(fileUniqueId)) {
-            // Deduplication check
-            boolean alreadyExists = contentDraftRepository.findAll().stream()
-                    .anyMatch(d -> fileTgId != null && fileTgId.equals(d.getFileTgId()));
-            if (alreadyExists) {
+        if (deduplicationEnabled && StringUtils.hasText(fileTgId)) {
+            // Efficient indexed deduplication check instead of loading entire table
+            if (contentDraftRepository.existsByFileTgId(fileTgId)) {
                 isDuplicate = true;
                 duplicateDate = "ранее";
             }
