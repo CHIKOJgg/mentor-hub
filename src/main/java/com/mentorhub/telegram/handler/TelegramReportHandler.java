@@ -132,8 +132,11 @@ public class TelegramReportHandler {
 
         report.setSubmittedAt(Instant.now());
         report.setIsOnTime(isOnTime);
-        if ("REJECTED".equalsIgnoreCase(report.getStatus())) {
-            report.setStatus("PENDING");
+        report.setStatus("PENDING");
+
+        // In mini-groups, bind the active group chatId to the student automatically
+        if (message.getChat() != null && (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat())) {
+            student.setTgChatId(message.getChat().getId());
         }
 
         String text = message.getText();

@@ -129,7 +129,7 @@ class StudentServiceTest {
         assertThat(byName).hasSize(1);
         assertThat(byName.get(0).fullName()).isEqualTo("Милана Горохова");
 
-        List<StudentDisciplineResponse> byNiche = studentService.getStudents("SMM", true);
+        List<StudentDisciplineResponse> byNiche = studentService.getStudents("Косметолог", true);
         assertThat(byNiche).hasSize(1);
         assertThat(byNiche.get(0).fullName()).isEqualTo("Полина Соколова");
 

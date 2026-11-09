@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { initialReports, studentDisciplines, taskRules, defaultSystemSettings } from './mockData';
-import type { DailyReport, StudentDiscipline, TabType, ContentType, TaskRule, SystemSettings, DayInfo, ZoomSessionRecord } from './types';
+import { BEAUTY_NICHES, type DailyReport, type StudentDiscipline, type TabType, type ContentType, type TaskRule, type SystemSettings, type DayInfo, type ZoomSessionRecord } from './types';
 import type { ApiAdminSession, ApiCuratorScript, ApiDailyReport, ApiStudent, ApiSystemSettings, ApiTaskRule, ApiZoomSession } from './api/contracts';
 import { api, getAdminToken, saveAdminToken } from './api/client';
 import { readPersisted, writePersisted } from './persistence';
@@ -126,7 +126,7 @@ const withZoomSessionSummary = (
 
 const newStudentTemplate = {
   fullName: '',
-  niche: '',
+  niche: BEAUTY_NICHES[0] as string,
   telegram: '',
   telegramChatId: '',
   initialIncome: 0,
@@ -3201,33 +3201,72 @@ export default function App() {
               </button>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="text-xs font-semibold text-slate-600">
-                Имя и фамилия
-                <input value={newStudent.fullName} onChange={event => setNewStudent(prev => ({ ...prev, fullName: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal" />
+              <label className="text-xs font-semibold text-slate-600 sm:col-span-2">
+                Имя и фамилия ученицы
+                <input
+                  value={newStudent.fullName}
+                  onChange={event => setNewStudent(prev => ({ ...prev, fullName: event.target.value }))}
+                  placeholder="Например: Милана Горохова"
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500"
+                />
               </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Ниша
-                <input value={newStudent.niche} onChange={event => setNewStudent(prev => ({ ...prev, niche: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal" />
+
+              <label className="text-xs font-semibold text-slate-600 sm:col-span-2">
+                Ниша (Бьюти & Стиль)
+                <select
+                  value={newStudent.niche}
+                  onChange={event => setNewStudent(prev => ({ ...prev, niche: event.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500 bg-white"
+                >
+                  {BEAUTY_NICHES.map(niche => (
+                    <option key={niche} value={niche}>{niche}</option>
+                  ))}
+                </select>
               </label>
+
+              <div className="sm:col-span-2 rounded-xl bg-indigo-50/80 border border-indigo-100 p-3.5 text-xs text-indigo-950 flex items-start gap-3">
+                <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-600 shrink-0 mt-0.5">
+                  <Send className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-semibold text-indigo-900">Автоматическая привязка к Telegram</div>
+                  <div className="text-slate-600 mt-0.5 leading-relaxed">
+                    Никаких Chat ID искать не нужно! Просто добавьте бота-ассистента в вашу мини-группу с ученицей, и группа привяжется автоматически.
+                  </div>
+                </div>
+              </div>
+
               <label className="text-xs font-semibold text-slate-600">
-                Telegram username
-                <input value={newStudent.telegram} onChange={event => setNewStudent(prev => ({ ...prev, telegram: event.target.value }))} placeholder="@username" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal" />
+                Доход на старте (Точка А), ₽
+                <input
+                  type="number"
+                  min={0}
+                  value={newStudent.initialIncome || ''}
+                  onChange={event => setNewStudent(prev => ({ ...prev, initialIncome: Number(event.target.value) || 0 }))}
+                  placeholder="30000"
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500"
+                />
               </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Telegram chat ID
-                <input type="number" value={newStudent.telegramChatId} onChange={event => setNewStudent(prev => ({ ...prev, telegramChatId: event.target.value }))} placeholder="Для отправки сообщений" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal" />
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Доход на старте, ₽
-                <input type="number" min={0} value={newStudent.initialIncome} onChange={event => setNewStudent(prev => ({ ...prev, initialIncome: Number(event.target.value) || 0 }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal" />
-              </label>
+
               <label className="text-xs font-semibold text-slate-600">
                 Средний чек на старте, ₽
-                <input type="number" min={0} value={newStudent.initialAvgTicket} onChange={event => setNewStudent(prev => ({ ...prev, initialAvgTicket: Number(event.target.value) || 0 }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal" />
+                <input
+                  type="number"
+                  min={0}
+                  value={newStudent.initialAvgTicket || ''}
+                  onChange={event => setNewStudent(prev => ({ ...prev, initialAvgTicket: Number(event.target.value) || 0 }))}
+                  placeholder="3000"
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500"
+                />
               </label>
+
               <label className="text-xs font-semibold text-slate-600 sm:col-span-2">
-                Тариф
-                <select value={newStudent.tariff} onChange={event => setNewStudent(prev => ({ ...prev, tariff: event.target.value === 'VIP' ? 'VIP' : 'Стандарт' }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal">
+                Тариф обучения
+                <select
+                  value={newStudent.tariff}
+                  onChange={event => setNewStudent(prev => ({ ...prev, tariff: event.target.value === 'VIP' ? 'VIP' : 'Стандарт' }))}
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500 bg-white"
+                >
                   <option value="Стандарт">Стандарт</option>
                   <option value="VIP">VIP</option>
                 </select>
@@ -3273,36 +3312,55 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Ниша эксперта:</label>
-                  <input
-                    type="text"
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Ниша (Бьюти & Стиль):</label>
+                  <select
                     value={editingStudent.niche}
                     onChange={e => setEditingStudent({ ...editingStudent, niche: e.target.value })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
-                  />
+                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 bg-white"
+                  >
+                    {BEAUTY_NICHES.map(niche => (
+                      <option key={niche} value={niche}>{niche}</option>
+                    ))}
+                    {!BEAUTY_NICHES.includes(editingStudent.niche as (typeof BEAUTY_NICHES)[number]) && (
+                      <option value={editingStudent.niche}>{editingStudent.niche}</option>
+                    )}
+                  </select>
                 </div>
               </div>
 
+              {/* Telegram Connection Card */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700">Рабочая Telegram-группа</span>
+                  {editingStudent.telegramChatId ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      🟢 Подключена
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                      ⏳ Ожидает группу
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  {editingStudent.telegramChatId
+                    ? `Телеграм-бот подключен к группе (ID: ${editingStudent.telegramChatId}). Все ответы ментора из дашборда отправляются в эту группу.`
+                    : `Чтобы привязать группу, добавьте бота в группу с ученицей (или отправьте в группе команду /bind ${editingStudent.fullName.split(' ')[0]}).`}
+                </p>
+                {editingStudent.telegramChatId && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingStudent({ ...editingStudent, telegramChatId: undefined })}
+                    className="text-xs text-rose-600 hover:text-rose-700 font-medium cursor-pointer"
+                  >
+                    Отвязать группу
+                  </button>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Telegram username:</label>
-                  <input
-                    type="text"
-                    value={editingStudent.telegram || ''}
-                    onChange={event => setEditingStudent({ ...editingStudent, telegram: event.target.value || undefined })}
-                    placeholder="@username"
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Telegram chat ID:</label>
-                  <input
-                    type="number"
-                    value={editingStudent.telegramChatId ?? ''}
-                    onChange={event => setEditingStudent({ ...editingStudent, telegramChatId: event.target.value ? Number(event.target.value) : undefined })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                  />
-                </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-600 block mb-1">Тариф:</label>
                   <select

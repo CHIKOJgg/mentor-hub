@@ -23,6 +23,7 @@ import org.telegram.telegrambots.meta.api.objects.business.BusinessConnection;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Slf4j
@@ -209,8 +210,8 @@ public class TelegramMessageRouter {
             return;
         }
 
-        // Identify Student by tg_chat_id or tg_user_id or username
-        Optional<Student> studentOpt = identifyStudent(chatId, fromId, from.getUserName());
+        // Identify Student by tg_chat_id or tg_user_id or username or group title/command
+        Optional<Student> studentOpt = identifyStudent(chatId, fromId, from.getUserName(), message);
 
         if (studentOpt.isEmpty()) {
             log.warn("Unmatched user encountered: chat_id={}, user_id={}, username='{}'",
@@ -228,12 +229,17 @@ public class TelegramMessageRouter {
                     .build());
 
             if (telegramSenderService != null && chatId != null) {
-                String uName = from.getUserName() != null ? "@" + from.getUserName() : "ID: " + fromId;
-                String guidance = "Здравствуйте! Ваш Telegram (" + uName + ") пока не привязан к списку учениц в системе.\n\n" +
-                        "Чтобы отчёты попадали в дашборд Ксении и Кати:\n" +
-                        "1. Добавьте меня в вашу рабочую мини-группу с Ксенией и Катей.\n" +
-                        "2. Куратор Катя зафиксирует ваш Telegram в списке потока.\n" +
-                        "(Ваш Telegram ID: " + fromId + ")";
+                boolean isGroup = message.getChat() != null && (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat());
+                String guidance;
+                if (isGroup) {
+                    guidance = "Здравствуйте! Я бот-ассистент платформы Mentor Hub для Ксении и Кати 🌸\n\n" +
+                            "Чтобы связать эту группу с ученицей, укажите имя ученицы в названии группы (например: «VIP — Милана») или отправьте команду:\n" +
+                            "/bind [Имя ученицы] (например: /bind Милана)";
+                } else {
+                    String uName = from.getUserName() != null ? "@" + from.getUserName() : "ID: " + fromId;
+                    guidance = "Здравствуйте! Ваш Telegram (" + uName + ") пока не привязан к списку учениц в системе.\n\n" +
+                            "Добавьте меня в вашу рабочую мини-группу с Ксенией и Катей, и чат подключится автоматически!";
+                }
                 telegramSenderService.sendCaringReply(chatId, message.getMessageId(), guidance);
             }
             return;
@@ -292,7 +298,7 @@ public class TelegramMessageRouter {
                 .anyMatch(t -> "CURATOR".equalsIgnoreCase(t.getRole()) && fromId.equals(t.getTgUserId()));
     }
 
-    private Optional<Student> identifyStudent(Long chatId, Long fromId, String username) {
+    private Optional<Student> identifyStudent(Long chatId, Long fromId, String username, Message message) {
         // 1. Try matching by group chatId
         if (chatId != null) {
             Optional<Student> byChat = studentRepository.findByTgChatId(chatId);
@@ -305,6 +311,13 @@ public class TelegramMessageRouter {
         if (fromId != null) {
             Optional<Student> byUser = studentRepository.findByTgChatId(fromId);
             if (byUser.isPresent()) {
+                Student st = byUser.get();
+                if (chatId != null && message != null && message.getChat() != null &&
+                        (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat())) {
+                    st.setTgChatId(chatId);
+                    studentRepository.save(st);
+                    log.info("Auto-bound student '{}' to group chat {}", st.getFullName(), chatId);
+                }
                 return byUser;
             }
         }
@@ -314,7 +327,56 @@ public class TelegramMessageRouter {
             String cleanName = username.replace("@", "").trim();
             Optional<Student> byName = studentRepository.findByTgUsername(cleanName);
             if (byName.isPresent()) {
+                Student st = byName.get();
+                if (chatId != null && message != null && message.getChat() != null &&
+                        (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat())) {
+                    st.setTgChatId(chatId);
+                    studentRepository.save(st);
+                    log.info("Auto-bound student '{}' to group chat {}", st.getFullName(), chatId);
+                }
                 return byName;
+            }
+        }
+
+        // 4. In a group chat, try matching by group title! (e.g. "VIP — Милана" matches "Милана")
+        if (message != null && message.getChat() != null && StringUtils.hasText(message.getChat().getTitle())) {
+            String titleLower = message.getChat().getTitle().toLowerCase();
+            List<Student> allStudents = studentRepository.findAll();
+            for (Student st : allStudents) {
+                if (st.getFullName() != null) {
+                    String nameLower = st.getFullName().toLowerCase();
+                    String firstNameLower = nameLower.split("\\s+")[0];
+                    if (titleLower.contains(nameLower) || (firstNameLower.length() >= 3 && titleLower.contains(firstNameLower))) {
+                        st.setTgChatId(chatId);
+                        studentRepository.save(st);
+                        log.info("Auto-bound student '{}' to group chat '{}' ({}) via title match", st.getFullName(), message.getChat().getTitle(), chatId);
+                        return Optional.of(st);
+                    }
+                }
+            }
+        }
+
+        // 5. Try command binding: /bind <name> or /link <name>
+        String rawText = message != null ? (message.getText() != null ? message.getText() : message.getCaption()) : null;
+        if (StringUtils.hasText(rawText)) {
+            String trimmed = rawText.trim();
+            if (trimmed.startsWith("/bind") || trimmed.startsWith("/link")) {
+                String target = trimmed.replaceFirst("^/(bind|link)", "").trim().toLowerCase();
+                if (StringUtils.hasText(target)) {
+                    List<Student> allStudents = studentRepository.findAll();
+                    for (Student st : allStudents) {
+                        if (st.getFullName() != null && st.getFullName().toLowerCase().contains(target)) {
+                            st.setTgChatId(chatId);
+                            studentRepository.save(st);
+                            log.info("Bound student '{}' to chat {} via /bind command", st.getFullName(), chatId);
+                            if (telegramSenderService != null && chatId != null) {
+                                telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
+                                        "✅ Группа успешно привязана к ученице " + st.getFullName() + "! Теперь все отчёты с хэштегами будут автоматически попадать на проверку Ксении и Кате.");
+                            }
+                            return Optional.of(st);
+                        }
+                    }
+                }
             }
         }
 

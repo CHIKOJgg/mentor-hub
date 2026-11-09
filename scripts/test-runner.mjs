@@ -730,7 +730,7 @@ describe('Tier 3: Cross-Feature State Combinations', () => {
     assert.strictEqual(filtered.length, 1);
     assert.strictEqual(filtered[0].id, 'st-1');
     // Switching query to niche
-    const filteredNiche = filterStudents(studentDisciplines, 'SMM');
+    const filteredNiche = filterStudents(studentDisciplines, 'Косметолог');
     assert.strictEqual(filteredNiche.length, 1);
     assert.strictEqual(filteredNiche[0].id, 'st-5');
   });
@@ -891,7 +891,7 @@ describe('Tier 4: Real-World Scenarios (End-to-End User Journeys)', () => {
     assert.strictEqual(missedDays.length, 2, 'Anya missed 2 reports (Вт and Пт)');
 
     // 3. Isolates Anya via search
-    const isolated = filterStudents(studentDisciplines, 'Психолог');
+    const isolated = filterStudents(studentDisciplines, 'Маникюр');
     assert.strictEqual(isolated.length, 1);
     assert.strictEqual(isolated[0].fullName, 'Аня Петрова');
   });

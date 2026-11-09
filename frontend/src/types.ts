@@ -165,3 +165,13 @@ export interface SystemSettings {
 }
 
 export type TabType = 'inbox' | 'students' | 'analytics' | 'tasks';
+
+export const BEAUTY_NICHES = [
+  'Бьюти-мастер (Маникюр / Брови)',
+  'Стилист-имиджмейкер',
+  'Визажист-стилист',
+  'Косметолог-эстетист',
+  'Наставник бьюти-сферы',
+] as const;
+
+export type BeautyNiche = (typeof BEAUTY_NICHES)[number];
