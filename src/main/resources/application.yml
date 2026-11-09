@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${PORT:8080}
   shutdown: graceful
 
 spring:
@@ -10,9 +10,9 @@ spring:
       enabled: true
 
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:5432/${DB_NAME:mentor_hub}
-    username: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:postgres}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:${PGHOST:localhost}}:${DB_PORT:${PGPORT:5432}}/${DB_NAME:${PGDATABASE:mentor_hub}}}
+    username: ${DB_USER:${PGUSER:postgres}}
+    password: ${DB_PASSWORD:${PGPASSWORD:postgres}}
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -35,15 +35,16 @@ spring:
 
   ai:
     openai:
+      base-url: ${AI_BASE_URL:https://api.openai.com}
       api-key: ${AI_API_KEY:mock-key}
       chat:
         options:
-          model: gpt-4o-mini
+          model: ${AI_MODEL:gpt-4o-mini}
           temperature: 0.2
       audio:
         transcription:
           options:
-            model: whisper-1
+            model: ${AI_WHISPER_MODEL:whisper-1}
             language: ru
 
 telegram:

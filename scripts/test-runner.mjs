@@ -153,8 +153,10 @@ console.log(`${colors.bold}${colors.magenta}====================================
 // =============================================================================
 describe('Suite 0: Static Build & Linter Verification', () => {
   test('TC-0.1: Oxlint static analysis passes with 0 errors and 0 warnings', () => {
-    const output = execSync('npm --prefix frontend run lint', { cwd: rootDir, encoding: 'utf8' });
-    assert.match(output, /Found 0 warnings and 0 errors/i, 'Linter should report 0 errors and 0 warnings');
+    assert.doesNotThrow(
+      () => execSync('npm --prefix frontend run lint -- --deny-warnings', { cwd: rootDir, encoding: 'utf8' }),
+      'Linter should exit successfully with no warnings or errors'
+    );
   });
 
   test('TC-0.2: TypeScript compilation and Vite build succeed (tsc -b && vite build)', () => {
@@ -202,21 +204,23 @@ describe('Tier 1 - Area 1: Brand Neutrality & Global Header', () => {
     );
   });
 
-  test('TC-1.1.2: Global header displays neutral title "Mentor Hub" and subtitle', () => {
+  test('TC-1.1.2: Header uses a neutral title without product branding', () => {
     assert.ok(
-      appTsxContent.includes('Mentor Hub'),
-      'App.tsx must include header title "Mentor Hub"'
+      appTsxContent.includes('Панель наставника'),
+      'App.tsx must include a clear, neutral page title'
     );
     assert.ok(appTsxContent.includes('Панель наставника'), 'App.tsx must include correct subtitle');
     assert.ok(
-      indexHtmlContent.includes('Mentor Hub — Трекер наставника'),
-      'index.html title must be neutral "Mentor Hub — Трекер наставника"'
+      indexHtmlContent.includes('<title>Панель наставника — рабочий трекер</title>'),
+      'index.html must use a neutral title without product branding'
     );
+    assert.strictEqual(appTsxContent.includes('Mentor Hub'), false, 'App UI must not show product branding');
   });
 
-  test('TC-1.1.3: Active bot indicator renders with pulsing animation classes', () => {
+  test('TC-1.1.3: Sidebar keeps the administrator profile without bot status clutter', () => {
     assert.ok(appTsxContent.includes('Ксения'), 'Sidebar must display mentor profile');
-    assert.ok(appTsxContent.includes('Поток Ноябрь'), 'Sidebar must display active cohort');
+    assert.strictEqual(appTsxContent.includes('@nastav_beauty_bot'), false, 'Bot handle must not be shown');
+    assert.strictEqual(appTsxContent.includes('онлайн'), false, 'Online status must not be shown');
   });
 
   test('TC-1.1.4: Dynamic daily submission counter formula and color coding', () => {
@@ -363,9 +367,9 @@ describe('Tier 1 - Area 3: Inbox Zero Tab («🔥 На проверку»)', () 
     assert.ok(karina.contentDrafts.some(d => d.type === 'storytell'), 'Must support storytell draft');
   });
 
-  test('TC-1.3.9: AI reflection summary (3 bullets: emotions, actions, questionToMentor) renders in card', () => {
+  test('TC-1.3.9: Reflection summary (3 bullets: emotions, actions, questionToMentor) renders in card', () => {
     assert.ok(appTsxContent.includes('reflectionSummary'), 'App.tsx must render reflectionSummary');
-    assert.ok(appTsxContent.includes('Выжимка рефлексии (AI)'), 'AI reflection header must render');
+    assert.ok(appTsxContent.includes('Краткая сводка рефлексии'), 'Reflection summary header must render');
     assert.ok(initialReports[0].reflectionSummary.emotions, 'Must include emotions bullet');
     assert.ok(initialReports[0].reflectionSummary.actions, 'Must include actions bullet');
   });
@@ -428,11 +432,20 @@ describe('Tier 1 - Area 4: Discipline Calendar Tab («👩‍🎓 Ученицы
     assert.ok(pausedStudent, 'Must have at least one student on pause');
   });
 
-  test('TC-1.4.8: Zoom call tracking fields (nextZoomDate, completedZoomsCount) integrated in student profiles', () => {
-    assert.ok(appTsxContent.includes('nextZoomDate'), 'App.tsx must render nextZoomDate');
+  test('TC-1.4.8: Calls support configurable, unlimited stages per student', () => {
+    assert.ok(appTsxContent.includes('addEditingZoomSession'), 'Admins can add call stages');
+    assert.ok(appTsxContent.includes('removeEditingZoomSession'), 'Admins can remove call stages');
+    assert.ok(appTsxContent.includes('Количество этапов не ограничено'), 'There is no fixed stage limit');
+    assert.ok(appTsxContent.includes('updateEditingZoomSession'), 'Admins can configure individual call stages');
+    assert.strictEqual(appTsxContent.includes('Math.min(8'), false, 'Call completion must not be capped at eight');
     for (const student of studentDisciplines) {
-      assert.strictEqual(typeof student.completedZoomsCount, 'number', 'completedZoomsCount must be number');
+      assert.strictEqual(typeof student.completedZoomsCount, 'number', 'Legacy summary remains numeric');
     }
+  });
+
+  test('TC-1.4.9: Telegram online indicator is removed from the sidebar', () => {
+    assert.strictEqual(appTsxContent.includes('@nastav_beauty_bot'), false, 'Sidebar must not show the bot handle');
+    assert.strictEqual(appTsxContent.includes('Active Telegram Bot Indicator'), false, 'Sidebar must not show bot online status');
   });
 });
 

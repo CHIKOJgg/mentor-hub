@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { initialReports, studentDisciplines, taskRules, defaultSystemSettings } from './mockData';
-import type { DailyReport, StudentDiscipline, TabType, ContentType, TaskRule, SystemSettings, DayInfo } from './types';
+import type { DailyReport, StudentDiscipline, TabType, ContentType, TaskRule, SystemSettings, DayInfo, ZoomSessionRecord } from './types';
 import {
   ExternalLink,
   Copy,
@@ -13,9 +13,8 @@ import {
   Search,
   RefreshCw,
   BarChart3,
-  PartyPopper,
   RotateCcw,
-  Sparkles,
+  FileText,
   Video,
   Coffee,
   CheckCheck,
@@ -69,10 +68,55 @@ const getContentTypeBadge = (type: ContentType) => {
   }
 };
 
+const defaultZoomSessionTitles = [
+  'Стратегия и декомпозиция цели',
+  'Позиционирование и упаковка предложения',
+  'Контент и привлечение клиентов',
+  'Продажи и работа с возражениями',
+  'Итоги и следующий план действий',
+];
+
+const getStudentZoomSessions = (student: StudentDiscipline): ZoomSessionRecord[] => {
+  const configuredSessions = student.zoomSessions ?? student.portalData?.zoomSessions;
+  if (configuredSessions) {
+    return configuredSessions.map((session, index) => ({ ...session, callNumber: index + 1 }));
+  }
+
+  const sessionCount = Math.max(
+    defaultZoomSessionTitles.length,
+    student.completedZoomsCount + (student.nextZoomDate ? 1 : 0),
+  );
+
+  return Array.from({ length: sessionCount }, (_, index) => ({
+    callNumber: index + 1,
+    title: defaultZoomSessionTitles[index] ?? `Этап сопровождения ${index + 1}`,
+    date: index === student.completedZoomsCount ? student.nextZoomDate ?? '' : '',
+    isCompleted: index < student.completedZoomsCount,
+  }));
+};
+
+const withZoomSessionSummary = (
+  student: StudentDiscipline,
+  sessions: ZoomSessionRecord[],
+): StudentDiscipline => {
+  const zoomSessions = sessions.map((session, index) => ({ ...session, callNumber: index + 1 }));
+  const nextSession = zoomSessions.find(session => !session.isCompleted);
+  const nextZoomDate = nextSession?.date.trim() || undefined;
+
+  return {
+    ...student,
+    zoomSessions,
+    completedZoomsCount: zoomSessions.filter(session => session.isCompleted).length,
+    nextZoomDate,
+  };
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'inbox' | 'students' | 'analytics' | 'tasks'>('inbox');
   const [reports, setReports] = useState<DailyReport[]>(initialReports);
-  const [students, setStudents] = useState<StudentDiscipline[]>(studentDisciplines);
+  const [students, setStudents] = useState<StudentDiscipline[]>(() =>
+    studentDisciplines.map(student => withZoomSessionSummary(student, getStudentZoomSessions(student))),
+  );
   const [replies, setReplies] = useState<Record<string, string>>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -148,11 +192,12 @@ export default function App() {
   };
 
   const saveStudentProfile = (updated: StudentDiscipline) => {
-    setStudents(prev => prev.map(s => (s.id === updated.id ? updated : s)));
-    if (selectedStudent.id === updated.id) {
-      setSelectedStudent(updated);
+    const normalized = withZoomSessionSummary(updated, updated.zoomSessions ?? []);
+    setStudents(prev => prev.map(s => (s.id === normalized.id ? normalized : s)));
+    if (selectedStudent.id === normalized.id) {
+      setSelectedStudent(normalized);
     }
-    showToast(`Профиль ${updated.fullName} успешно сохранен`);
+    showToast(`Профиль ${normalized.fullName} сохранен`);
   };
 
   const saveScript = (index: number, scriptData: { title: string; description: string; text: string }) => {
@@ -234,14 +279,56 @@ export default function App() {
   const markStudentZoomCompleted = (studentId: string, studentName: string) => {
     setStudents(prev =>
       prev.map(s => {
-        if (s.id === studentId) {
-          const nextCount = Math.min(8, s.completedZoomsCount + 1);
-          showToast(`Созвон ${nextCount}/8 с ${studentName} зачтен`);
-          return { ...s, completedZoomsCount: nextCount };
+        if (s.id !== studentId) return s;
+
+        const sessions = getStudentZoomSessions(s);
+        const nextSessionIndex = sessions.findIndex(session => !session.isCompleted);
+        if (nextSessionIndex < 0) {
+          showToast(`Для ${studentName} нет незавершенных созвонов`);
+          return s;
         }
-        return s;
+
+        const nextSessions = sessions.map((session, index) =>
+          index === nextSessionIndex ? { ...session, isCompleted: true } : session,
+        );
+        showToast(`Созвон ${nextSessionIndex + 1}/${sessions.length} с ${studentName} зачтен`);
+        return withZoomSessionSummary(s, nextSessions);
       })
     );
+  };
+
+  const updateEditingZoomSession = (index: number, changes: Partial<ZoomSessionRecord>) => {
+    setEditingStudent(current => {
+      if (!current) return current;
+      const sessions = (current.zoomSessions ?? []).map((session, sessionIndex) =>
+        sessionIndex === index ? { ...session, ...changes } : session,
+      );
+      return withZoomSessionSummary(current, sessions);
+    });
+  };
+
+  const addEditingZoomSession = () => {
+    setEditingStudent(current => {
+      if (!current) return current;
+      const sessions = current.zoomSessions ?? [];
+      return withZoomSessionSummary(current, [
+        ...sessions,
+        {
+          callNumber: sessions.length + 1,
+          title: `Новый этап ${sessions.length + 1}`,
+          date: '',
+          isCompleted: false,
+        },
+      ]);
+    });
+  };
+
+  const removeEditingZoomSession = (index: number) => {
+    setEditingStudent(current => {
+      if (!current) return current;
+      const sessions = (current.zoomSessions ?? []).filter((_, sessionIndex) => sessionIndex !== index);
+      return withZoomSessionSummary(current, sessions);
+    });
   };
 
   const showToast = (msg: string) => {
@@ -321,7 +408,7 @@ export default function App() {
     if (studentsFilter === 'perfect') return s.disciplineRate >= 95;
     if (studentsFilter === 'attention') return s.disciplineRate < 75 || s.weekDays.some(d => d.status === 'MISSED');
     if (studentsFilter === 'pause') return s.isOnPause;
-    if (studentsFilter === 'zooms') return Boolean(s.nextZoomDate);
+    if (studentsFilter === 'zooms') return Boolean(s.zoomSessions?.length);
     return true;
   });
 
@@ -340,36 +427,16 @@ export default function App() {
   const totalMailingsCount = students.reduce((sum, s) => sum + s.totalMailings, 0);
 
   return (
-    <div className="min-h-screen bg-[#fcfdfd] text-slate-800" style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+    <div className="app-shell min-h-screen bg-[#fcfdfd] text-slate-800">
 
       {/* ─── Sidebar + Main Layout ─── */}
-      <div className="flex">
+      <div className="app-layout flex">
 
         {/* Sidebar */}
-        <aside className="hidden md:flex flex-col w-64 min-h-screen bg-white border-r border-slate-200/60 px-4 py-8 fixed left-0 top-0 z-20">
+        <aside className="app-sidebar hidden md:flex flex-col w-64 min-h-screen bg-white border-r border-slate-200/60 px-4 py-8 fixed left-0 top-0 z-20">
           <div className="px-3 mb-6">
-            <div className="text-xs font-medium tracking-wider text-slate-400 uppercase font-mono mb-1">Mentor Hub</div>
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Панель наставника</h1>
             <p className="text-xs text-slate-500 mt-0.5">Рабочий трекер куратора</p>
-          </div>
-
-          {/* Active Telegram Bot Indicator */}
-          <div className="px-3 mb-5">
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <div>
-                  <div className="text-xs font-bold text-slate-900">Telegram-бот</div>
-                  <div className="text-xs text-slate-400 font-mono">@nastav_beauty_bot</div>
-                </div>
-              </div>
-              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                онлайн
-              </span>
-            </div>
           </div>
 
           <nav className="flex-1 space-y-1">
@@ -377,9 +444,9 @@ export default function App() {
               <button
                 key={t.id}
                 onClick={() => setActiveTab(t.id)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-colors cursor-pointer ${
+                className={`app-nav-link w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-colors cursor-pointer ${
                   activeTab === t.id
-                    ? 'bg-neutral-900 text-white font-medium'
+                    ? 'is-active bg-neutral-900 text-white font-medium'
                     : 'text-neutral-500 hover:text-neutral-900 hover:bg-slate-50'
                 }`}
               >
@@ -396,64 +463,9 @@ export default function App() {
             ))}
           </nav>
 
-          {/* Quick Curator Tools for Ksenia & Katya */}
-          <div className="mt-5 pt-4 border-t border-slate-100 px-1 space-y-1">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-2.5 mb-2">
-              Инструменты куратора:
-            </div>
-            <button
-              onClick={() => {
-                setActiveTab('students');
-                setStudentsViewMode('zooms');
-                showToast('Открыт трекер Zoom-созвонов (8 этапов)');
-              }}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5">
-                <Video className="w-4 h-4 text-indigo-500" />
-                <span>Zoom-созвоны (8 этапов)</span>
-              </div>
-              <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">8</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('students');
-                setStudentsFilter('attention');
-                setStudentsViewMode('calendar');
-                showToast('Открыт Радар удержания: ученицы в зоне риска');
-              }}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5">
-                <AlertTriangle className="w-4 h-4 text-rose-500" />
-                <span>Радар удержания (риски)</span>
-              </div>
-              <span className="text-xs font-mono font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded">1</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('tasks');
-                setTasksSubTab('scripts');
-                showToast('Открыта база шпаргалок и скриптов куратора');
-              }}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5">
-                <MessageSquare className="w-4 h-4 text-emerald-500" />
-                <span>Шпаргалки и скрипты</span>
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{curatorScripts.length}</span>
-            </button>
-          </div>
-
           {/* Admin Switcher & Session */}
           <div className="px-3 pt-5 border-t border-slate-100 mt-4 space-y-3.5">
-            <div className="flex items-center justify-between text-xs text-slate-400 font-medium uppercase tracking-wider">
-              <span>Доступ админа:</span>
-              <span className="text-emerald-600 font-medium normal-case flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>онлайн
-              </span>
-            </div>
+            <div className="text-xs text-slate-400 font-medium uppercase tracking-wider">Профиль</div>
 
             <div className="grid grid-cols-2 gap-1.5 bg-slate-100/80 p-1 rounded-xl text-xs font-medium">
               <button
@@ -502,12 +514,12 @@ export default function App() {
         <div className="md:hidden fixed top-0 left-0 right-0 z-20 bg-white border-b border-slate-200/60 px-4 py-3.5">
           <div className="flex items-center justify-between mb-2.5">
             <div>
-              <div className="text-xs font-medium tracking-wider text-slate-400 uppercase font-mono">Mentor Hub</div>
               <h1 className="text-base font-bold text-slate-900 tracking-tight">Панель наставника</h1>
               <p className="text-xs text-slate-500">{activeAdmin} · Поток Ноябрь</p>
             </div>
             <button
               onClick={() => showToast('Синхронизировано')}
+              aria-label="Синхронизировать данные"
               className="text-slate-500 hover:text-slate-900 transition cursor-pointer p-1.5"
             >
               <RefreshCw className="w-4 h-4" strokeWidth={1.8} />
@@ -543,8 +555,8 @@ export default function App() {
                 key={t.id}
                 onClick={() => setActiveTab(t.id)}
                 className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition shrink-0 cursor-pointer ${
-                  activeTab === t.id
-                    ? 'bg-neutral-900 text-white'
+                    activeTab === t.id
+                      ? 'is-active bg-neutral-900 text-white'
                     : 'text-neutral-500 hover:text-neutral-900 hover:bg-slate-100'
                 }`}
               >
@@ -558,8 +570,8 @@ export default function App() {
         </div>
 
         {/* Main content */}
-        <main className="flex-1 md:ml-64 pt-28 md:pt-0">
-          <div className="max-w-5xl mx-auto px-6 sm:px-10 py-10">
+        <main className="app-main flex-1 md:ml-64 pt-28 md:pt-0">
+          <div className="app-content max-w-5xl mx-auto px-6 sm:px-10 py-10">
 
             {/* ════════════ TAB: INBOX ════════════ */}
                 {activeTab === 'inbox' && (
@@ -574,15 +586,11 @@ export default function App() {
                       }
                     </p>
                   </div>
-                  <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-slate-600 bg-white border border-slate-200/60 px-3.5 py-2 rounded-xl">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>AI-выжимка рефлексий активна</span>
-                  </div>
                 </div>
 
                 {reports.length === 0 ? (
                   <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/60 p-8">
-                    <PartyPopper className="w-10 h-10 text-slate-400 mx-auto mb-3" strokeWidth={1.5} />
+                    <CheckCheck className="w-8 h-8 text-slate-400 mx-auto mb-3" strokeWidth={1.5} />
                     <p className="text-lg font-bold text-slate-800">Все черновики проверены</p>
                     <p className="text-sm text-slate-500 mt-1">Всё проверено. Ученицы получили обратную связь в чатах.</p>
                     <button
@@ -696,8 +704,8 @@ export default function App() {
                             <div className="py-4 px-5 rounded-xl bg-slate-50/70 border border-slate-200/60 text-sm space-y-2.5">
                               <div className="flex items-center justify-between">
                                 <span className="text-slate-900 font-semibold text-xs uppercase tracking-wider flex items-center gap-2">
-                                  <Sparkles className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
-                                  <span>Выжимка рефлексии (AI)</span>
+                                  <FileText className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
+                                  <span>Краткая сводка рефлексии</span>
                                 </span>
                                 <a
                                   href={`https://t.me/${r.tgUsername}`}
@@ -773,8 +781,8 @@ export default function App() {
               <div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
                   <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Ученицы & Календарь</h2>
-                    <p className="text-sm sm:text-base text-slate-500 mt-1">Календарь дисциплины, трекер Zoom-созвонов и статус прохождения</p>
+                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Ученицы</h2>
+                    <p className="text-sm sm:text-base text-slate-500 mt-1">Дисциплина и прогресс по созвонам</p>
                   </div>
                   <div className="relative">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" strokeWidth={1.8} />
@@ -782,6 +790,7 @@ export default function App() {
                       type="text"
                       value={searchQuery}
                       onChange={e => setSearchQuery(e.target.value)}
+                      aria-label="Поиск учениц"
                       placeholder="Поиск по имени или нише..."
                       className="text-sm pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-500 transition w-full sm:w-64 placeholder:text-slate-400"
                     />
@@ -793,11 +802,11 @@ export default function App() {
                   {/* Category Filter Pills */}
                   <div className="flex flex-wrap items-center gap-2">
                     {[
-                      { id: 'all', label: `Все ученицы (${students.length})` },
-                      { id: 'perfect', label: '100% дисциплина (зелено)' },
-                      { id: 'attention', label: 'Требуют внимания / риск' },
-                      { id: 'pause', label: 'На паузе (болезнь)' },
-                      { id: 'zooms', label: `Zoom-созвоны (${students.length})` },
+                      { id: 'all', label: `Все (${students.length})` },
+                      { id: 'perfect', label: 'Дисциплина 95%+' },
+                      { id: 'attention', label: 'Требуют внимания' },
+                      { id: 'pause', label: 'На паузе' },
+                      { id: 'zooms', label: 'Есть созвон' },
                     ].map(tab => (
                       <button
                         key={tab.id}
@@ -834,13 +843,13 @@ export default function App() {
                       }`}
                     >
                       <Video className="w-3.5 h-3.5" />
-                      <span>Созвоны (8 этапов)</span>
+                      <span>Созвоны</span>
                     </button>
                   </div>
                 </div>
 
-                {/* ─── RETENTION RADAR 360° (ДЛЯ КСЕНИИ: РАДАР УДЕРЖАНИЯ) ─── */}
-                {(studentsFilter === 'all' || studentsFilter === 'attention') && (
+                {/* Retention details appear only when the risk filter is selected. */}
+                {studentsFilter === 'attention' && (
                   <div className="bg-white rounded-2xl border border-rose-200/80 p-5 sm:p-6 mb-6">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-rose-100">
                       <div className="flex items-center gap-3">
@@ -849,7 +858,7 @@ export default function App() {
                         </div>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-bold text-slate-900 uppercase tracking-wider">Радар удержания (Retention Radar 360°)</span>
+                            <span className="text-sm font-bold text-slate-900">Требует внимания</span>
                             <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
                               Риск слёта: 78% (Высокий)
                             </span>
@@ -890,11 +899,11 @@ export default function App() {
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-                      {/* Left: AI Diagnosis */}
+                      {/* Risk context */}
                       <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
                         <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>AI-диагноз психологического барьера (Whisper)</span>
+                           <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                           <span>Наблюдения по риску</span>
                         </div>
                         <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">
                           Аня на грани выгорания из-за попытки совместить полный рабочий день и 25 рассылок. Синдром самозванца при чеке 15 000 ₽. Сдаёт отчёты глубокой ночью (23:15). Высокий риск схода.
@@ -1000,46 +1009,46 @@ export default function App() {
                                       <div className="text-xs sm:text-sm text-slate-500">{s.niche}</div>
                                       
                                       {/* Zoom Calls Progress Line */}
-                                      {s.nextZoomDate && (
+                                      {s.zoomSessions && s.zoomSessions.length > 0 && (
                                         <div className="mt-2 pt-2 border-t border-slate-100">
                                           <div className="flex items-center justify-between text-xs text-slate-600 mb-1.5 gap-2">
                                             <span className="inline-flex items-center gap-1.5">
                                               <Video className="w-3.5 h-3.5 text-indigo-500" />
-                                              <span>Созвон: <strong>{s.nextZoomDate}</strong></span>
+                                              <span>Следующий: <strong>{s.nextZoomDate || 'не назначен'}</strong></span>
                                             </span>
                                             <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
-                                              {s.completedZoomsCount} проведено из 8
+                                              {s.completedZoomsCount} из {s.zoomSessions.length}
                                             </span>
                                           </div>
 
-                                          {/* 8 Call slots - All green when done */}
                                           <div className="flex items-center gap-1 flex-wrap">
-                                            {[1, 2, 3, 4, 5, 6, 7, 8].map(num => {
-                                              const isDone = num <= s.completedZoomsCount;
-                                              const isNext = num === s.completedZoomsCount + 1;
+                                            {s.zoomSessions.map((session, index) => {
+                                              const isNext = !session.isCompleted && s.zoomSessions?.findIndex(item => !item.isCompleted) === index;
                                               return (
                                                 <span
-                                                  key={num}
-                                                  title={`Созвон ${num}: ${isDone ? 'Проведён (зелено)' : isNext ? s.nextZoomDate || 'Запланирован' : 'В программе'}`}
+                                                  key={`${s.id}-session-${index}`}
+                                                  title={`Этап ${index + 1}: ${session.isCompleted ? 'проведен' : session.date || 'не назначен'}`}
                                                   className={`inline-flex items-center justify-center text-xs font-bold w-5 h-5 rounded-md border ${
-                                                    isDone
+                                                    session.isCompleted
                                                       ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                                                       : isNext
                                                       ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
                                                       : 'bg-slate-100 text-slate-400 border-slate-200'
                                                   }`}
                                                 >
-                                                  {isDone ? <Check className="w-2.5 h-2.5 text-emerald-700 stroke-[3]" /> : num}
+                                                  {session.isCompleted ? <Check className="w-2.5 h-2.5 text-emerald-700 stroke-[3]" /> : index + 1}
                                                 </span>
                                               );
                                             })}
-                                            <button
-                                              onClick={() => markStudentZoomCompleted(s.id, s.fullName)}
-                                              title="Отметить следующий созвон проведенным"
-                                              className="ml-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition cursor-pointer"
-                                            >
-                                              + Зачесть
-                                            </button>
+                                            {s.completedZoomsCount < s.zoomSessions.length && (
+                                              <button
+                                                onClick={() => markStudentZoomCompleted(s.id, s.fullName)}
+                                                title="Отметить следующий созвон проведенным"
+                                                className="ml-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition cursor-pointer"
+                                              >
+                                                + Зачесть
+                                              </button>
+                                            )}
                                           </div>
                                         </div>
                                       )}
@@ -1125,34 +1134,28 @@ export default function App() {
                   </div>
                 )}
 
-                {/* VIEW 2: DEDICATED ZOOM CALLS TRACKER BOARD (8 STAGES) */}
+                {/* Configurable calls tracker */}
                 {studentsViewMode === 'zooms' && (
                   <div className="space-y-6">
                     <div className="bg-white rounded-2xl border border-slate-200/60 p-5 flex items-center justify-between">
                       <div>
-                        <h3 className="text-lg font-bold text-slate-900">Мастер-трекер Zoom-созвонов потока</h3>
-                        <p className="text-xs sm:text-sm text-slate-500 mt-0.5">8 обязательных модульных созвонов для каждой ученицы (проведенные отмечены зелёным)</p>
+                        <h3 className="text-lg font-bold text-slate-900">Созвоны</h3>
+                        <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Настраиваемые этапы сопровождения для каждой ученицы</p>
                       </div>
                       <div className="text-right">
-                        <span className="text-2xl font-bold text-emerald-600">
-                          {students.reduce((sum, s) => sum + s.completedZoomsCount, 0)} / 40
+                        <span className="text-2xl font-bold text-slate-900">
+                          {students.reduce((sum, student) => sum + student.completedZoomsCount, 0)} / {students.reduce((sum, student) => sum + (student.zoomSessions?.length ?? 0), 0)}
                         </span>
-                        <div className="text-xs text-slate-400">созвонов проведено</div>
+                        <div className="text-xs text-slate-400">проведено этапов</div>
                       </div>
                     </div>
 
                     <div className="space-y-5">
                       {filtered.map(s => {
-                        const zoomTopics = [
-                          'Стратегия и декомпозиция цели (Точка А -> Точка Б)',
-                          'Распаковка позиционирования и премиум-оферты',
-                          'Воронка экспертных Reels и хуки первых 3 секунд',
-                          'Скрипты квалификации и продаж в Direct без отказов',
-                          'Сбор продающих каруселей и упаковка кейсов',
-                          'Дожим входящих лидов и отработка возражений по чеку',
-                          'Делегирование, ассистент и масштабирование',
-                          'Финальная аттестация, презентация кейса и выпуск',
-                        ];
+                        const sessions = s.zoomSessions ?? [];
+                        const totalSessions = sessions.length;
+                        const completedSessions = sessions.filter(session => session.isCompleted).length;
+                        const nextSession = sessions.find(session => !session.isCompleted);
 
                         return (
                           <div key={s.id} className="bg-white rounded-2xl border border-slate-200/60 p-6">
@@ -1167,84 +1170,66 @@ export default function App() {
                                     <button
                                       type="button"
                                       onClick={() => setEditingStudent(s)}
-                                      title="Редактировать созвоны и профиль"
-                                      className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                                      title="Настроить этапы созвонов"
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 transition cursor-pointer text-xs font-semibold"
                                     >
-                                      <Pencil className="w-3.5 h-3.5" />
+                                      <Settings className="w-3.5 h-3.5" />
+                                      <span>Настроить этапы</span>
                                     </button>
                                     <span className="text-xs text-slate-500">({s.niche})</span>
                                   </div>
                                   <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
-                                    <Calendar className="w-3.5 h-3.5 text-indigo-500" />
-                                    <span>Следующий созвон: <strong className="text-indigo-600">{s.nextZoomDate || 'по согласованию'}</strong></span>
+                                    <Calendar className="w-3.5 h-3.5" />
+                                    <span>Следующий созвон: <strong>{nextSession?.date || 'не назначен'}</strong></span>
                                   </div>
                                 </div>
                               </div>
 
                               <div className="flex items-center gap-3 self-start sm:self-auto">
-                                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  {s.completedZoomsCount}/8 проведено ({Math.round((s.completedZoomsCount / 8) * 100)}%)
+                                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                                  {completedSessions}/{totalSessions} проведено
                                 </span>
-                                <button
-                                  onClick={() => markStudentZoomCompleted(s.id, s.fullName)}
-                                  className="text-xs font-semibold px-3.5 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-                                >
-                                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                  <span>+ Зачесть созвон</span>
-                                </button>
+                                {completedSessions < totalSessions && (
+                                  <button
+                                    onClick={() => markStudentZoomCompleted(s.id, s.fullName)}
+                                    className="text-xs font-semibold px-3.5 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Зачесть созвон</span>
+                                  </button>
+                                )}
                               </div>
                             </div>
 
-                            {/* 8 Zoom Call Modules Grid */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                              {zoomTopics.map((topic, idx) => {
-                                const callNum = idx + 1;
-                                const isDone = callNum <= s.completedZoomsCount;
-                                const isNext = callNum === s.completedZoomsCount + 1;
-
-                                return (
-                                  <div
-                                    key={callNum}
-                                    className={`p-3.5 rounded-xl border transition ${
-                                      isDone
-                                        ? 'bg-emerald-50/60 border-emerald-200 text-slate-800'
-                                        : isNext
-                                        ? 'bg-indigo-50/50 border-indigo-200 text-slate-800'
-                                        : 'bg-slate-50 border-slate-200/60 text-slate-400'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between mb-1.5">
-                                      <span className="text-xs font-bold uppercase tracking-wider">
-                                        Созвон #{callNum}
-                                      </span>
-                                      {isDone ? (
-                                        <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
-                                          <Check className="w-3 h-3" />
-                                          <span>Проведён</span>
-                                        </span>
-                                      ) : isNext ? (
-                                        <span className="text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
-                                          Следующий
-                                        </span>
-                                      ) : (
-                                        <span className="text-xs font-medium text-slate-400">
-                                          В плане
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="text-xs font-medium leading-snug line-clamp-2 text-slate-700">
-                                      {topic}
-                                    </div>
-                                    {isNext && s.nextZoomDate && (
-                                      <div className="mt-2 text-xs text-indigo-600 font-semibold flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />
-                                        <span>{s.nextZoomDate}</span>
+                            {totalSessions === 0 ? (
+                              <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                                Этапы пока не добавлены
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {sessions.map((session, index) => {
+                                  const isNext = nextSession === session;
+                                  return (
+                                    <div
+                                      key={`${s.id}-zoom-${index}`}
+                                      className={`p-4 rounded-xl border ${session.isCompleted ? 'bg-slate-50 border-slate-200' : isNext ? 'bg-white border-slate-400' : 'bg-white border-slate-200'}`}
+                                    >
+                                      <div className="flex items-center justify-between gap-2 mb-2">
+                                        <span className="text-xs font-semibold uppercase tracking-wide">Этап {index + 1}</span>
+                                        <span className="text-xs text-slate-500">{session.isCompleted ? 'Проведен' : isNext ? 'Следующий' : 'Запланирован'}</span>
                                       </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                      <div className="text-sm font-semibold text-slate-900">{session.title}</div>
+                                      <div className="mt-2 text-xs text-slate-500">{session.date || 'Дата не назначена'}</div>
+                                      {session.keyTakeaway && <p className="mt-2 text-xs text-slate-600">{session.keyTakeaway}</p>}
+                                      <div className="mt-3 flex flex-wrap gap-3 text-xs">
+                                        {session.zoomLink && <a href={session.zoomLink} target="_blank" rel="noreferrer" className="underline underline-offset-2">Подключиться</a>}
+                                        {session.recordingUrl && <a href={session.recordingUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">Запись</a>}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1402,10 +1387,10 @@ export default function App() {
                     {/* Telegram Ingestion Status Notice */}
                     <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4.5 flex items-start gap-3.5">
                       <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0 mt-0.5">
-                        <Sparkles className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
+                        <FileText className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
                       </div>
                       <div className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                        <strong className="font-semibold text-slate-900">Автоматическая агрегация из Telegram:</strong> Все метрики поступают непрерывно из персональных чатов учениц по хэштегам <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#рилс</code>, <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#карусель</code>, <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#сторителл</code>, <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#рассылки</code>, <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#продажи</code> и субботним опросам <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#клиенты</code>. Войсы рефлексии анализируются через Whisper AI.
+                        <strong className="font-semibold text-slate-900">Автоматическая агрегация из Telegram:</strong> Все метрики поступают из персональных чатов учениц по хэштегам <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#рилс</code>, <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#карусель</code>, <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#сторителл</code>, <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#рассылки</code>, <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#продажи</code> и субботним опросам <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#клиенты</code>. Голосовые сообщения расшифровываются автоматически.
                       </div>
                     </div>
 
@@ -1664,12 +1649,12 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* AI Voice Reflection & Sentiment Card */}
+                      {/* Reflection summary */}
                       <div className="px-6 py-5 border-b border-slate-100 space-y-3">
                         <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-indigo-600" />
+                          <FileText className="w-4 h-4 text-indigo-600" />
                           <span className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                            AI-выжимка рефлексии из Telegram-войсов ({analyticsPeriod === 'week' ? 'за неделю' : analyticsPeriod === 'month' ? 'за месяц' : 'за весь период'})
+                            Краткая сводка рефлексии ({analyticsPeriod === 'week' ? 'за неделю' : analyticsPeriod === 'month' ? 'за месяц' : 'за весь период'})
                           </span>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
@@ -1687,65 +1672,6 @@ export default function App() {
                           </div>
                         </div>
                       </div>
-
-                      {/* Retention Radar 360 Dossier for Anya Petrova */}
-                      {selectedStudent.id === 'st-2' && (
-                        <div className="px-6 py-5 border-b border-slate-100 bg-rose-50/40">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                            <div className="flex items-center gap-2">
-                              <AlertTriangle className="w-4 h-4 text-rose-600" />
-                              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                                Досье удержания 360° & Риск слёта: 78% (Высокий)
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => {
-                                  setRehabOffered(true);
-                                  showToast('Офер амнистии стрика отправлен Ане в Telegram: 1 Reels + 15 рассылок вернут дисциплину до 92%');
-                                }}
-                                disabled={rehabOffered}
-                                className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                                  rehabOffered
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                                }`}
-                              >
-                                <Zap className="w-3 h-3" />
-                                <span>{rehabOffered ? 'Амнистия предложена' : 'Предложить амнистию стрика'}</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard?.writeText(selectedStudent.telegram || '');
-                                  showToast(`Юзернейм ${selectedStudent.telegram} скопирован для связи в TG`);
-                                }}
-                                className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1"
-                              >
-                                <Send className="w-3 h-3 text-indigo-400" />
-                                <span>Написать в TG</span>
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs sm:text-sm">
-                            <div className="p-3.5 bg-white rounded-xl border border-rose-100 text-slate-700">
-                              <div className="text-xs font-semibold text-slate-400 mb-1">AI-диагноз психологического барьера:</div>
-                              <p className="leading-relaxed">
-                                {selectedStudent.retentionDossier?.aiDiagnosis || 'Аня на грани выгорания из-за попытки совместить полный рабочий день и 25 рассылок. Синдром самозванца при чеке 15 000 ₽. Сдаёт отчёты глубокой ночью (23:15). Высокий риск схода.'}
-                              </p>
-                            </div>
-                            <div className="p-3.5 bg-white rounded-xl border border-rose-100 text-slate-700">
-                              <div className="text-xs font-semibold text-slate-400 mb-1">Фокус Ксении на созвон 12.11 (19:00):</div>
-                              <ul className="space-y-1 text-xs">
-                                <li>• Снизить норму рассылок с 25 до 15 целевых контактов</li>
-                                <li>• Шаблоны сценариев Reels на 20 минут съемки</li>
-                                <li>• Отработать страх чека 15 000 ₽ (продажа уже состоялась!)</li>
-                                <li>• Субботняя амнистия стрика для перекрытия пропусков</li>
-                              </ul>
-                            </div>
-                          </div>
-                        </div>
-                      )}
 
                       {/* Ready-to-use Story Case Text Preview */}
                       <div className="px-6 py-5 bg-slate-50/70">
@@ -2179,25 +2105,25 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* AI Engine & Anti-Fraud Protection */}
+                    {/* Message processing and integrity controls */}
                     <div className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 hover:border-slate-300 transition">
                       <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                         <ShieldCheck className="w-5 h-5 text-indigo-600" />
                         <div>
-                          <h3 className="text-base font-bold text-slate-900">Интеллектуальные функции и защита от накруток</h3>
-                          <p className="text-xs text-slate-500">Нейросетевая обработка отчётов учениц и валидация Reels</p>
+                          <h3 className="text-base font-bold text-slate-900">Обработка сообщений и контроль данных</h3>
+                          <p className="text-xs text-slate-500">Расшифровка голосовых сообщений, сводки и проверка повторов</p>
                         </div>
                       </div>
 
                       <div className="divide-y divide-slate-100">
-                        {/* Setting 6: AI Audio Transcription */}
+                        {/* Setting 6: Voice transcription */}
                         <div className="py-3.5 flex items-center justify-between">
                           <div>
-                            <div className="text-sm font-semibold text-slate-900">Транскрибация голосовых рефлексий (Whisper AI)</div>
-                            <div className="text-xs text-slate-500">Автоматический перевод аудио-сообщений учениц в структурированный текст для наставника</div>
+                            <div className="text-sm font-semibold text-slate-900">Расшифровка голосовых сообщений</div>
+                            <div className="text-xs text-slate-500">Преобразование аудио учениц в текст для наставника</div>
                           </div>
                           <button
-                            onClick={() => toggleSystemSetting('aiWhisperEnabled', 'AI-транскрибация голосовых')}
+                              onClick={() => toggleSystemSetting('aiWhisperEnabled', 'Расшифровка голосовых')}
                             className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                               systemSettings.aiWhisperEnabled ? 'bg-indigo-600' : 'bg-slate-200'
                             }`}
@@ -2208,14 +2134,14 @@ export default function App() {
                           </button>
                         </div>
 
-                        {/* Setting 7: AI Reflection Summary */}
+                        {/* Setting 7: Reflection summary */}
                         <div className="py-3.5 flex items-center justify-between">
                           <div>
-                            <div className="text-sm font-semibold text-slate-900">AI-выжимка рефлексий (эмоции, действия, вопрос ментору)</div>
+                            <div className="text-sm font-semibold text-slate-900">Сводка рефлексии (эмоции, действия, вопрос наставнику)</div>
                             <div className="text-xs text-slate-500">Формирует 3 главных тезиса из длинных сообщений учениц в ленту «На проверку»</div>
                           </div>
                           <button
-                            onClick={() => toggleSystemSetting('aiSummaryEnabled', 'AI-выжимка рефлексий')}
+                              onClick={() => toggleSystemSetting('aiSummaryEnabled', 'Сводка рефлексии')}
                             className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                               systemSettings.aiSummaryEnabled ? 'bg-indigo-600' : 'bg-slate-200'
                             }`}
@@ -2382,7 +2308,7 @@ export default function App() {
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
-                <h3 className="text-base font-bold text-slate-900">Редактирование профиля ученицы</h3>
+                <h3 className="text-base font-bold text-slate-900">Профиль и созвоны</h3>
                 <p className="text-xs text-slate-500 mt-0.5">{editingStudent.fullName}</p>
               </div>
               <button
@@ -2457,34 +2383,111 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Следующий Zoom-созвон:</label>
-                  <input
-                    type="text"
-                    value={editingStudent.nextZoomDate || ''}
-                    onChange={e => setEditingStudent({ ...editingStudent, nextZoomDate: e.target.value })}
-                    placeholder="Например: 12.11 в 19:00"
-                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
-                  />
+              <section className="space-y-3 border-t border-slate-100 pt-4" aria-labelledby="zoom-session-settings-title">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 id="zoom-session-settings-title" className="text-sm font-semibold text-slate-900">Этапы созвонов</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">Количество этапов не ограничено</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addEditingZoomSession}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Добавить этап</span>
+                  </button>
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Проведено созвонов (из 8):</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={8}
-                    value={editingStudent.completedZoomsCount}
-                    onChange={e =>
-                      setEditingStudent({
-                        ...editingStudent,
-                        completedZoomsCount: Math.min(8, Math.max(0, Number(e.target.value) || 0)),
-                      })
-                    }
-                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
+
+                {(editingStudent.zoomSessions ?? []).length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-xs text-slate-500">
+                    Этапов пока нет. Добавьте первый этап сопровождения.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {(editingStudent.zoomSessions ?? []).map((session, index) => (
+                      <div key={`${editingStudent.id}-editing-session-${index}`} className="space-y-3 rounded-xl border border-slate-200 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-semibold uppercase tracking-wide">Этап {index + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeEditingZoomSession(index)}
+                            aria-label={`Удалить этап ${index + 1}`}
+                            title="Удалить этап"
+                            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="sm:col-span-2">
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Название этапа</label>
+                            <input
+                              type="text"
+                              value={session.title}
+                              onChange={e => updateEditingZoomSession(index, { title: e.target.value })}
+                              placeholder="Например: Разбор стратегии"
+                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Дата и время</label>
+                            <input
+                              type="text"
+                              value={session.date}
+                              onChange={e => updateEditingZoomSession(index, { date: e.target.value })}
+                              placeholder="Например: 12.11 в 19:00"
+                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Статус</label>
+                            <select
+                              value={session.isCompleted ? 'completed' : 'planned'}
+                              onChange={e => updateEditingZoomSession(index, { isCompleted: e.target.value === 'completed' })}
+                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                            >
+                              <option value="planned">Запланирован</option>
+                              <option value="completed">Проведен</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Ссылка на созвон</label>
+                            <input
+                              type="url"
+                              value={session.zoomLink ?? ''}
+                              onChange={e => updateEditingZoomSession(index, { zoomLink: e.target.value || undefined })}
+                              placeholder="https://…"
+                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Ссылка на запись</label>
+                            <input
+                              type="url"
+                              value={session.recordingUrl ?? ''}
+                              onChange={e => updateEditingZoomSession(index, { recordingUrl: e.target.value || undefined })}
+                              placeholder="https://…"
+                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Итог и заметки</label>
+                            <textarea
+                              rows={2}
+                              value={session.keyTakeaway ?? ''}
+                              onChange={e => updateEditingZoomSession(index, { keyTakeaway: e.target.value || undefined })}
+                              placeholder="Ключевые договоренности и итоги этапа"
+                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
 
               <div>
                 <label className="text-xs font-semibold text-slate-600 block mb-1">Финансовая цель потока (₽):</label>

@@ -134,6 +134,7 @@ export interface StudentDiscipline {
   pauseReason?: string;
   nextZoomDate?: string;
   completedZoomsCount: number;
+  zoomSessions?: ZoomSessionRecord[];
   periodStats?: {
     week: StudentPeriodMetrics;
     month: StudentPeriodMetrics;

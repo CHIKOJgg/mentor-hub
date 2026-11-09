@@ -1,24 +1,41 @@
 # =============================================================================
-# Stage 1: Build Application with Maven & JDK 21
+# Stage 1: Build React SPA Frontend
+# =============================================================================
+FROM node:24-alpine AS frontend-builder
+WORKDIR /workspace/frontend
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+# =============================================================================
+# Stage 2: Build Spring Boot Application with Bundled Frontend
 # =============================================================================
 FROM maven:3.9.9-eclipse-temurin-21-alpine AS builder
 WORKDIR /workspace
 
-# Cache dependencies
+# Cache Maven dependencies
 COPY pom.xml .
 RUN mvn dependency:go-offline -B || true
 
-# Compile and package application
+# Copy backend sources
 COPY src ./src
+
+# Copy built frontend into Spring Boot static resources
+COPY --from=frontend-builder /workspace/frontend/dist ./src/main/resources/static/
+
+# Compile and package monolithic application jar
 RUN mvn clean package -DskipTests
 
 # =============================================================================
-# Stage 2: Minimal Production JRE Runtime
+# Stage 3: Minimal Production JRE 21 Runtime
 # =============================================================================
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-# Run as non-root user
+# Run as non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
 USER spring:spring
 
