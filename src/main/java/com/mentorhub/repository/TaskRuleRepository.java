@@ -12,5 +12,7 @@ public interface TaskRuleRepository extends JpaRepository<TaskRule, Long> {
 
     Optional<TaskRule> findByHashtag(String hashtag);
 
+    Optional<TaskRule> findByHashtagIgnoreCase(String hashtag);
+
     List<TaskRule> findByIsActiveTrue();
 }

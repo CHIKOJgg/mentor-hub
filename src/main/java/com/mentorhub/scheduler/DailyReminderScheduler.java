@@ -2,7 +2,9 @@ package com.mentorhub.scheduler;
 
 import com.mentorhub.entity.DailyReport;
 import com.mentorhub.entity.Student;
+import com.mentorhub.entity.MentorSetting;
 import com.mentorhub.repository.DailyReportRepository;
+import com.mentorhub.repository.MentorSettingRepository;
 import com.mentorhub.repository.StudentRepository;
 import com.mentorhub.telegram.service.TelegramSenderService;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +15,10 @@ import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,23 +31,45 @@ public class DailyReminderScheduler {
 
     private final StudentRepository studentRepository;
     private final DailyReportRepository dailyReportRepository;
+    private final MentorSettingRepository mentorSettingRepository;
     private final TelegramSenderService telegramSenderService;
 
     @Value("${telegram.reminder.rate-limit-ms:1000}")
     private long rateLimitMs = 1000L;
 
-    @Scheduled(cron = "${telegram.reminder.cron:0 0 20 * * MON-SAT}", zone = "${telegram.reminder.zone:Europe/Minsk}")
+    @Scheduled(cron = "0 * * * * *", zone = "Europe/Minsk")
+    public void pollConfiguredReminders() {
+        LocalDateTime now = LocalDateTime.now(MINSK_ZONE).truncatedTo(ChronoUnit.MINUTES);
+        MentorSetting settings = mentorSettingRepository.findAll().stream().findFirst().orElse(null);
+        if (settings == null) return;
+        boolean sundayRest = Boolean.TRUE.equals(settings.getSundayRestEnabled());
+        if (now.getDayOfWeek() == DayOfWeek.SUNDAY && sundayRest) return;
+
+        LocalTime currentTime = now.toLocalTime();
+        if (Boolean.TRUE.equals(settings.getMorningPushEnabled()) && currentTime.equals(settings.getMorningPushTime())) {
+            sendMorningFocusToStudents(settings);
+        }
+        if (Boolean.TRUE.equals(settings.getEveningReminderEnabled())
+                && Boolean.TRUE.equals(settings.getAutoRemindersEnabled())
+                && currentTime.equals(settings.getEveningReminderTime())) {
+            executeDailyReminderJob(now.toLocalDate(), sundayRest);
+        }
+    }
+
     public void executeDailyReminderJob() {
-        LocalDate today = LocalDate.now(MINSK_ZONE);
+        executeDailyReminderJob(LocalDate.now(MINSK_ZONE), true);
+    }
+
+    private void executeDailyReminderJob(LocalDate today, boolean sundayRest) {
         log.info("Starting DailyReminderScheduler job for date {}", today);
 
         // Sunday is official rest day for the cohort
-        if (today.getDayOfWeek() == DayOfWeek.SUNDAY) {
+        if (today.getDayOfWeek() == DayOfWeek.SUNDAY && sundayRest) {
             log.info("Skipping daily reminder job: Sunday is official day off");
             return;
         }
 
-        List<Student> debtors = findDebtors(today);
+        List<Student> debtors = findDebtors(today, sundayRest);
         log.info("Found {} debtor student(s) without report for {}", debtors.size(), today);
 
         for (Student student : debtors) {
@@ -64,7 +91,11 @@ public class DailyReminderScheduler {
     }
 
     public List<Student> findDebtors(LocalDate date) {
-        if (date.getDayOfWeek() == DayOfWeek.SUNDAY) {
+        return findDebtors(date, true);
+    }
+
+    private List<Student> findDebtors(LocalDate date, boolean sundayRest) {
+        if (date.getDayOfWeek() == DayOfWeek.SUNDAY && sundayRest) {
             return List.of();
         }
 
@@ -89,12 +120,31 @@ public class DailyReminderScheduler {
             return false;
         }
 
+        MentorSetting settings = mentorSettingRepository.findAll().stream().findFirst().orElse(null);
+        String deadline = settings != null && settings.getDeadlineTime() != null ? settings.getDeadlineTime().toString() : "21:00";
         String messageText = String.format(
-                "%s, привет! Напоминаю: до дедлайна сдачи отчета остался 1 час (до 21:00) ⏰ " +
+                "%s, привет! Напоминаю: до дедлайна сдачи отчета остался 1 час (до %s) ⏰ " +
                 "Ждем твои черновики #контента (#рилс, #карусель, #сторителл), результаты по #рассылкам и #продажам!",
-                student.getFullName()
+                student.getFullName(), deadline
         );
 
-        return telegramSenderService.sendReminder(student.getTgChatId(), messageText);
+        String businessConnectionId = settings != null && Boolean.TRUE.equals(settings.getIsBusinessConnected())
+                ? settings.getBusinessConnectionId()
+                : null;
+        return businessConnectionId == null
+                ? telegramSenderService.sendReminder(student.getTgChatId(), messageText)
+                : telegramSenderService.sendStudentMessage(student.getTgChatId(), businessConnectionId, messageText);
+    }
+
+    private void sendMorningFocusToStudents(MentorSetting settings) {
+        String businessConnectionId = Boolean.TRUE.equals(settings.getIsBusinessConnected())
+                ? settings.getBusinessConnectionId()
+                : null;
+        for (Student student : studentRepository.findByIsActiveTrue()) {
+            if (Boolean.TRUE.equals(student.getIsPaused()) || student.getTgChatId() == null) continue;
+            String text = student.getFullName() + ", доброе утро. Выберите один главный результат на сегодня и не забывайте отметить отчет до "
+                    + (settings.getDeadlineTime() == null ? "21:00" : settings.getDeadlineTime()) + ".";
+            telegramSenderService.sendStudentMessage(student.getTgChatId(), businessConnectionId, text);
+        }
     }
 }

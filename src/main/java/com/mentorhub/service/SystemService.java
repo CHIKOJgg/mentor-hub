@@ -8,6 +8,7 @@ import com.mentorhub.repository.DailyReportRepository;
 import com.mentorhub.repository.MentorSettingRepository;
 import com.mentorhub.repository.StudentRepository;
 import com.mentorhub.repository.ZoomMeetingRepository;
+import com.mentorhub.telegram.service.TelegramSenderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,6 +29,7 @@ public class SystemService {
     private final StudentRepository studentRepository;
     private final DailyReportRepository dailyReportRepository;
     private final ZoomMeetingRepository zoomMeetingRepository;
+    private final TelegramSenderService telegramSenderService;
 
     @Value("${telegram.bot.username:MentorHubBot}")
     private String botUsername;
@@ -35,12 +37,17 @@ public class SystemService {
     @Value("${telegram.bot.enabled:true}")
     private Boolean botEnabled;
 
+    @Value("${spring.ai.openai.api-key:}")
+    private String aiApiKey;
+
     @Transactional(readOnly = true)
     public SystemStatusResponse getSystemStatus() {
         Optional<MentorSetting> settingOpt = mentorSettingRepository.findAll().stream().findFirst();
         boolean businessConnected = settingOpt
-                .map(s -> Boolean.TRUE.equals(s.getIsBusinessConnected()))
-                .orElse(true);
+                .map(s -> Boolean.TRUE.equals(s.getIsBusinessConnected())
+                        && s.getBusinessConnectionId() != null
+                        && !s.getBusinessConnectionId().isBlank())
+                .orElse(false);
 
         long activeStudentsCount = studentRepository.findByIsActiveTrue().size();
         long pendingReportsToday = dailyReportRepository.countByStatus("PENDING");
@@ -59,7 +66,7 @@ public class SystemService {
         }
 
         return new SystemStatusResponse(
-                Boolean.TRUE.equals(botEnabled),
+                Boolean.TRUE.equals(botEnabled) && telegramSenderService.isConfigured(),
                 botUsername,
                 businessConnected ? "CONNECTED" : "DISCONNECTED",
                 businessConnected,
@@ -67,7 +74,7 @@ public class SystemService {
                 pendingReportsToday,
                 "3.4.2",
                 virtualThreads,
-                "AVAILABLE",
+                aiApiKey != null && !aiApiKey.isBlank() && !"mock-key".equalsIgnoreCase(aiApiKey) ? "CONFIGURED" : "NOT_CONFIGURED",
                 zoomSummary
         );
     }
@@ -86,6 +93,36 @@ public class SystemService {
         return new ZoomTrackerResponse(nextCallAt, completedCallsTotal, upcoming);
     }
 
+    @Transactional(readOnly = true)
+    public SystemSettingsDto getSettings() {
+        MentorSetting setting = mentorSettingRepository.findAll().stream().findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Настройки наставника не найдены"));
+        return mapSettings(setting);
+    }
+
+    @Transactional
+    public SystemSettingsDto updateSettings(SystemSettingsDto request) {
+        MentorSetting setting = mentorSettingRepository.findAll().stream().findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Настройки наставника не найдены"));
+        setting.setMorningPushEnabled(request.morningPushEnabled());
+        setting.setMorningPushTime(request.morningPushTime());
+        setting.setEveningReminderEnabled(request.eveningReminderEnabled());
+        setting.setEveningReminderTime(request.eveningReminderTime());
+        setting.setDeadlineTime(request.dailyDeadlineTime());
+        setting.setStrictDeadlineEnabled(request.strictDeadlineEnabled());
+        setting.setSaturdayPollEnabled(request.saturdayPollEnabled());
+        setting.setSaturdayPollTime(request.saturdayPollTime());
+        setting.setSundayRestEnabled(request.sundayRestEnabled());
+        setting.setAiWhisperEnabled(request.aiWhisperEnabled());
+        setting.setAiSummaryEnabled(request.aiSummaryEnabled());
+        setting.setAntiFraudDedupEnabled(request.antiFraudDedupEnabled());
+        setting.setZoomAutoDetectEnabled(request.zoomAutoDetectEnabled());
+        setting.setAutoRemindersEnabled(request.eveningReminderEnabled());
+        setting.setReminderCron("0 " + request.eveningReminderTime().getMinute() + " " + request.eveningReminderTime().getHour() + " * * MON-SAT");
+        setting.setSaturdayPollCron("0 " + request.saturdayPollTime().getMinute() + " " + request.saturdayPollTime().getHour() + " * * SAT");
+        return mapSettings(mentorSettingRepository.save(setting));
+    }
+
     @Transactional
     public ZoomMeetingDto scheduleZoom(ScheduleZoomRequest request) {
         Student student = studentRepository.findById(request.studentId())
@@ -93,7 +130,10 @@ public class SystemService {
 
         ZoomMeeting meeting = ZoomMeeting.builder()
                 .student(student)
+                .meetingTitle(request.title() == null || request.title().isBlank() ? "Созвон" : request.title().trim())
+                .callNumber(request.callNumber())
                 .zoomUrl(request.zoomUrl())
+                .recordingUrl(request.recordingUrl())
                 .scheduledAt(request.scheduledAt())
                 .meetingNotes(request.meetingNotes())
                 .isCompleted(false)
@@ -108,12 +148,102 @@ public class SystemService {
         return mapZoomMeetingToDto(saved);
     }
 
+    @Transactional
+    public ZoomMeetingDto updateZoomMeeting(Long meetingId, UpdateZoomMeetingRequest request) {
+        ZoomMeeting meeting = zoomMeetingRepository.findById(meetingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zoom meeting not found with id: " + meetingId));
+        if (request.title() != null) meeting.setMeetingTitle(request.title().trim());
+        if (request.callNumber() != null) meeting.setCallNumber(request.callNumber());
+        if (request.zoomUrl() != null) meeting.setZoomUrl(request.zoomUrl());
+        if (request.recordingUrl() != null) meeting.setRecordingUrl(request.recordingUrl());
+        if (request.scheduledAt() != null) meeting.setScheduledAt(request.scheduledAt());
+        if (request.meetingNotes() != null) meeting.setMeetingNotes(request.meetingNotes());
+        if (request.isCompleted() != null) {
+            meeting.setIsCompleted(request.isCompleted());
+            meeting.setCompletedAt(request.isCompleted()
+                    ? Optional.ofNullable(meeting.getCompletedAt()).orElseGet(Instant::now)
+                    : null);
+        }
+        ZoomMeeting saved = zoomMeetingRepository.save(meeting);
+        Student student = saved.getStudent();
+        if (student != null) {
+            long completed = zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(student.getId()).stream()
+                    .filter(item -> Boolean.TRUE.equals(item.getIsCompleted())).count();
+            student.setCompletedZoomsCount(Math.toIntExact(completed));
+            student.setNextZoomAt(zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(student.getId()).stream()
+                    .filter(item -> !Boolean.TRUE.equals(item.getIsCompleted()))
+                    .map(ZoomMeeting::getScheduledAt)
+                    .filter(java.util.Objects::nonNull)
+                    .min(Comparator.naturalOrder())
+                    .orElse(null));
+            studentRepository.save(student);
+        }
+        return mapZoomMeetingToDto(saved);
+    }
+
+    @Transactional
+    public void deleteZoomMeeting(Long meetingId) {
+        ZoomMeeting meeting = zoomMeetingRepository.findById(meetingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zoom meeting not found with id: " + meetingId));
+        Student student = meeting.getStudent();
+        zoomMeetingRepository.delete(meeting);
+        if (student != null) {
+            List<ZoomMeeting> remaining = zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(student.getId());
+            for (int index = 0; index < remaining.size(); index++) remaining.get(index).setCallNumber(index + 1);
+            zoomMeetingRepository.saveAll(remaining);
+            student.setCompletedZoomsCount(Math.toIntExact(remaining.stream().filter(item -> Boolean.TRUE.equals(item.getIsCompleted())).count()));
+            student.setNextZoomAt(remaining.stream().filter(item -> !Boolean.TRUE.equals(item.getIsCompleted()))
+                    .map(ZoomMeeting::getScheduledAt).filter(java.util.Objects::nonNull).min(Comparator.naturalOrder()).orElse(null));
+            studentRepository.save(student);
+        }
+    }
+
     public SyncTelegramResponse syncTelegram() {
-        log.info("Telegram updates synced successfully.");
+        boolean botReachable = telegramSenderService.checkBotConnection();
+        log.info("Telegram connection check completed. reachable={}", botReachable);
         return new SyncTelegramResponse(
-                true,
-                "Синхронизация с Telegram успешно выполнена",
+                botReachable,
+                botReachable
+                        ? "Подключение к Telegram проверено; входящие обновления обрабатываются в фоне"
+                        : "Telegram недоступен или токен бота не настроен",
                 Instant.now()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public TelegramMessageDeliveryResponse sendMessageToStudent(Long studentId, String text) {
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + studentId));
+        if (student.getTgChatId() == null) {
+            return new TelegramMessageDeliveryResponse(false, "У ученицы не указан Telegram chat ID", Instant.now());
+        }
+        String businessConnectionId = mentorSettingRepository.findFirstByOrderByIdAsc()
+                .filter(setting -> Boolean.TRUE.equals(setting.getIsBusinessConnected()))
+                .map(MentorSetting::getBusinessConnectionId)
+                .orElse(null);
+        boolean delivered = telegramSenderService.sendStudentMessage(student.getTgChatId(), businessConnectionId, text);
+        return new TelegramMessageDeliveryResponse(
+                delivered,
+                delivered ? "Сообщение доставлено" : "Telegram не принял сообщение",
+                Instant.now()
+        );
+    }
+
+    private SystemSettingsDto mapSettings(MentorSetting setting) {
+        return new SystemSettingsDto(
+                Boolean.TRUE.equals(setting.getMorningPushEnabled()),
+                setting.getMorningPushTime(),
+                Boolean.TRUE.equals(setting.getEveningReminderEnabled()),
+                setting.getEveningReminderTime(),
+                setting.getDeadlineTime(),
+                Boolean.TRUE.equals(setting.getStrictDeadlineEnabled()),
+                Boolean.TRUE.equals(setting.getSaturdayPollEnabled()),
+                setting.getSaturdayPollTime(),
+                Boolean.TRUE.equals(setting.getSundayRestEnabled()),
+                Boolean.TRUE.equals(setting.getAiWhisperEnabled()),
+                Boolean.TRUE.equals(setting.getAiSummaryEnabled()),
+                Boolean.TRUE.equals(setting.getAntiFraudDedupEnabled()),
+                Boolean.TRUE.equals(setting.getZoomAutoDetectEnabled())
         );
     }
 
@@ -124,7 +254,7 @@ public class SystemService {
                         .map(Student::getNextZoomAt)
                         .filter(java.util.Objects::nonNull)
                         .min(Comparator.naturalOrder()))
-                .orElse(Instant.parse("2026-11-11T14:00:00Z"));
+                .orElse(null);
     }
 
     private long resolveCompletedCallsTotal() {
@@ -134,7 +264,7 @@ public class SystemService {
         long fromStudents = studentRepository.findAll().stream()
                 .mapToLong(s -> s.getCompletedZoomsCount() != null ? s.getCompletedZoomsCount() : 0)
                 .sum();
-        return fromStudents > 0 ? fromStudents : 19;
+        return fromStudents;
     }
 
     private ZoomMeetingDto mapZoomMeetingToDto(ZoomMeeting meeting) {
@@ -144,7 +274,10 @@ public class SystemService {
                 meeting.getId(),
                 studentId,
                 studentName,
+                meeting.getMeetingTitle(),
+                meeting.getCallNumber(),
                 meeting.getZoomUrl(),
+                meeting.getRecordingUrl(),
                 meeting.getScheduledAt(),
                 meeting.getCompletedAt(),
                 meeting.getIsCompleted(),

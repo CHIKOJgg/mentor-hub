@@ -3,6 +3,7 @@ package com.mentorhub.scheduler;
 import com.mentorhub.entity.DailyReport;
 import com.mentorhub.entity.Student;
 import com.mentorhub.repository.DailyReportRepository;
+import com.mentorhub.repository.MentorSettingRepository;
 import com.mentorhub.repository.StudentRepository;
 import com.mentorhub.telegram.service.TelegramSenderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,7 @@ class DailyReminderSchedulerTest {
 
     private StudentRepository studentRepository;
     private DailyReportRepository dailyReportRepository;
+    private MentorSettingRepository mentorSettingRepository;
 
     private Long reminderChatId;
     private String reminderText;
@@ -34,6 +36,7 @@ class DailyReminderSchedulerTest {
     void setUp() {
         studentRepository = mock(StudentRepository.class);
         dailyReportRepository = mock(DailyReportRepository.class);
+        mentorSettingRepository = mock(MentorSettingRepository.class);
 
         stubSenderService = new TelegramSenderService(null) {
             @Override
@@ -44,7 +47,7 @@ class DailyReminderSchedulerTest {
             }
         };
 
-        scheduler = new DailyReminderScheduler(studentRepository, dailyReportRepository, stubSenderService);
+        scheduler = new DailyReminderScheduler(studentRepository, dailyReportRepository, mentorSettingRepository, stubSenderService);
         ReflectionTestUtils.setField(scheduler, "rateLimitMs", 0L);
     }
 

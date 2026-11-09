@@ -8,8 +8,11 @@ public record StudentDisciplineResponse(
     String fullName,
     String avatarText,
     String tgUsername,
+    Long tgChatId,
     String niche,
     String tariff,
+    java.time.LocalDate startDate,
+    Boolean isActive,
     BigDecimal initialIncome,
     BigDecimal currentIncome,
     BigDecimal initialAvgTicket,
@@ -24,5 +27,6 @@ public record StudentDisciplineResponse(
     String pauseReason,
     String nextZoomDate,
     Integer completedZoomsCount,
-    List<DayInfoResponse> weekDays
+    List<DayInfoResponse> weekDays,
+    List<ZoomMeetingDto> zoomSessions
 ) {}

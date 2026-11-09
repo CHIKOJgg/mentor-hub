@@ -19,6 +19,7 @@ import org.springframework.util.StringUtils;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.User;
+import org.telegram.telegrambots.meta.api.objects.business.BusinessConnection;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 
 import java.time.Instant;
@@ -70,6 +71,11 @@ public class TelegramMessageRouter {
             return;
         }
 
+        if (update.hasBusinessConnection()) {
+            handleBusinessConnection(update.getBusinessConnection(), update.getUpdateId());
+            return;
+        }
+
         // 1. Handle interactive callback queries (Saturday survey inline buttons)
         if (update.hasCallbackQuery()) {
             handleCallbackQuery(update.getCallbackQuery(), update.getUpdateId());
@@ -104,6 +110,35 @@ public class TelegramMessageRouter {
         }
 
         routeIncomingMessage(message, update.getUpdateId() != null ? update.getUpdateId().longValue() : 0L, sourceType);
+    }
+
+    private void handleBusinessConnection(BusinessConnection connection, Integer updateId) {
+        if (connection == null || connection.getUserChatId() == null || !StringUtils.hasText(connection.getId())) {
+            log.warn("Ignoring incomplete Telegram business_connection update {}", updateId);
+            return;
+        }
+        MentorSetting setting = mentorSettingRepository.findByMentorTgId(connection.getUserChatId())
+                .or(() -> mentorSettingRepository.findFirstByOrderByIdAsc())
+                .orElseGet(() -> MentorSetting.builder()
+                        .mentorTgId(connection.getUserChatId())
+                        .mentorName(connection.getUser() != null && StringUtils.hasText(connection.getUser().getFirstName())
+                                ? connection.getUser().getFirstName()
+                                : "Наставник")
+                        .build());
+        boolean enabled = Boolean.TRUE.equals(connection.getIsEnabled());
+        setting.setBusinessConnectionId(enabled ? connection.getId() : null);
+        setting.setIsBusinessConnected(enabled);
+        mentorSettingRepository.save(setting);
+        auditMessageLogRepository.save(AuditMessageLog.builder()
+                .updateId(updateId == null ? 0L : updateId.longValue())
+                .tgChatId(connection.getUserChatId())
+                .tgUserId(connection.getUser() == null ? null : connection.getUser().getId())
+                .sourceType("BUSINESS_CONNECTION")
+                .rawPayload(connection.getId())
+                .processingStatus(enabled ? "CONNECTED" : "DISCONNECTED")
+                .createdAt(Instant.now())
+                .build());
+        log.info("Telegram Business connection updated: enabled={}", enabled);
     }
 
     private void handleCallbackQuery(CallbackQuery callbackQuery, Integer updateId) {

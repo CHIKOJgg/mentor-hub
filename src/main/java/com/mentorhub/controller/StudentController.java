@@ -2,6 +2,7 @@ package com.mentorhub.controller;
 
 import com.mentorhub.dto.*;
 import com.mentorhub.service.StudentService;
+import com.mentorhub.service.SystemService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -16,11 +17,12 @@ import java.util.List;
 public class StudentController {
 
     private final StudentService studentService;
+    private final SystemService systemService;
 
     @GetMapping
     public ResponseEntity<List<StudentDisciplineResponse>> getStudents(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false, defaultValue = "true") Boolean active
+            @RequestParam(required = false) Boolean active
     ) {
         List<StudentDisciplineResponse> students = studentService.getStudents(search, active);
         return ResponseEntity.ok(students);
@@ -66,11 +68,44 @@ public class StudentController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/{id}/telegram-message")
+    public ResponseEntity<TelegramMessageDeliveryResponse> sendTelegramMessage(
+            @PathVariable String id,
+            @Valid @RequestBody TelegramMessageRequest request
+    ) {
+        Long studentId = parseId(id);
+        return ResponseEntity.ok(systemService.sendMessageToStudent(studentId, request.text()));
+    }
+
     @GetMapping("/{id}/discipline-calendar")
     public ResponseEntity<List<DayInfoResponse>> getDisciplineCalendar(@PathVariable String id) {
         Long studentId = parseId(id);
         List<DayInfoResponse> calendar = studentService.getDisciplineCalendar(studentId);
         return ResponseEntity.ok(calendar);
+    }
+
+    @PutMapping("/{id}/discipline-calendar")
+    public ResponseEntity<DayInfoResponse> updateDisciplineDay(
+            @PathVariable String id,
+            @Valid @RequestBody UpdateDayStatusRequest request
+    ) {
+        Long studentId = parseId(id);
+        return ResponseEntity.ok(studentService.updateDisciplineDay(studentId, request));
+    }
+
+    @GetMapping("/{id}/zoom-meetings")
+    public ResponseEntity<List<ZoomMeetingDto>> getStudentZoomMeetings(@PathVariable String id) {
+        Long studentId = parseId(id);
+        return ResponseEntity.ok(studentService.getStudentZoomMeetings(studentId));
+    }
+
+    @PutMapping("/{id}/zoom-meetings")
+    public ResponseEntity<List<ZoomMeetingDto>> replaceStudentZoomMeetings(
+            @PathVariable String id,
+            @Valid @RequestBody ReplaceZoomSessionsRequest request
+    ) {
+        Long studentId = parseId(id);
+        return ResponseEntity.ok(studentService.replaceStudentZoomMeetings(studentId, request));
     }
 
     private Long parseId(String idStr) {

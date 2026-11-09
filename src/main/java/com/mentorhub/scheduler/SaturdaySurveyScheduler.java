@@ -1,6 +1,8 @@
 package com.mentorhub.scheduler;
 
 import com.mentorhub.entity.Student;
+import com.mentorhub.entity.MentorSetting;
+import com.mentorhub.repository.MentorSettingRepository;
 import com.mentorhub.repository.StudentRepository;
 import com.mentorhub.telegram.service.TelegramSenderService;
 import lombok.RequiredArgsConstructor;
@@ -11,7 +13,10 @@ import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Slf4j
@@ -22,12 +27,22 @@ public class SaturdaySurveyScheduler {
     private static final ZoneId MINSK_ZONE = ZoneId.of("Europe/Minsk");
 
     private final StudentRepository studentRepository;
+    private final MentorSettingRepository mentorSettingRepository;
     private final TelegramSenderService telegramSenderService;
 
     @Value("${telegram.poll.rate-limit-ms:1000}")
     private long rateLimitMs = 1000L;
 
-    @Scheduled(cron = "${telegram.poll.cron:0 0 18 * * SAT}", zone = "${telegram.poll.zone:Europe/Minsk}")
+    @Scheduled(cron = "0 * * * * *", zone = "Europe/Minsk")
+    public void pollConfiguredSurvey() {
+        LocalDateTime now = LocalDateTime.now(MINSK_ZONE).truncatedTo(ChronoUnit.MINUTES);
+        if (now.getDayOfWeek() != DayOfWeek.SATURDAY) return;
+        MentorSetting settings = mentorSettingRepository.findAll().stream().findFirst().orElse(null);
+        if (settings == null || !Boolean.TRUE.equals(settings.getSaturdayPollEnabled())) return;
+        LocalTime scheduledTime = settings.getSaturdayPollTime();
+        if (scheduledTime != null && scheduledTime.equals(now.toLocalTime())) executeSaturdaySurveyJob();
+    }
+
     public void executeSaturdaySurveyJob() {
         LocalDate today = LocalDate.now(MINSK_ZONE);
         log.info("Starting SaturdaySurveyScheduler job for date {}", today);
@@ -71,7 +86,13 @@ public class SaturdaySurveyScheduler {
             return false;
         }
 
-        String surveyText = "Субботний чекап недели! 📊\nСколько новых клиентов ты закрыла за эту неделю?";
-        return telegramSenderService.sendSaturdaySurveyPoll(student.getTgChatId(), student.getId(), surveyText);
+        String surveyText = "Субботний чекап недели!\nСколько новых клиентов ты закрыла за эту неделю?";
+        MentorSetting settings = mentorSettingRepository.findAll().stream().findFirst().orElse(null);
+        String businessConnectionId = settings != null && Boolean.TRUE.equals(settings.getIsBusinessConnected())
+                ? settings.getBusinessConnectionId()
+                : null;
+        return businessConnectionId == null
+                ? telegramSenderService.sendSaturdaySurveyPoll(student.getTgChatId(), student.getId(), surveyText)
+                : telegramSenderService.sendSaturdaySurveyPoll(student.getTgChatId(), student.getId(), surveyText, businessConnectionId);
     }
 }

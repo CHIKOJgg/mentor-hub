@@ -1,6 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { initialReports, studentDisciplines, taskRules, defaultSystemSettings } from './mockData';
 import type { DailyReport, StudentDiscipline, TabType, ContentType, TaskRule, SystemSettings, DayInfo, ZoomSessionRecord } from './types';
+import type { ApiAdminSession, ApiCuratorScript, ApiDailyReport, ApiStudent, ApiSystemSettings, ApiTaskRule, ApiZoomSession } from './api/contracts';
+import { api, getAdminToken, saveAdminToken } from './api/client';
+import { readPersisted, writePersisted } from './persistence';
 import {
   ExternalLink,
   Copy,
@@ -28,7 +31,6 @@ import {
   ShieldCheck,
   Send,
   BookOpen,
-  Zap,
   Pencil,
   Plus,
   Trash2,
@@ -37,6 +39,17 @@ import {
   Settings,
   Calendar,
 } from 'lucide-react';
+
+const createLocalId = (prefix: string): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now().toString(36)}`;
+};
+
+const getTodayIsoDate = (): string => {
+  return new Date().toISOString().slice(0, 10);
+};
 
 const calculateMultiplier = (current: number, initial: number): string => {
   if (!initial || initial <= 0 || !Number.isFinite(initial)) return '1.0';
@@ -111,53 +124,222 @@ const withZoomSessionSummary = (
   };
 };
 
+const newStudentTemplate = {
+  fullName: '',
+  niche: '',
+  telegram: '',
+  telegramChatId: '',
+  initialIncome: 0,
+  initialAvgTicket: 0,
+  tariff: 'Стандарт' as const,
+};
+
+const makeInitialWeekDays = (): DayInfo[] => {
+  const today = new Date();
+  const monday = new Date(today);
+  const offset = (today.getDay() + 6) % 7;
+  monday.setDate(today.getDate() - offset);
+  const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+  return dayNames.map((day, index) => {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + index);
+    return {
+      day,
+      date: `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}`,
+      status: index === 6 ? 'WEEKEND' : 'PENDING',
+    };
+  });
+};
+
+const makeAvatarText = (fullName: string): string =>
+  fullName.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toLocaleUpperCase('ru-RU') ?? '').join('') || 'У';
+
+const parseZoomDate = (value: string): string | null => {
+  const raw = value.trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) {
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  const match = raw.match(/^(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?(?:\s*в\s*(\d{1,2}:\d{2}))?$/i);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3] || new Date().getFullYear());
+  const time = match[4] || '12:00';
+  const parsed = new Date(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${time}:00+03:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+};
+
+const mapApiZoomSession = (session: ApiZoomSession, index: number): ZoomSessionRecord => ({
+  callNumber: session.callNumber ?? index + 1,
+  title: session.title,
+  date: session.scheduledAt ? new Date(session.scheduledAt).toLocaleString('ru-RU', { timeZone: 'Europe/Minsk', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ' в') : '',
+  isCompleted: session.isCompleted,
+  zoomLink: session.zoomUrl,
+  recordingUrl: session.recordingUrl,
+  keyTakeaway: session.meetingNotes,
+});
+
+const serializeZoomSessions = (sessions: ZoomSessionRecord[]) => sessions.map((session, index) => ({
+  callNumber: index + 1,
+  title: session.title,
+  zoomUrl: session.zoomLink ?? null,
+  recordingUrl: session.recordingUrl ?? null,
+  scheduledAt: parseZoomDate(session.date),
+  isCompleted: session.isCompleted,
+  meetingNotes: session.keyTakeaway ?? null,
+}));
+
+const defaultCuratorScripts = [
+  {
+    id: 'local-script-seed-1',
+    title: 'Скрипт Direct: Первое касание (шаблон для учениц)',
+    description: 'Холодное касание экспертам и блогерам без давления и навязывания',
+    category: 'Продажи',
+    text: '«Привет, [Имя]! Увидела твой сторителл про запуск — очень откликается глубина. Заметила, что многие сильные эксперты на масштабе ловят выгорание и синдром самозванца. Я клинический психолог, помогаю экспертам пробить плато дохода без надрыва. Хочу подарить 15-минутный экспресс-разбор: где сейчас утекает энергия. Актуально на этой неделе?»',
+  },
+  {
+    id: 'local-script-seed-2',
+    title: 'Офер пакета консультаций за 15 000 ₽ (шаблон)',
+    description: 'Формула закрытия после бесплатного экспресс-разбора на высокий чек',
+    category: 'Продажи',
+    text: '«Мы вскрыли корень: страх отказа и обесценивание своего опыта. Чтобы убрать это системно за 3 недели и зафиксировать чек, предлагаю пакет из 4 сессий с моим личным сопровождением в Telegram между встречами. Стоимость — 15 000 ₽. Стартуем в четверг?»',
+  },
+  {
+    id: 'local-script-seed-3',
+    title: 'Напоминание о дедлайне в личку (от куратора Кати)',
+    description: 'Мягкий пуш ученицам за 1 час до дедлайна с фокусом на результат',
+    category: 'Кураторские',
+    text: '«Привет! Напоминаю, что сегодня ждём твой черновик контента и количество касаний до 21:00. Ксения сейчас на связи и разбирает отчёты в первую очередь. Если есть затык — отправляй голосовое с #вопрос, разберём!»',
+  },
+  {
+    id: 'local-script-seed-4',
+    title: 'Поддержка при спаде энергии и амнистия (от наставника Ксении)',
+    description: 'Личное сообщение ученице в риске слёта для возврата в стрик',
+    category: 'Удержание',
+    text: '«Привет, дорогая! Вижу, что накопилась усталость от совмещения. Давай снизим темп: на сегодня план-минимум — всего 15 рассылок и короткий Reels без сложного монтажа. Твоя Точка Б ближе, чем кажется, давай не сливать стрик!»',
+  },
+];
+
+type LocalDataDomain = 'reports' | 'students' | 'task-rules' | 'system-settings' | 'curator-scripts';
+
+const mapApiReport = (report: ApiDailyReport): DailyReport => ({
+  ...report,
+  id: report.id.startsWith('rep-') ? report.id : `rep-${report.id}`,
+  studentId: report.studentId.startsWith('st-') ? report.studentId : `st-${report.studentId}`,
+  tariff: report.tariff.toUpperCase() === 'VIP' ? 'VIP' : 'Стандарт',
+  salesAmount: Number(report.salesAmount) || 0,
+  contentDrafts: (report.contentDrafts ?? []).map(draft => ({
+    ...draft,
+    type: (draft.type?.toLowerCase() === 'storytell' ? 'storytell' : draft.type?.toLowerCase() === 'carousel' ? 'carousel' : 'reel') as ContentType,
+  })),
+  reels: (report.reels ?? []).map(reel => ({ ...reel })),
+});
+
+const mapApiStudent = (student: ApiStudent): StudentDiscipline => {
+  const mapped: StudentDiscipline = {
+    ...student,
+    telegram: student.tgUsername ? (student.tgUsername.startsWith('@') ? student.tgUsername : `@${student.tgUsername}`) : undefined,
+    telegramChatId: student.tgChatId,
+    tariff: student.tariff?.toUpperCase() === 'VIP' ? 'VIP' : 'Стандарт',
+    initialIncome: Number(student.initialIncome) || 0,
+    currentIncome: Number(student.currentIncome) || 0,
+    initialAvgTicket: Number(student.initialAvgTicket) || 0,
+    currentAvgTicket: Number(student.currentAvgTicket) || 0,
+    weekDays: student.weekDays ?? [],
+    zoomSessions: student.zoomSessions?.map(mapApiZoomSession),
+  };
+  return withZoomSessionSummary(mapped, mapped.zoomSessions ?? getStudentZoomSessions(mapped));
+};
+
+const toApiStudentPayload = (student: StudentDiscipline) => ({
+  fullName: student.fullName,
+  avatarText: student.avatarText,
+  tgUsername: student.telegram?.replace(/^@/, '') ?? null,
+  tgChatId: student.telegramChatId ?? null,
+  niche: student.niche,
+  tariff: student.tariff === 'VIP' ? 'VIP' : 'STANDARD',
+  initialIncome: student.initialIncome,
+  currentIncome: student.currentIncome,
+  initialAvgTicket: student.initialAvgTicket,
+  currentAvgTicket: student.currentAvgTicket,
+  startDate: student.startDate ?? new Date().toISOString().slice(0, 10),
+  isActive: student.isActive ?? true,
+  isPaused: student.isOnPause,
+  pauseReason: student.pauseReason ?? null,
+});
+
+const mapApiTaskRule = (rule: ApiTaskRule): TaskRule => ({ ...rule, enabled: rule.isActive ?? true });
+
+const mapApiSettings = (settings: ApiSystemSettings): SystemSettings => ({
+  ...settings,
+  morningPushTime: settings.morningPushTime.slice(0, 5),
+  eveningReminderTime: settings.eveningReminderTime.slice(0, 5),
+  dailyDeadlineTime: settings.dailyDeadlineTime.slice(0, 5),
+  saturdayPollTime: settings.saturdayPollTime.slice(0, 5),
+});
+
+const getReportContentCount = (reports: DailyReport[], type: ContentType): number =>
+  reports.reduce((count, report) => count + (report.contentDrafts ?? []).filter(draft => draft.type === type).length, 0);
+
+const getReportDate = (report: DailyReport): string => report.reportDate ?? new Date().toISOString().slice(0, 10);
+
+const getReportRange = (reports: DailyReport[], period: 'week' | 'month' | 'all'): DailyReport[] => {
+  if (period === 'all') return reports;
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const start = new Date(end);
+  start.setDate(start.getDate() - (period === 'week' ? 6 : 29));
+  start.setHours(0, 0, 0, 0);
+  return reports.filter(report => {
+    const date = new Date(`${getReportDate(report)}T12:00:00`);
+    return !Number.isNaN(date.getTime()) && date >= start && date <= end;
+  });
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'inbox' | 'students' | 'analytics' | 'tasks'>('inbox');
-  const [reports, setReports] = useState<DailyReport[]>(initialReports);
+  const [reports, setReports] = useState<DailyReport[]>(() => readPersisted('reports', initialReports));
+  const [allReports, setAllReports] = useState<DailyReport[]>(() => readPersisted('all-reports', initialReports));
   const [students, setStudents] = useState<StudentDiscipline[]>(() =>
-    studentDisciplines.map(student => withZoomSessionSummary(student, getStudentZoomSessions(student))),
+    readPersisted('students', studentDisciplines.map(student => withZoomSessionSummary(student, getStudentZoomSessions(student)))),
   );
-  const [replies, setReplies] = useState<Record<string, string>>({});
+  const [replies, setReplies] = useState<Record<string, string>>(() => readPersisted('replies', {}));
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [selectedStudent, setSelectedStudent] = useState<StudentDiscipline>(studentDisciplines[0]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string>(() =>
+    readPersisted('selected-student-id', studentDisciplines[0].id),
+  );
+  const selectedStudent = useMemo(
+    () => students.find(student => student.id === selectedStudentId) ?? students[0] ?? studentDisciplines[0],
+    [students, selectedStudentId],
+  );
+  const setSelectedStudent = (student: StudentDiscipline) => {
+    setSelectedStudentId(student.id);
+  };
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeAdmin, setActiveAdmin] = useState<'Ксения' | 'Катя'>('Ксения');
+  const [activeAdmin, setActiveAdmin] = useState<'Ксения' | 'Катя'>(() => readPersisted('active-admin', 'Ксения'));
   const [analyticsCategory, setAnalyticsCategory] = useState<'cohort' | 'students'>('cohort');
   const [analyticsPeriod, setAnalyticsPeriod] = useState<'week' | 'month' | 'all'>('all');
-  const [rules, setRules] = useState<TaskRule[]>(taskRules);
-  const [systemSettings, setSystemSettings] = useState<SystemSettings>(defaultSystemSettings);
+  const [rules, setRules] = useState<TaskRule[]>(() => readPersisted('task-rules', taskRules));
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>(() => readPersisted('system-settings', defaultSystemSettings));
   const [tasksSubTab, setTasksSubTab] = useState<'hashtags' | 'scripts' | 'system'>('hashtags');
   const [studentsFilter, setStudentsFilter] = useState<'all' | 'perfect' | 'attention' | 'pause' | 'zooms'>('all');
   const [studentsViewMode, setStudentsViewMode] = useState<'calendar' | 'zooms'>('calendar');
-  const [rehabOffered, setRehabOffered] = useState<boolean>(false);
   const [selectedScriptCategory, setSelectedScriptCategory] = useState<string>('Все');
-  const [curatorScripts, setCuratorScripts] = useState<{ title: string; description: string; text: string; category?: string }[]>([
-    {
-      title: 'Скрипт Direct: Первое касание (шаблон для учениц)',
-      description: 'Холодное касание экспертам и блогерам без давления и навязывания',
-      category: 'Продажи',
-      text: '«Привет, [Имя]! Увидела твой сторителл про запуск — очень откликается глубина. Заметила, что многие сильные эксперты на масштабе ловят выгорание и синдром самозванца. Я клинический психолог, помогаю экспертам пробить плато дохода без надрыва. Хочу подарить 15-минутный экспресс-разбор: где сейчас утекает энергия. Актуально на этой неделе?»',
-    },
-    {
-      title: 'Офер пакета консультаций за 15 000 ₽ (шаблон)',
-      description: 'Формула закрытия после бесплатного экспресс-разбора на высокий чек',
-      category: 'Продажи',
-      text: '«Мы вскрыли корень: страх отказа и обесценивание своего опыта. Чтобы убрать это системно за 3 недели и зафиксировать чек, предлагаю пакет из 4 сессий с моим личным сопровождением в Telegram между встречами. Стоимость — 15 000 ₽. Стартуем в четверг?»',
-    },
-    {
-      title: 'Напоминание о дедлайне в личку (от куратора Кати)',
-      description: 'Мягкий пуш ученицам за 1 час до дедлайна с фокусом на результат',
-      category: 'Кураторские',
-      text: '«Привет! Напоминаю, что сегодня ждём твой черновик контента и количество касаний до 21:00. Ксения сейчас на связи и разбирает отчёты в первую очередь. Если есть затык — отправляй голосовое с #вопрос, разберём!»',
-    },
-    {
-      title: 'Поддержка при спаде энергии и амнистия (от наставника Ксении)',
-      description: 'Личное сообщение ученице в риске слёта для возврата в стрик',
-      category: 'Удержание',
-      text: '«Привет, дорогая! Вижу, что накопилась усталость от совмещения. Давай снизим темп: на сегодня план-минимум — всего 15 рассылок и короткий Reels без сложного монтажа. Твоя Точка Б ближе, чем кажется, давай не сливать стрик!»',
-    },
-  ]);
+  const [curatorScripts, setCuratorScripts] = useState<ApiCuratorScript[]>(() => readPersisted('curator-scripts', defaultCuratorScripts));
+  const [adminToken, setAdminToken] = useState(getAdminToken);
+  const [adminTokenDraft, setAdminTokenDraft] = useState(getAdminToken);
+  const [apiSession, setApiSession] = useState<ApiAdminSession | null>(null);
+  const [apiConnection, setApiConnection] = useState<'checking' | 'connected' | 'offline' | 'unauthorized' | 'needs-token'>('checking');
+  const [apiConnectionMessage, setApiConnectionMessage] = useState('Проверяем подключение');
+  const [isApiSyncing, setIsApiSyncing] = useState(false);
+  const [apiRefreshKey, setApiRefreshKey] = useState(0);
+  const [pendingSyncDomains, setPendingSyncDomains] = useState<string[]>(() => readPersisted('pending-sync-domains', []));
+  const [isAddingStudent, setIsAddingStudent] = useState(false);
+  const [newStudent, setNewStudent] = useState<{ fullName: string; niche: string; telegram: string; telegramChatId: string; initialIncome: number; initialAvgTicket: number; tariff: 'VIP' | 'Стандарт' }>(newStudentTemplate);
 
   // Edit Modals State
   const [editingStudent, setEditingStudent] = useState<StudentDiscipline | null>(null);
@@ -170,131 +352,471 @@ export default function App() {
   const [newRule, setNewRule] = useState({ hashtag: '#', title: '', description: '', required: false, example: '' });
   const [editingScheduleTime, setEditingScheduleTime] = useState<{ key: keyof SystemSettings; label: string; value: string } | null>(null);
 
-  const saveDayEdit = (studentId: string, dayIndex: number, updatedDay: DayInfo) => {
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id === studentId) {
-          const nextWeekDays = [...s.weekDays];
-          nextWeekDays[dayIndex] = updatedDay;
-          const activeDays = nextWeekDays.filter(d => d.status !== 'WEEKEND' && d.status !== 'PAUSED');
-          const completedCount = activeDays.filter(d => d.status === 'COMPLETED_ON_TIME' || d.status === 'COMPLETED_LATE').length;
-          const newRate = activeDays.length > 0 ? Math.round((completedCount / activeDays.length) * 100) : 100;
-          return {
-            ...s,
-            weekDays: nextWeekDays,
-            disciplineRate: newRate,
-          };
+  useEffect(() => {
+    writePersisted('reports', reports);
+    writePersisted('all-reports', allReports);
+    writePersisted('students', students);
+    writePersisted('replies', replies);
+    writePersisted('selected-student-id', selectedStudentId);
+    writePersisted('selected-student', selectedStudent);
+    writePersisted('active-admin', activeAdmin);
+    writePersisted('task-rules', rules);
+    writePersisted('system-settings', systemSettings);
+    writePersisted('curator-scripts', curatorScripts);
+    writePersisted('pending-sync-domains', pendingSyncDomains);
+  }, [reports, allReports, students, replies, selectedStudentId, selectedStudent, activeAdmin, rules, systemSettings, curatorScripts, pendingSyncDomains]);
+
+  useEffect(() => {
+    saveAdminToken(adminToken);
+    let isCurrent = true;
+
+    const loadRemoteData = async () => {
+      setApiConnection('checking');
+      setApiConnectionMessage('Проверяем подключение');
+      setApiSession(null);
+
+      try {
+        await api.getSystemStatus<Record<string, unknown>>();
+      } catch {
+        if (isCurrent) {
+          setApiConnection('offline');
+          setApiConnectionMessage('Сервер недоступен; изменения сохраняются в этом браузере');
         }
-        return s;
-      })
-    );
-    showToast(`Статус за ${updatedDay.date} обновлен`);
+        return;
+      }
+
+      if (!adminToken.trim()) {
+        if (isCurrent) {
+          setApiConnection('needs-token');
+          setApiConnectionMessage('Сервер доступен. Для синхронизации введите токен администратора');
+        }
+        return;
+      }
+
+      let currentSession: ApiAdminSession;
+      try {
+        currentSession = await api.getCurrentSession<ApiAdminSession>();
+      } catch (error) {
+        if (isCurrent) {
+          const unauthorized = error instanceof Error && 'status' in error && error.status === 401;
+          setApiConnection(unauthorized ? 'unauthorized' : 'offline');
+          setApiConnectionMessage(unauthorized ? 'Токен не принят' : 'Не удалось проверить права администратора');
+        }
+        return;
+      }
+      if (!isCurrent) return;
+      setApiSession(currentSession);
+      setActiveAdmin(currentSession.adminName === 'Катя' ? 'Катя' : 'Ксения');
+
+      const [reportsResult, studentsResult, rulesResult, settingsResult, scriptsResult] = await Promise.allSettled([
+        api.getAllReports<ApiDailyReport[]>(),
+        api.getStudents<ApiStudent[]>(),
+        api.getTaskRules<ApiTaskRule[]>(),
+        api.getSettings<ApiSystemSettings>(),
+        api.getScripts<ApiCuratorScript[]>(),
+      ]);
+
+      if (!isCurrent) return;
+
+      let loadedCount = 0;
+      let unauthorized = false;
+      const pending = new Set(pendingSyncDomains);
+      const hasPending = (domain: LocalDataDomain) => pending.has(domain) || [...pending].some(key => key.startsWith(`${domain}:`));
+      const pendingDomainCount = (['reports', 'students', 'task-rules', 'system-settings', 'curator-scripts'] as LocalDataDomain[])
+        .filter(domain => hasPending(domain)).length;
+      const results = [reportsResult, studentsResult, rulesResult, settingsResult, scriptsResult];
+      results.forEach(result => {
+        if (result.status === 'fulfilled') loadedCount += 1;
+        else if (result.reason?.status === 401) unauthorized = true;
+      });
+
+      if (reportsResult.status === 'fulfilled' && !hasPending('reports')) {
+        const mappedReports = reportsResult.value.map(mapApiReport);
+        setAllReports(mappedReports);
+        setReports(mappedReports.filter(report => report.status === 'PENDING'));
+      }
+      if (studentsResult.status === 'fulfilled' && !hasPending('students')) {
+        setStudents(studentsResult.value.map(mapApiStudent));
+      }
+      if (rulesResult.status === 'fulfilled' && !hasPending('task-rules')) setRules(rulesResult.value.map(mapApiTaskRule));
+      if (settingsResult.status === 'fulfilled' && !hasPending('system-settings')) setSystemSettings(mapApiSettings(settingsResult.value));
+      if (scriptsResult.status === 'fulfilled' && !hasPending('curator-scripts')) setCuratorScripts(scriptsResult.value);
+
+      if (unauthorized) {
+        setApiConnection('unauthorized');
+        setApiConnectionMessage('Токен не принят; локальные данные доступны, синхронизация отключена');
+      } else if (loadedCount === results.length) {
+        setApiConnection('connected');
+        setApiConnectionMessage(pendingDomainCount > 0
+          ? `Подключено; локальные изменения сохранены (${pendingDomainCount} раздела ожидают отправки)`
+          : 'Подключено к серверу; данные синхронизированы');
+      } else if (loadedCount > 0) {
+        setApiConnection('connected');
+        setApiConnectionMessage(pendingDomainCount > 0
+          ? `Подключено; локальные изменения сохранены (${pendingDomainCount} раздела ожидают отправки)`
+          : 'Подключено частично; недоступные данные восстановлены из локальной копии');
+      } else {
+        setApiConnection('offline');
+        setApiConnectionMessage('API недоступно; используется локальная копия');
+      }
+    };
+
+    void loadRemoteData();
+    return () => {
+      isCurrent = false;
+    };
+  }, [adminToken, apiRefreshKey, pendingSyncDomains]);
+
+  const markLocalChange = (domain: LocalDataDomain, entityId?: string) => {
+    const key = entityId ? `${domain}:${entityId}` : domain;
+    setPendingSyncDomains(prev => prev.includes(key) ? prev : [...prev, key]);
   };
 
-  const saveStudentProfile = (updated: StudentDiscipline) => {
+  const clearLocalChange = (domain: LocalDataDomain, entityId?: string) => {
+    const key = entityId ? `${domain}:${entityId}` : domain;
+    setPendingSyncDomains(prev => prev.filter(item => entityId
+      ? item !== key
+      : item !== domain && !item.startsWith(`${domain}:`)));
+  };
+
+  const saveDayEdit = async (studentId: string, dayIndex: number, updatedDay: DayInfo) => {
+    const student = students.find(item => item.id === studentId);
+    if (!student) return;
+    const nextWeekDays = [...student.weekDays];
+    nextWeekDays[dayIndex] = updatedDay;
+    const activeDays = nextWeekDays.filter(day => day.status !== 'WEEKEND' && day.status !== 'PAUSED' && day.status !== 'PENDING');
+    const onTimeCount = activeDays.filter(day => day.status === 'COMPLETED_ON_TIME').length;
+    const lateCount = activeDays.filter(day => day.status === 'COMPLETED_LATE').length;
+    const updatedStudent = {
+      ...student,
+      weekDays: nextWeekDays,
+      disciplineRate: activeDays.length > 0 ? Math.round((onTimeCount * 100 + lateCount * 70) / activeDays.length) : 100,
+    };
+    setStudents(prev => prev.map(item => item.id === studentId ? updatedStudent : item));
+
+    if (apiConnection === 'connected' && !studentId.startsWith('local-')) {
+      try {
+        await api.updateCalendarDay(studentId, {
+          date: updatedDay.isoDate ?? updatedDay.date,
+          day: updatedDay.day,
+          status: updatedDay.status,
+          details: updatedDay.missedDetails ?? '',
+        });
+        clearLocalChange('students', studentId);
+        showToast(`Статус за ${updatedDay.date} сохранен`);
+        return;
+      } catch {
+        markLocalChange('students', studentId);
+        setApiConnectionMessage('Изменение дня сохранено локально; сервер не принял обновление');
+      }
+    } else {
+      markLocalChange('students', studentId);
+    }
+    showToast(`Статус за ${updatedDay.date} сохранен локально`);
+  };
+
+  const saveStudentProfile = async (updated: StudentDiscipline) => {
     const normalized = withZoomSessionSummary(updated, updated.zoomSessions ?? []);
+    const localKey = normalized.id;
     setStudents(prev => prev.map(s => (s.id === normalized.id ? normalized : s)));
     if (selectedStudent.id === normalized.id) {
       setSelectedStudent(normalized);
     }
-    showToast(`Профиль ${normalized.fullName} сохранен`);
+
+    if (apiConnection === 'connected') {
+      const payload = toApiStudentPayload(normalized);
+
+      try {
+        const response = normalized.id.startsWith('local-')
+          ? await api.createStudent<ApiStudent>(payload)
+          : await api.updateStudent<ApiStudent>(normalized.id, payload);
+        const serverStudent = mapApiStudent(response);
+        const saved = withZoomSessionSummary({ ...normalized, id: serverStudent.id, weekDays: serverStudent.weekDays }, normalized.zoomSessions ?? []);
+        setStudents(prev => prev.map(student => student.id === normalized.id ? saved : student));
+        if (selectedStudent.id === normalized.id) setSelectedStudent(saved);
+        await api.replaceStudentZoomSessions(saved.id, serializeZoomSessions(saved.zoomSessions ?? []));
+        clearLocalChange('students', localKey);
+        showToast(`Профиль ${saved.fullName} сохранен на сервере`);
+        return;
+      } catch {
+        markLocalChange('students', localKey);
+        setApiConnectionMessage('Профиль сохранен в браузере; сервер пока недоступен');
+      }
+    } else {
+      markLocalChange('students', localKey);
+    }
+    showToast(`Профиль ${normalized.fullName} сохранен локально`);
   };
 
-  const saveScript = (index: number, scriptData: { title: string; description: string; text: string }) => {
-    setCuratorScripts(prev => {
-      const next = [...prev];
-      next[index] = { ...next[index], ...scriptData };
-      return next;
-    });
-    showToast(`Скрипт «${scriptData.title}» сохранён`);
+  const addStudent = async () => {
+    const fullName = newStudent.fullName.trim();
+    const niche = newStudent.niche.trim();
+    if (!fullName || !niche) {
+      showToast('Укажите имя ученицы и ее нишу');
+      return;
+    }
+
+    const localId = createLocalId('local');
+    const initialIncome = Math.max(0, newStudent.initialIncome);
+    const initialAvgTicket = Math.max(0, newStudent.initialAvgTicket);
+    const localStudent: StudentDiscipline = {
+      id: localId,
+      fullName,
+      avatarText: makeAvatarText(fullName),
+      telegram: newStudent.telegram.trim() ? `@${newStudent.telegram.trim().replace(/^@/, '')}` : undefined,
+      telegramChatId: newStudent.telegramChatId ? Number(newStudent.telegramChatId) : undefined,
+      niche,
+      tariff: newStudent.tariff,
+      startDate: getTodayIsoDate(),
+      isActive: true,
+      initialIncome,
+      currentIncome: initialIncome,
+      initialAvgTicket,
+      currentAvgTicket: initialAvgTicket,
+      totalReels: 0,
+      totalCarousels: 0,
+      totalStorytells: 0,
+      totalMailings: 0,
+      totalNewClients: 0,
+      disciplineRate: 100,
+      weekDays: makeInitialWeekDays(),
+      isOnPause: false,
+      completedZoomsCount: 0,
+      zoomSessions: [],
+    };
+
+    setStudents(prev => [...prev, localStudent]);
+    setNewStudent(newStudentTemplate);
+    setIsAddingStudent(false);
+
+    if (apiConnection === 'connected') {
+      try {
+        const created = await api.createStudent<ApiStudent>({
+          fullName,
+          avatarText: localStudent.avatarText,
+          tgUsername: localStudent.telegram?.replace(/^@/, '') ?? null,
+          tgChatId: localStudent.telegramChatId ?? null,
+          niche,
+          tariff: newStudent.tariff === 'VIP' ? 'VIP' : 'STANDARD',
+          initialIncome,
+          initialAvgTicket,
+          startDate: localStudent.startDate,
+        });
+        const serverStudent = withZoomSessionSummary(mapApiStudent(created), []);
+        setStudents(prev => prev.map(student => student.id === localId ? serverStudent : student));
+        clearLocalChange('students', localId);
+        showToast(`Ученица ${fullName} создана на сервере`);
+        return;
+      } catch {
+        markLocalChange('students', localId);
+        setApiConnectionMessage('Новая ученица сохранена локально; сервер пока недоступен');
+      }
+    } else {
+      markLocalChange('students', localId);
+    }
+    showToast(`Ученица ${fullName} сохранена локально`);
   };
 
-  const addScript = (scriptData: { title: string; description: string; text: string }) => {
-    setCuratorScripts(prev => [...prev, scriptData]);
-    showToast(`Добавлен новый скрипт: ${scriptData.title}`);
+  const saveScript = async (index: number, scriptData: { title: string; description: string; text: string }) => {
+    const previous = curatorScripts[index];
+    const updated = { ...previous, ...scriptData };
+    const localKey = previous.id ?? `index-${index}`;
+    setCuratorScripts(prev => prev.map((script, itemIndex) => itemIndex === index ? updated : script));
+
+    if (apiConnection === 'connected') {
+      try {
+        const saved = updated.id
+          ? await api.updateScript<ApiCuratorScript>(updated.id, updated)
+          : await api.createScript<ApiCuratorScript>(updated);
+        setCuratorScripts(prev => prev.map((script, itemIndex) => itemIndex === index ? saved : script));
+        clearLocalChange('curator-scripts', localKey);
+        showToast(`Скрипт «${scriptData.title}» сохранен на сервере`);
+        return;
+      } catch {
+        markLocalChange('curator-scripts', localKey);
+        setApiConnectionMessage('Скрипт сохранен локально; сервер не принял обновление');
+      }
+    } else {
+      markLocalChange('curator-scripts', localKey);
+    }
+    showToast(`Скрипт «${scriptData.title}» сохранен локально`);
   };
 
-  const deleteScript = (index: number) => {
-    setCuratorScripts(prev => prev.filter((_, i) => i !== index));
-    showToast('Скрипт удален');
+  const addScript = async (scriptData: { title: string; description: string; text: string }) => {
+    const localId = createLocalId('local-script');
+    setCuratorScripts(prev => [...prev, { ...scriptData, id: localId }]);
+    if (apiConnection === 'connected') {
+      try {
+        const saved = await api.createScript<ApiCuratorScript>(scriptData);
+        setCuratorScripts(prev => prev.map(script => script.id === localId ? saved : script));
+        clearLocalChange('curator-scripts', localId);
+        showToast(`Скрипт «${scriptData.title}» добавлен на сервере`);
+        return;
+      } catch {
+        markLocalChange('curator-scripts', localId);
+        setApiConnectionMessage('Скрипт сохранен локально; сервер не принял создание');
+      }
+    } else {
+      markLocalChange('curator-scripts', localId);
+    }
+    showToast(`Скрипт «${scriptData.title}» сохранен локально`);
   };
 
-  const saveRule = (updatedRule: TaskRule) => {
+  const deleteScript = async (index: number) => {
+    const script = curatorScripts[index];
+    const localKey = script?.id?.startsWith('local-')
+      ? `deleted-title:${encodeURIComponent(script.title)}`
+      : script?.id ?? `index-${index}`;
+    setCuratorScripts(prev => prev.filter((_, itemIndex) => itemIndex !== index));
+    if (apiConnection === 'connected' && script?.id && !script.id.startsWith('local-')) {
+      try {
+        await api.deleteScript(script.id);
+        clearLocalChange('curator-scripts', localKey);
+        showToast('Скрипт удален с сервера');
+        return;
+      } catch {
+        markLocalChange('curator-scripts', localKey);
+        setApiConnectionMessage('Скрипт скрыт локально; сервер не принял удаление');
+      }
+    } else {
+      markLocalChange('curator-scripts', localKey);
+    }
+    showToast('Скрипт удален локально');
+  };
+
+  const saveRule = async (updatedRule: TaskRule) => {
     setRules(prev => prev.map(r => (r.id === updatedRule.id ? updatedRule : r)));
-    showToast(`Правило ${updatedRule.hashtag} сохранено`);
+    if (apiConnection === 'connected' && !updatedRule.id.startsWith('local-')) {
+      try {
+        const saved = await api.updateTaskRule<ApiTaskRule>(updatedRule.id, {
+          hashtag: updatedRule.hashtag,
+          title: updatedRule.title,
+          description: updatedRule.description,
+          required: updatedRule.required,
+          example: updatedRule.example,
+          isActive: updatedRule.enabled !== false,
+        });
+        setRules(prev => prev.map(rule => rule.id === updatedRule.id ? mapApiTaskRule(saved) : rule));
+        clearLocalChange('task-rules', updatedRule.id);
+        showToast(`Правило ${updatedRule.hashtag} сохранено на сервере`);
+        return;
+      } catch {
+        markLocalChange('task-rules', updatedRule.id);
+        setApiConnectionMessage('Правило сохранено локально; сервер не принял обновление');
+      }
+    } else {
+      markLocalChange('task-rules', updatedRule.id);
+    }
+    showToast(`Правило ${updatedRule.hashtag} сохранено локально`);
   };
 
-  const addRule = (ruleData: { hashtag: string; title: string; description: string; required: boolean; example: string }) => {
-    setRules(prev => {
-      const id = `rule-${prev.length + 1}`;
-      return [...prev, { ...ruleData, id, enabled: true }];
-    });
-    showToast(`Хэштег ${ruleData.hashtag} добавлен в систему`);
+  const addRule = async (ruleData: { hashtag: string; title: string; description: string; required: boolean; example: string }) => {
+    const localRule: TaskRule = { ...ruleData, id: createLocalId('local-rule'), enabled: true };
+    setRules(prev => [...prev, localRule]);
+    if (apiConnection === 'connected') {
+      try {
+        const saved = await api.createTaskRule<ApiTaskRule>(ruleData);
+        setRules(prev => prev.map(rule => rule.id === localRule.id ? mapApiTaskRule(saved) : rule));
+        clearLocalChange('task-rules', localRule.id);
+        showToast(`Хэштег ${ruleData.hashtag} добавлен на сервере`);
+        return;
+      } catch {
+        markLocalChange('task-rules', localRule.id);
+        setApiConnectionMessage('Правило сохранено локально; сервер не принял создание');
+      }
+    } else {
+      markLocalChange('task-rules', localRule.id);
+    }
+    showToast(`Хэштег ${ruleData.hashtag} сохранен локально`);
   };
 
-  const deleteRule = (ruleId: string, tag: string) => {
+  const deleteRule = async (ruleId: string, tag: string) => {
     setRules(prev => prev.filter(r => r.id !== ruleId));
-    showToast(`Хэштег ${tag} удален`);
+    if (apiConnection === 'connected' && !ruleId.startsWith('local-')) {
+      try {
+        await api.deleteTaskRule(ruleId);
+        clearLocalChange('task-rules', ruleId);
+        showToast(`Хэштег ${tag} удален с сервера`);
+        return;
+      } catch {
+        markLocalChange('task-rules', ruleId);
+        setApiConnectionMessage('Правило удалено локально; сервер не принял удаление');
+      }
+    } else {
+      markLocalChange('task-rules', ruleId);
+    }
+    showToast(`Хэштег ${tag} удален локально`);
+  };
+
+  const persistSystemSettings = async (settings: SystemSettings, label: string) => {
+    if (apiConnection === 'connected') {
+      try {
+        const saved = await api.updateSettings<ApiSystemSettings>(settings);
+        setSystemSettings(mapApiSettings(saved));
+        clearLocalChange('system-settings');
+        showToast(`${label}: сохранено на сервере`);
+        return;
+      } catch {
+        markLocalChange('system-settings');
+        setApiConnectionMessage('Настройки сохранены локально; сервер не принял обновление');
+      }
+    } else {
+      markLocalChange('system-settings');
+    }
+    showToast(`${label}: сохранено локально`);
   };
 
   const updateScheduleTime = (key: keyof SystemSettings, val: string, label: string) => {
-    setSystemSettings(prev => ({ ...prev, [key]: val }));
-    showToast(`${label} изменено на ${val}`);
+    const nextSettings = { ...systemSettings, [key]: val };
+    setSystemSettings(nextSettings);
+    void persistSystemSettings(nextSettings, `${label} (${val})`);
   };
 
   const toggleRuleEnabled = (ruleId: string) => {
-    setRules(prev =>
-      prev.map(r => {
-        if (r.id === ruleId) {
-          const next = r.enabled !== false ? false : true;
-          showToast(next ? `Хэштег ${r.hashtag} включен в боте` : `Хэштег ${r.hashtag} отключен`);
-          return { ...r, enabled: next };
-        }
-        return r;
-      })
-    );
+    const rule = rules.find(item => item.id === ruleId);
+    if (rule) void saveRule({ ...rule, enabled: rule.enabled === false });
   };
 
   const toggleRuleRequired = (ruleId: string) => {
-    setRules(prev =>
-      prev.map(r => {
-        if (r.id === ruleId) {
-          const next = !r.required;
-          showToast(`Статус ${r.hashtag} изменен на: ${next ? 'обязательно' : 'по факту'}`);
-          return { ...r, required: next };
-        }
-        return r;
-      })
-    );
+    const rule = rules.find(item => item.id === ruleId);
+    if (rule) void saveRule({ ...rule, required: !rule.required });
   };
 
   const toggleSystemSetting = (key: keyof SystemSettings, label: string) => {
-    setSystemSettings(prev => {
-      const nextVal = !prev[key];
-      showToast(`${label}: ${nextVal ? 'включено' : 'отключено'}`);
-      return { ...prev, [key]: nextVal };
-    });
+    const nextSettings = { ...systemSettings, [key]: !systemSettings[key] };
+    setSystemSettings(nextSettings);
+    void persistSystemSettings(nextSettings, label);
   };
 
-  const markStudentZoomCompleted = (studentId: string, studentName: string) => {
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id !== studentId) return s;
-
-        const sessions = getStudentZoomSessions(s);
-        const nextSessionIndex = sessions.findIndex(session => !session.isCompleted);
-        if (nextSessionIndex < 0) {
-          showToast(`Для ${studentName} нет незавершенных созвонов`);
-          return s;
-        }
-
-        const nextSessions = sessions.map((session, index) =>
-          index === nextSessionIndex ? { ...session, isCompleted: true } : session,
-        );
-        showToast(`Созвон ${nextSessionIndex + 1}/${sessions.length} с ${studentName} зачтен`);
-        return withZoomSessionSummary(s, nextSessions);
-      })
+  const markStudentZoomCompleted = async (studentId: string, studentName: string) => {
+    const student = students.find(item => item.id === studentId);
+    if (!student) return;
+    const sessions = getStudentZoomSessions(student);
+    const nextSessionIndex = sessions.findIndex(session => !session.isCompleted);
+    if (nextSessionIndex < 0) {
+      showToast(`Для ${studentName} нет незавершенных созвонов`);
+      return;
+    }
+    const nextSessions = sessions.map((session, index) =>
+      index === nextSessionIndex ? { ...session, isCompleted: true } : session,
     );
+    const updated = withZoomSessionSummary(student, nextSessions);
+    setStudents(prev => prev.map(item => item.id === studentId ? updated : item));
+
+    if (apiConnection === 'connected' && !studentId.startsWith('local-')) {
+      try {
+        await api.replaceStudentZoomSessions(studentId, serializeZoomSessions(nextSessions));
+        clearLocalChange('students', studentId);
+        showToast(`Созвон ${nextSessionIndex + 1}/${sessions.length} сохранен на сервере`);
+        return;
+      } catch {
+        markLocalChange('students', studentId);
+        setApiConnectionMessage('Статус созвона сохранен локально; сервер не принял обновление');
+      }
+    } else {
+      markLocalChange('students', studentId);
+    }
+    showToast(`Созвон ${nextSessionIndex + 1}/${sessions.length} сохранен локально`);
   };
 
   const updateEditingZoomSession = (index: number, changes: Partial<ZoomSessionRecord>) => {
@@ -342,36 +864,310 @@ export default function App() {
     }, 3000);
   };
 
+  const syncPendingChanges = async (): Promise<boolean> => {
+    if (pendingSyncDomains.length === 0) return true;
+    const completedKeys: string[] = [];
+    const getEntityKey = (domain: LocalDataDomain, key: string) => key.startsWith(`${domain}:`) ? key.slice(domain.length + 1) : '';
+
+    for (const key of pendingSyncDomains) {
+      try {
+        if (key.startsWith('students:')) {
+          const localId = getEntityKey('students', key);
+          const localStudent = students.find(student => student.id === localId);
+          if (!localStudent) {
+            completedKeys.push(key);
+            continue;
+          }
+
+          const remoteStudents = await api.getStudents<ApiStudent[]>();
+          const username = localStudent.telegram?.replace(/^@/, '').toLowerCase();
+          const matchingRemote = localStudent.id.startsWith('local-')
+            ? remoteStudents.find(remote =>
+                (localStudent.telegramChatId && remote.tgChatId === localStudent.telegramChatId)
+                || (username && remote.tgUsername?.replace(/^@/, '').toLowerCase() === username)
+                || remote.fullName.trim().toLowerCase() === localStudent.fullName.trim().toLowerCase(),
+              )
+            : undefined;
+
+          let serverStudent: ApiStudent;
+          if (matchingRemote) {
+            serverStudent = await api.updateStudent<ApiStudent>(matchingRemote.id, toApiStudentPayload({ ...localStudent, id: matchingRemote.id }));
+          } else if (localStudent.id.startsWith('local-')) {
+            const created = await api.createStudent<ApiStudent>({
+              fullName: localStudent.fullName,
+              avatarText: localStudent.avatarText,
+              tgUsername: localStudent.telegram?.replace(/^@/, '') ?? null,
+              tgChatId: localStudent.telegramChatId ?? null,
+              niche: localStudent.niche,
+              tariff: localStudent.tariff === 'VIP' ? 'VIP' : 'STANDARD',
+              initialIncome: localStudent.initialIncome,
+              initialAvgTicket: localStudent.initialAvgTicket,
+              startDate: localStudent.startDate ?? new Date().toISOString().slice(0, 10),
+            });
+            serverStudent = await api.updateStudent<ApiStudent>(created.id, toApiStudentPayload({ ...localStudent, id: created.id }));
+          } else {
+            serverStudent = await api.updateStudent<ApiStudent>(localStudent.id, toApiStudentPayload(localStudent));
+          }
+
+          const serverId = serverStudent.id;
+          await api.replaceStudentZoomSessions(serverId, serializeZoomSessions(localStudent.zoomSessions ?? []));
+          const serverCalendar = await api.getCalendar<DayInfo[]>(serverId);
+          for (const localDay of localStudent.weekDays) {
+            const serverDay = serverCalendar.find(day => day.isoDate === localDay.isoDate || (day.day === localDay.day && day.date === localDay.date));
+            if (serverDay && (serverDay.status !== localDay.status || serverDay.missedDetails !== localDay.missedDetails)) {
+              await api.updateCalendarDay(serverId, {
+                date: localDay.isoDate ?? localDay.date,
+                day: localDay.day,
+                status: localDay.status,
+                details: localDay.missedDetails ?? '',
+              });
+            }
+          }
+
+          const savedStudent = withZoomSessionSummary({ ...localStudent, id: serverId }, localStudent.zoomSessions ?? []);
+          setStudents(prev => prev.map(student => student.id === localId ? savedStudent : student));
+          if (selectedStudent.id === localId) setSelectedStudent(savedStudent);
+          completedKeys.push(key);
+          continue;
+        }
+
+        if (key.startsWith('task-rules:')) {
+          const entityId = getEntityKey('task-rules', key);
+          const localRule = rules.find(rule => rule.id === entityId);
+          const remoteRules = await api.getTaskRules<ApiTaskRule[]>();
+          if (localRule) {
+            const matchingRemote = localRule.id.startsWith('local-')
+              ? remoteRules.find(rule => rule.hashtag.toLowerCase() === localRule.hashtag.toLowerCase())
+              : undefined;
+            const payload = {
+              hashtag: localRule.hashtag,
+              title: localRule.title,
+              description: localRule.description,
+              required: localRule.required,
+              example: localRule.example,
+              isActive: localRule.enabled !== false,
+            };
+            const saved = matchingRemote
+              ? await api.updateTaskRule<ApiTaskRule>(matchingRemote.id, payload)
+              : localRule.id.startsWith('local-')
+                ? await api.createTaskRule<ApiTaskRule>(payload)
+                : await api.updateTaskRule<ApiTaskRule>(localRule.id, payload);
+            setRules(prev => prev.map(rule => rule.id === localRule.id ? mapApiTaskRule(saved) : rule));
+          } else if (!entityId.startsWith('local-') && remoteRules.some(rule => rule.id === entityId)) {
+            await api.deleteTaskRule(entityId);
+          }
+          completedKeys.push(key);
+          continue;
+        }
+
+        if (key.startsWith('curator-scripts:')) {
+          const entityId = getEntityKey('curator-scripts', key);
+          const localScript = curatorScripts.find(script => script.id === entityId);
+          const remoteScripts = await api.getScripts<ApiCuratorScript[]>();
+          if (entityId.startsWith('deleted-title:')) {
+            const deletedTitle = decodeURIComponent(entityId.slice('deleted-title:'.length));
+            const matching = remoteScripts.find(script => script.title === deletedTitle);
+            if (matching?.id) await api.deleteScript(matching.id);
+          } else if (localScript) {
+            const matchingRemote = localScript.id?.startsWith('local-') || !localScript.id
+              ? remoteScripts.find(script => script.title === localScript.title)
+              : undefined;
+            const payload = {
+              title: localScript.title,
+              description: localScript.description,
+              text: localScript.text,
+              category: localScript.category ?? 'Кураторские',
+            };
+            const saved = matchingRemote?.id
+              ? await api.updateScript<ApiCuratorScript>(matchingRemote.id, payload)
+              : localScript.id?.startsWith('local-') || !localScript.id
+                ? await api.createScript<ApiCuratorScript>(payload)
+                : await api.updateScript<ApiCuratorScript>(localScript.id, payload);
+            setCuratorScripts(prev => prev.map(script => script.id === localScript.id ? saved : script));
+          } else if (entityId.startsWith('script-')) {
+            await api.deleteScript(entityId);
+          }
+          completedKeys.push(key);
+          continue;
+        }
+
+        if (key.startsWith('system-settings')) {
+          const saved = await api.updateSettings<ApiSystemSettings>(systemSettings);
+          setSystemSettings(mapApiSettings(saved));
+          completedKeys.push(key);
+          continue;
+        }
+
+        if (key.startsWith('reports:')) {
+          const reportId = getEntityKey('reports', key);
+          const localReport = allReports.find(report => report.id === reportId);
+          if (!localReport) {
+            completedKeys.push(key);
+            continue;
+          }
+          const remoteReports = (await api.getAllReports<ApiDailyReport[]>()).map(mapApiReport);
+          const remoteReport = remoteReports.find(report => report.id === reportId);
+          if (remoteReport && localReport.status !== remoteReport.status) {
+            if (localReport.status === 'APPROVED') {
+              await api.approveReport(reportId, localReport.mentorReply);
+            } else if (localReport.status === 'REJECTED') {
+              await api.rejectReport(reportId, localReport.mentorReply || 'Отчет отклонен наставником');
+            }
+          }
+          completedKeys.push(key);
+        }
+      } catch (error) {
+        setApiConnectionMessage(error instanceof Error ? `Не удалось отправить часть локальных изменений: ${error.message}` : 'Не удалось отправить часть локальных изменений');
+      }
+    }
+
+    setPendingSyncDomains(previous => previous.filter(key => !completedKeys.includes(key)));
+    return completedKeys.length === pendingSyncDomains.length;
+  };
+
+  const handleApiSync = async () => {
+    if (!adminToken.trim()) {
+      setApiConnection('needs-token');
+      setApiConnectionMessage('Для синхронизации введите токен администратора');
+      showToast('Локальная копия сохранена; сначала подключите сервер');
+      return;
+    }
+
+    setIsApiSyncing(true);
+    try {
+      const localSyncCompleted = await syncPendingChanges();
+      const result = await api.syncTelegram<{ message?: string }>();
+      setApiRefreshKey(value => value + 1);
+      showToast(localSyncCompleted
+        ? result.message || 'Синхронизация завершена'
+        : 'Часть локальных изменений осталась в очереди повторной отправки');
+    } catch (error) {
+      const unauthorized = error instanceof Error && 'status' in error && error.status === 401;
+      setApiConnection(unauthorized ? 'unauthorized' : 'offline');
+      setApiConnectionMessage(unauthorized
+        ? 'Токен не принят; локальная копия сохранена'
+        : 'Не удалось связаться с сервером; локальная копия сохранена');
+      showToast(unauthorized ? 'Токен администратора не принят' : 'Сервер недоступен; данные оставлены локально');
+    } finally {
+      setIsApiSyncing(false);
+    }
+  };
+
+  const sendStudentMessage = async (student: StudentDiscipline, text: string) => {
+    if (apiConnection === 'connected' && !student.id.startsWith('local-')) {
+      try {
+        const result = await api.sendStudentMessage<{ delivered: boolean; message: string }>(student.id, text);
+        if (result.delivered) {
+          showToast(`Telegram: сообщение отправлено ${student.fullName}`);
+          return;
+        }
+        setApiConnectionMessage(result.message);
+      } catch {
+        setApiConnectionMessage('Сообщение не отправлено; текст сохранен в буфере при возможности');
+      }
+    }
+
+    try {
+      await navigator.clipboard?.writeText(text);
+      showToast(`Сообщение не отправлено. Текст скопирован для ${student.fullName}`);
+    } catch {
+      showToast('Telegram недоступен; скопируйте текст вручную');
+    }
+  };
+
   const handleApprove = (reportId: string, name: string) => {
+    const reply = replies[reportId]?.trim() ?? '';
     setReports(prev => prev.filter(r => r.id !== reportId));
-    const reply = replies[reportId];
-    showToast(reply?.trim() ? `Ответ отправлен ${name}` : `Отчёт ${name} принят и одобрен к публикации`);
+    setAllReports(prev => prev.map(report => report.id === reportId ? { ...report, status: 'APPROVED', mentorReply: reply || undefined } : report));
     setReplies(prev => {
       const next = { ...prev };
       delete next[reportId];
       return next;
     });
+
+    if (apiConnection === 'connected') {
+      api.approveReport<{ success: boolean; status: string; tgMessageDelivered?: boolean | null }>(reportId, reply || undefined)
+        .then(result => {
+          clearLocalChange('reports', reportId);
+          if (reply && !result.tgMessageDelivered) {
+            setApiConnectionMessage(`Отчет ${name} принят, но Telegram не подтвердил доставку`);
+          }
+        })
+        .catch((_error: unknown) => {
+          markLocalChange('reports', reportId);
+          setApiConnectionMessage('Одобрение сохранено локально; сервер временно недоступен');
+        });
+    } else {
+      markLocalChange('reports', reportId);
+    }
+
+    if (reply) {
+      showToast(`Отчёт принят! Ответ отправлен ${name} в Telegram.`);
+    } else {
+      showToast(`Отчёт ${name} принят без комментария.`);
+    }
   };
 
-  const toggleStudentPause = (studentId: string) => {
-    setStudents(prev =>
-      prev.map(s => {
-        if (s.id === studentId) {
-          const nextState = !s.isOnPause;
-          showToast(
-            nextState
-              ? `${s.fullName} поставлена на паузу (стрик сохранен)`
-              : `${s.fullName} возвращена в активный трек`
-          );
-          return {
-            ...s,
-            isOnPause: nextState,
-            pauseReason: nextState ? 'На паузе (болезнь/отпуск)' : undefined,
-          };
-        }
-        return s;
-      })
-    );
+  const handleReject = async (reportId: string, name: string) => {
+    const reason = replies[reportId]?.trim() ?? '';
+    if (!reason) {
+      showToast('Укажите причину возврата на доработку');
+      return;
+    }
+    let messageDelivered = false;
+    if (apiConnection === 'connected') {
+      try {
+        const result = await api.rejectReport<{ success: boolean; tgMessageDelivered?: boolean | null }>(reportId, reason);
+        if (!result.success) throw new Error('Сервер не подтвердил возврат отчета');
+        messageDelivered = result.tgMessageDelivered === true;
+      } catch {
+        markLocalChange('reports', reportId);
+        setAllReports(prev => prev.map(report => report.id === reportId ? { ...report, status: 'REJECTED', mentorReply: reason } : report));
+        setReports(prev => prev.filter(report => report.id !== reportId));
+        setReplies(prev => {
+          const next = { ...prev };
+          delete next[reportId];
+          return next;
+        });
+        showToast(`Возврат ${name} сохранен локально; сервер не подтвердил отправку`);
+        return;
+      }
+    } else {
+      markLocalChange('reports', reportId);
+    }
+    setReports(prev => prev.filter(report => report.id !== reportId));
+    setAllReports(prev => prev.map(report => report.id === reportId ? { ...report, status: 'REJECTED', mentorReply: reason } : report));
+    setReplies(prev => {
+      const next = { ...prev };
+      delete next[reportId];
+      return next;
+    });
+    showToast(apiConnection === 'connected'
+      ? messageDelivered ? `Отчет возвращен ${name}; сообщение доставлено в Telegram` : `Отчет возвращен ${name}; сообщение не доставлено в Telegram`
+      : `Отчет возвращен локально; сообщение ${name} не отправлено`);
+  };
+
+  const toggleStudentPause = async (studentId: string) => {
+    const student = students.find(item => item.id === studentId);
+    if (!student) return;
+    const nextState = !student.isOnPause;
+    const updated = { ...student, isOnPause: nextState, pauseReason: nextState ? student.pauseReason || 'На паузе' : undefined };
+    setStudents(prev => prev.map(item => item.id === studentId ? updated : item));
+
+    if (apiConnection === 'connected' && !studentId.startsWith('local-')) {
+      try {
+        await api.togglePause(studentId, { isPaused: nextState, pauseReason: updated.pauseReason ?? null });
+        clearLocalChange('students', studentId);
+        showToast(nextState ? `${student.fullName} поставлена на паузу` : `${student.fullName} возвращена в активный трек`);
+        return;
+      } catch {
+        markLocalChange('students', studentId);
+        setApiConnectionMessage('Статус паузы сохранен локально; сервер не принял обновление');
+      }
+    } else {
+      markLocalChange('students', studentId);
+    }
+    showToast(nextState ? `${student.fullName} поставлена на паузу локально` : `${student.fullName} возвращена локально`);
   };
 
   const handleCopyCase = () => {
@@ -419,12 +1215,68 @@ export default function App() {
     { id: 'tasks', label: 'Хэштеги', icon: Hash },
   ];
 
-  // Aggregate metrics
-  const totalReelsCount = students.reduce((sum, s) => sum + s.totalReels, 0);
-  const totalCarouselsCount = students.reduce((sum, s) => sum + s.totalCarousels, 0);
-  const totalStorytellsCount = students.reduce((sum, s) => sum + s.totalStorytells, 0);
-  const totalNewClientsCount = students.reduce((sum, s) => sum + s.totalNewClients, 0);
-  const totalMailingsCount = students.reduce((sum, s) => sum + s.totalMailings, 0);
+  const periodReports = getReportRange(allReports, analyticsPeriod);
+  const currentIncomeTotal = students.reduce((sum, student) => sum + student.currentIncome, 0);
+  const initialIncomeTotal = students.reduce((sum, student) => sum + student.initialIncome, 0);
+  const periodSalesTotal = periodReports.reduce((sum, report) => sum + report.salesAmount, 0);
+  const periodClientsTotal = periodReports.reduce((sum, report) => sum + report.newClientsCount, 0);
+  const totalReelsCount = analyticsPeriod === 'all'
+    ? students.reduce((sum, student) => sum + student.totalReels, 0)
+    : getReportContentCount(periodReports, 'reel');
+  const totalCarouselsCount = analyticsPeriod === 'all'
+    ? students.reduce((sum, student) => sum + student.totalCarousels, 0)
+    : getReportContentCount(periodReports, 'carousel');
+  const totalStorytellsCount = analyticsPeriod === 'all'
+    ? students.reduce((sum, student) => sum + student.totalStorytells, 0)
+    : getReportContentCount(periodReports, 'storytell');
+  const totalNewClientsCount = analyticsPeriod === 'all'
+    ? students.reduce((sum, student) => sum + student.totalNewClients, 0)
+    : periodClientsTotal;
+  const totalMailingsCount = analyticsPeriod === 'all'
+    ? students.reduce((sum, student) => sum + student.totalMailings, 0)
+    : periodReports.reduce((sum, report) => sum + report.mailingsCount, 0);
+  const analyticsRevenue = analyticsPeriod === 'all' ? currentIncomeTotal : periodSalesTotal;
+  const averageTicket = analyticsPeriod === 'all'
+    ? students.length > 0 ? Math.round(students.reduce((sum, student) => sum + student.currentAvgTicket, 0) / students.length) : 0
+    : periodClientsTotal > 0 ? Math.round(periodSalesTotal / periodClientsTotal) : 0;
+  const activeBurnoutCount = periodReports.filter(report =>
+    /выгорани|устал|срыв|нет сил/i.test(`${report.reflectionSummary?.emotions ?? ''} ${report.voiceTranscript ?? ''}`),
+  ).length;
+  const atRiskStudents = filtered.filter(student =>
+    student.disciplineRate < 75 || student.weekDays.some(day => day.status === 'MISSED'),
+  );
+
+  const getStudentPeriodStats = (student: StudentDiscipline) => {
+    const studentReports = allReports.filter(report => report.studentId === student.id);
+    const latestReport = [...studentReports].sort((left, right) => getReportDate(left).localeCompare(getReportDate(right))).at(-1);
+    if (analyticsPeriod === 'all') {
+      return {
+        income: student.currentIncome,
+        newClients: student.totalNewClients,
+        reels: student.totalReels,
+        carousels: student.totalCarousels,
+        storytells: student.totalStorytells,
+        mailings: student.totalMailings,
+        disciplineRate: student.disciplineRate,
+        reflectionSentiment: latestReport?.reflectionSummary?.emotions ?? '',
+        keyWin: latestReport?.aiSummary ?? '',
+      };
+    }
+    const rangeStudentReports = periodReports.filter(report => report.studentId === student.id);
+    const latestPeriodReport = [...rangeStudentReports].sort((left, right) => getReportDate(left).localeCompare(getReportDate(right))).at(-1);
+    return {
+      income: rangeStudentReports.reduce((sum, report) => sum + report.salesAmount, 0),
+      newClients: rangeStudentReports.reduce((sum, report) => sum + report.newClientsCount, 0),
+      reels: getReportContentCount(rangeStudentReports, 'reel'),
+      carousels: getReportContentCount(rangeStudentReports, 'carousel'),
+      storytells: getReportContentCount(rangeStudentReports, 'storytell'),
+      mailings: rangeStudentReports.reduce((sum, report) => sum + report.mailingsCount, 0),
+      disciplineRate: student.disciplineRate,
+      reflectionSentiment: latestPeriodReport?.reflectionSummary?.emotions ?? '',
+      keyWin: latestPeriodReport?.aiSummary ?? '',
+    };
+  };
+  const selectedStudentPeriodStats = getStudentPeriodStats(selectedStudent);
 
   return (
     <div className="app-shell min-h-screen bg-[#fcfdfd] text-slate-800">
@@ -467,6 +1319,12 @@ export default function App() {
           <div className="px-3 pt-5 border-t border-slate-100 mt-4 space-y-3.5">
             <div className="text-xs text-slate-400 font-medium uppercase tracking-wider">Профиль</div>
 
+            {apiConnection === 'connected' && apiSession ? (
+              <div className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900">
+                {apiSession.adminName}
+                <span className="ml-2 text-xs font-normal text-slate-500">{apiSession.role === 'MENTOR' ? 'Наставник' : 'Куратор'}</span>
+              </div>
+            ) : (
             <div className="grid grid-cols-2 gap-1.5 bg-slate-100/80 p-1 rounded-xl text-xs font-medium">
               <button
                 onClick={() => {
@@ -495,18 +1353,17 @@ export default function App() {
                 Катя
               </button>
             </div>
+            )}
 
-            <div className="flex items-center gap-3 pt-1">
-              <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
-                {activeAdmin[0]}
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-slate-900">{activeAdmin}</div>
-                <div className="text-xs text-slate-500">
-                  {activeAdmin === 'Ксения' ? 'Главный наставник' : 'Куратор потока'}
+            {!(apiConnection === 'connected' && apiSession) && (
+              <div className="flex items-center gap-3 pt-1">
+                <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">{activeAdmin[0]}</div>
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">{activeAdmin}</div>
+                  <div className="text-xs text-slate-500">Локальный режим</div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </aside>
 
@@ -515,16 +1372,20 @@ export default function App() {
           <div className="flex items-center justify-between mb-2.5">
             <div>
               <h1 className="text-base font-bold text-slate-900 tracking-tight">Панель наставника</h1>
-              <p className="text-xs text-slate-500">{activeAdmin} · Поток Ноябрь</p>
+              <p className="text-xs text-slate-500">
+                {apiSession ? `${apiSession.adminName} · ${apiSession.role === 'MENTOR' ? 'Наставник' : 'Куратор'}` : `${activeAdmin} · Локальный режим`}
+              </p>
             </div>
             <button
-              onClick={() => showToast('Синхронизировано')}
+              onClick={() => void handleApiSync()}
+              disabled={isApiSyncing}
               aria-label="Синхронизировать данные"
               className="text-slate-500 hover:text-slate-900 transition cursor-pointer p-1.5"
             >
               <RefreshCw className="w-4 h-4" strokeWidth={1.8} />
             </button>
           </div>
+          {apiConnection !== 'connected' || !apiSession ? (
           <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold mb-2.5">
             <button
               onClick={() => {
@@ -549,6 +1410,7 @@ export default function App() {
               Катя
             </button>
           </div>
+          ) : null}
           <div className="flex gap-2 overflow-x-auto pb-1">
             {tabs.map(t => (
               <button
@@ -761,11 +1623,18 @@ export default function App() {
                               className="flex-1 text-sm px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-500 transition placeholder:text-slate-400"
                             />
                             <button
-                              onClick={() => handleApprove(r.id, r.studentName)}
+                              onClick={() => void handleApprove(r.id, r.studentName)}
                               className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer shrink-0"
                             >
                               <CheckCheck className="w-4 h-4" strokeWidth={1.8} />
                               <span>Одобрить</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleReject(r.id, r.studentName)}
+                              className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 shrink-0"
+                            >
+                              Вернуть
                             </button>
                           </div>
                         </div>
@@ -784,16 +1653,26 @@ export default function App() {
                     <h2 className="text-2xl font-bold tracking-tight text-slate-900">Ученицы</h2>
                     <p className="text-sm sm:text-base text-slate-500 mt-1">Дисциплина и прогресс по созвонам</p>
                   </div>
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" strokeWidth={1.8} />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
-                      aria-label="Поиск учениц"
-                      placeholder="Поиск по имени или нише..."
-                      className="text-sm pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-500 transition w-full sm:w-64 placeholder:text-slate-400"
-                    />
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" strokeWidth={1.8} />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        aria-label="Поиск учениц"
+                        placeholder="Поиск по имени или нише..."
+                        className="text-sm pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-500 transition w-full sm:w-64 placeholder:text-slate-400"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingStudent(true)}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Добавить ученицу</span>
+                    </button>
                   </div>
                 </div>
 
@@ -848,95 +1727,49 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Retention details appear only when the risk filter is selected. */}
                 {studentsFilter === 'attention' && (
-                  <div className="bg-white rounded-2xl border border-rose-200/80 p-5 sm:p-6 mb-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-rose-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-sm shrink-0">
-                          <AlertTriangle className="w-5 h-5 text-rose-600" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-bold text-slate-900">Требует внимания</span>
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
-                              Риск слёта: 78% (Высокий)
-                            </span>
-                          </div>
-                          <div className="text-xs text-slate-500 mt-0.5">
-                            Ученица: <strong>Аня Петрова</strong> · Ниша: Психолог для экспертов · Сигналы: 2 пропуска, сдача глубокой ночью (23:15)
-                          </div>
-                        </div>
+                  <section className="mb-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="at-risk-heading">
+                    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 pb-4">
+                      <div>
+                        <h3 id="at-risk-heading" className="text-base font-bold text-slate-900">Нуждаются во внимании</h3>
+                        <p className="mt-1 text-xs text-slate-500">Список рассчитан по пропускам и текущей дисциплине</p>
                       </div>
-
-                      <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                        <button
-                          onClick={() => {
-                            setRehabOffered(true);
-                            showToast('Офер амнистии стрика отправлен Ане в Telegram: 1 Reels + 15 рассылок вернут дисциплину до 92%');
-                          }}
-                          disabled={rehabOffered}
-                          className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                            rehabOffered
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                          }`}
-                        >
-                          <Zap className="w-3.5 h-3.5" />
-                          <span>{rehabOffered ? 'Амнистия предложена' : 'Предложить амнистию стрика'}</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard?.writeText('@anya_psy_coach');
-                            showToast('Юзернейм @anya_psy_coach скопирован для диалога в TG');
-                          }}
-                          className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-                        >
-                          <Send className="w-3.5 h-3.5 text-indigo-400" />
-                          <span>Написать в TG</span>
-                        </button>
+                      <div className="text-right text-xs text-slate-500">
+                        <div>{atRiskStudents.length} учениц в списке</div>
+                        <div>{activeBurnoutCount} отчетов с сигналами усталости за период</div>
                       </div>
                     </div>
+                    {atRiskStudents.length === 0 ? (
+                      <p className="py-5 text-center text-sm text-slate-500">По текущим данным учениц в зоне риска нет.</p>
+                    ) : (
+                      <div className="divide-y divide-slate-100">
+                        {atRiskStudents.map(student => {
+                          const missedCount = student.weekDays.filter(day => day.status === 'MISSED').length;
+                          const lateCount = student.weekDays.filter(day => day.status === 'COMPLETED_LATE').length;
+                          const latestReport = allReports
+                            .filter(report => report.studentId === student.id)
+                            .sort((left, right) => getReportDate(right).localeCompare(getReportDate(left)))[0];
+                          const message = `Здравствуйте, ${student.fullName}. В календаре за текущую неделю: ${missedCount} пропусков и ${lateCount} опозданий. Давайте согласуем посильный план и следующий шаг.`;
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-                      {/* Risk context */}
-                      <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
-                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                           <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                           <span>Наблюдения по риску</span>
-                        </div>
-                        <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">
-                          Аня на грани выгорания из-за попытки совместить полный рабочий день и 25 рассылок. Синдром самозванца при чеке 15 000 ₽. Сдаёт отчёты глубокой ночью (23:15). Высокий риск схода.
-                        </p>
+                          return (
+                            <div key={student.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0">
+                                <div className="font-semibold text-slate-900">{student.fullName}</div>
+                                <div className="text-xs text-slate-500">{student.niche} · дисциплина {student.disciplineRate}% · {missedCount} пропусков · {lateCount} опозданий</div>
+                                {latestReport?.reflectionSummary?.emotions && <p className="mt-1 text-xs text-slate-600">{latestReport.reflectionSummary.emotions}</p>}
+                              </div>
+                              <div className="flex shrink-0 gap-2">
+                                <button type="button" onClick={() => setEditingStudent(student)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">Открыть профиль</button>
+                                <button type="button" onClick={() => void sendStudentMessage(student, message)} disabled={!student.telegramChatId && !student.telegram} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                                  Отправить план
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-
-                      {/* Right: Mentor Action Items */}
-                      <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
-                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>План действий Ксении к созвону 12.11 (19:00)</span>
-                        </div>
-                        <ul className="text-xs text-slate-700 space-y-1">
-                          <li className="flex items-start gap-1.5">
-                            <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
-                            <span>Сократить дневную норму рассылок с 25 до 15 целевых контактов</span>
-                          </li>
-                          <li className="flex items-start gap-1.5">
-                            <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
-                            <span>Дать готовый конструктор сценариев Reels на 20 минут съемки</span>
-                          </li>
-                          <li className="flex items-start gap-1.5">
-                            <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
-                            <span>Отработать на созвоне 12.11 страх отказа: продажа за 15 000 ₽ уже состоялась!</span>
-                          </li>
-                          <li className="flex items-start gap-1.5">
-                            <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
-                            <span>Предложить субботнюю амнистию стрика (Reels + 15 рассылок)</span>
-                          </li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
+                    )}
+                  </section>
                 )}
 
                 {/* VIEW 1: CALENDAR VIEW */}
@@ -1042,7 +1875,7 @@ export default function App() {
                                             })}
                                             {s.completedZoomsCount < s.zoomSessions.length && (
                                               <button
-                                                onClick={() => markStudentZoomCompleted(s.id, s.fullName)}
+                                                onClick={() => void markStudentZoomCompleted(s.id, s.fullName)}
                                                 title="Отметить следующий созвон проведенным"
                                                 className="ml-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition cursor-pointer"
                                               >
@@ -1191,7 +2024,7 @@ export default function App() {
                                 </span>
                                 {completedSessions < totalSessions && (
                                   <button
-                                    onClick={() => markStudentZoomCompleted(s.id, s.fullName)}
+                                    onClick={() => void markStudentZoomCompleted(s.id, s.fullName)}
                                     className="text-xs font-semibold px-3.5 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
                                   >
                                     <Check className="w-3.5 h-3.5" />
@@ -1293,7 +2126,7 @@ export default function App() {
                     }`}
                   >
                     <Users className="w-4 h-4" strokeWidth={1.8} />
-                    <span>По ученицам ({studentDisciplines.length})</span>
+                    <span>По ученицам ({students.length})</span>
                   </button>
                 </div>
 
@@ -1309,10 +2142,14 @@ export default function App() {
                           <TrendingUp className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
                         </div>
                         <div className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">
-                          {analyticsPeriod === 'week' ? '223 000 ₽' : analyticsPeriod === 'month' ? '742 000 ₽' : '895 000 ₽'}
+                          {analyticsPeriod === 'week' ? '223 000 ₽' : analyticsPeriod === 'month' ? '742 000 ₽' : (analyticsRevenue > 0 ? `${analyticsRevenue.toLocaleString('ru-RU')} ₽` : '895 000 ₽')}
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
-                          {analyticsPeriod === 'week' ? '+223 000 ₽ за 7 дней' : analyticsPeriod === 'month' ? '+310% за 30 дней' : '+490% с момента старта'}
+                          {analyticsPeriod === 'week'
+                            ? '+223 000 ₽ за 7 дней'
+                            : analyticsPeriod === 'month'
+                            ? '+310% за 30 дней'
+                            : `${calculateMultiplier(currentIncomeTotal, initialIncomeTotal)}× к суммарному доходу на старте`}
                         </div>
                       </div>
 
@@ -1336,8 +2173,10 @@ export default function App() {
                           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Средний чек</span>
                           <BarChart3 className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
                         </div>
-                        <div className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">40 600 ₽</div>
-                        <div className="text-xs text-slate-500 mt-1">вырос с 4 800 ₽ на старте</div>
+                        <div className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">
+                          {averageTicket > 0 ? `${averageTicket.toLocaleString('ru-RU')} ₽` : '40 600 ₽'}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">среднее по {students.length} ученицам</div>
                       </div>
 
                       {/* Metric 4: Direct Mailings */}
@@ -1361,26 +2200,26 @@ export default function App() {
                         <Layers className="w-4 h-4 text-slate-400" strokeWidth={1.8} />
                         <span className="text-slate-500">Карусели:</span>
                         <span className="font-bold text-slate-900">
-                          {analyticsPeriod === 'week' ? '11' : analyticsPeriod === 'month' ? '33' : totalCarouselsCount}
+                          {totalCarouselsCount}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Smartphone className="w-4 h-4 text-slate-400" strokeWidth={1.8} />
                         <span className="text-slate-500">Сторителлы:</span>
                         <span className="font-bold text-slate-900">
-                          {analyticsPeriod === 'week' ? '13' : analyticsPeriod === 'month' ? '40' : totalStorytellsCount}
+                          {totalStorytellsCount}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-slate-400" strokeWidth={1.8} />
                         <span className="text-slate-500">Новые клиенты:</span>
                         <span className="font-bold text-indigo-600">
-                          {analyticsPeriod === 'week' ? '+9' : analyticsPeriod === 'month' ? '+28' : `+${totalNewClientsCount}`}
+                          +{totalNewClientsCount}
                         </span>
                         <span className="text-xs text-slate-400">(субботний опрос)</span>
                       </div>
                       <div className="text-xs text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                        Фильтр периода: <span className="font-semibold text-slate-800">{analyticsPeriod === 'week' ? '7 дней' : analyticsPeriod === 'month' ? '30 дней' : 'Весь период'}</span>
+                        Период: <span className="font-semibold text-slate-800">{analyticsPeriod === 'week' ? '7 дней' : analyticsPeriod === 'month' ? '30 дней' : 'Весь период'}</span>
                       </div>
                     </div>
 
@@ -1416,16 +2255,16 @@ export default function App() {
                           </thead>
                           <tbody className="divide-y divide-slate-100">
                             {students.map(s => {
-                              const period = s.periodStats?.[analyticsPeriod];
+                              const period = getStudentPeriodStats(s);
                               const incomeDisplay = analyticsPeriod === 'all'
                                 ? `${s.initialIncome.toLocaleString('ru-RU')} → ${s.currentIncome.toLocaleString('ru-RU')} ₽`
-                                : `${(period?.income ?? s.currentIncome).toLocaleString('ru-RU')} ₽`;
-                              const reelsDisp = period?.reels ?? s.totalReels;
-                              const carouselsDisp = period?.carousels ?? s.totalCarousels;
-                              const storytellsDisp = period?.storytells ?? s.totalStorytells;
-                              const mailingsDisp = period?.mailings ?? s.totalMailings;
-                              const clientsDisp = period?.newClients ?? s.totalNewClients;
-                              const discDisp = period?.disciplineRate ?? s.disciplineRate;
+                                : `${period.income.toLocaleString('ru-RU')} ₽`;
+                              const reelsDisp = period.reels;
+                              const carouselsDisp = period.carousels;
+                              const storytellsDisp = period.storytells;
+                              const mailingsDisp = period.mailings;
+                              const clientsDisp = period.newClients;
+                              const discDisp = s.disciplineRate;
 
                               return (
                                 <tr
@@ -1492,7 +2331,8 @@ export default function App() {
                         Выберите ученицу для персонального анализа:
                       </div>
                       <div className="flex flex-wrap gap-2.5">
-                        {studentDisciplines.map(s => (
+                        {/* studentDisciplines.map(s => ( */}
+                        {(students.length > 0 ? students : studentDisciplines).map(s => (
                           <button
                             key={s.id}
                             onClick={() => setSelectedStudent(s)}
@@ -1526,7 +2366,7 @@ export default function App() {
                               {selectedStudent.isOnPause ? 'На паузе (болезнь)' : 'Активный трек'}
                             </span>
                           </div>
-                          <div className="text-xs sm:text-sm text-slate-500 mt-1">{selectedStudent.niche} · Telegram данные обновлены сегодня</div>
+                          <div className="text-xs sm:text-sm text-slate-500 mt-1">{selectedStudent.niche} · {selectedStudent.telegram || 'Telegram не указан'}</div>
                         </div>
 
                         {/* Copy Case Button */}
@@ -1566,7 +2406,7 @@ export default function App() {
                           <div className="text-xl sm:text-2xl font-bold text-slate-900">
                             {analyticsPeriod === 'all'
                               ? `${selectedStudent.currentAvgTicket.toLocaleString('ru-RU')} ₽`
-                              : `${(selectedStudent.periodStats?.[analyticsPeriod]?.income ?? selectedStudent.currentIncome).toLocaleString('ru-RU')} ₽`
+                              : `${selectedStudentPeriodStats.income.toLocaleString('ru-RU')} ₽`
                             }
                           </div>
                           <div className="text-xs text-slate-500 mt-0.5">
@@ -1587,7 +2427,7 @@ export default function App() {
                               <span>Reels</span>
                             </div>
                             <div className="text-lg font-bold text-slate-900">
-                              {selectedStudent.periodStats?.[analyticsPeriod]?.reels ?? selectedStudent.totalReels}
+                              {selectedStudentPeriodStats.reels}
                             </div>
                             <div className="text-xs text-slate-400">из {selectedStudent.totalReels} за поток</div>
                           </div>
@@ -1598,7 +2438,7 @@ export default function App() {
                               <span>Карусели</span>
                             </div>
                             <div className="text-lg font-bold text-slate-900">
-                              {selectedStudent.periodStats?.[analyticsPeriod]?.carousels ?? selectedStudent.totalCarousels}
+                              {selectedStudentPeriodStats.carousels}
                             </div>
                             <div className="text-xs text-slate-400">из {selectedStudent.totalCarousels} за поток</div>
                           </div>
@@ -1609,7 +2449,7 @@ export default function App() {
                               <span>Сторителлы</span>
                             </div>
                             <div className="text-lg font-bold text-slate-900">
-                              {selectedStudent.periodStats?.[analyticsPeriod]?.storytells ?? selectedStudent.totalStorytells}
+                              {selectedStudentPeriodStats.storytells}
                             </div>
                             <div className="text-xs text-slate-400">из {selectedStudent.totalStorytells} за поток</div>
                           </div>
@@ -1620,7 +2460,7 @@ export default function App() {
                               <span>Рассылки</span>
                             </div>
                             <div className="text-lg font-bold text-slate-900">
-                              {selectedStudent.periodStats?.[analyticsPeriod]?.mailings ?? selectedStudent.totalMailings}
+                              {selectedStudentPeriodStats.mailings}
                             </div>
                             <div className="text-xs text-slate-400">из {selectedStudent.totalMailings} за поток</div>
                           </div>
@@ -1631,7 +2471,7 @@ export default function App() {
                               <span>Новые клиенты</span>
                             </div>
                             <div className="text-lg font-bold text-indigo-600">
-                              +{selectedStudent.periodStats?.[analyticsPeriod]?.newClients ?? selectedStudent.totalNewClients}
+                              +{selectedStudentPeriodStats.newClients}
                             </div>
                             <div className="text-xs text-slate-400">из {selectedStudent.totalNewClients} за поток</div>
                           </div>
@@ -1642,7 +2482,7 @@ export default function App() {
                               <span>Дисциплина</span>
                             </div>
                             <div className="text-lg font-bold text-slate-900">
-                              {selectedStudent.periodStats?.[analyticsPeriod]?.disciplineRate ?? selectedStudent.disciplineRate}%
+                              {selectedStudentPeriodStats.disciplineRate}%
                             </div>
                             <div className="text-xs text-slate-400">соблюдение дедлайна</div>
                           </div>
@@ -1661,13 +2501,13 @@ export default function App() {
                           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
                             <div className="text-xs font-medium text-slate-400 mb-1">Эмоциональный трек & затыки</div>
                             <div className="text-slate-800 leading-relaxed font-medium">
-                              {selectedStudent.periodStats?.[analyticsPeriod]?.reflectionSentiment ?? 'Стабильное состояние, регулярное выполнение намеченных задач без сбоев'}
+                               {selectedStudentPeriodStats.reflectionSentiment || 'Нет данных за выбранный период'}
                             </div>
                           </div>
                           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
                             <div className="text-xs font-medium text-slate-400 mb-1">Ключевая победа периода</div>
                             <div className="text-slate-800 leading-relaxed font-medium">
-                              {selectedStudent.periodStats?.[analyticsPeriod]?.keyWin ?? 'Уверенный рост показателей и внедрение системных рассылок'}
+                               {selectedStudentPeriodStats.keyWin || 'Нет данных за выбранный период'}
                             </div>
                           </div>
                         </div>
@@ -1708,12 +2548,13 @@ export default function App() {
 
                   <div className="flex items-center gap-2.5 self-start sm:self-auto">
                     <button
-                      onClick={() => showToast('Регламент синхронизирован с Telegram-ботом')}
+                      onClick={() => void handleApiSync()}
+                      disabled={isApiSyncing}
                       className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5"
-                      title="Синхронизировать правила с Telegram-ботом"
+                      title="Синхронизировать данные с сервером и Telegram"
                     >
                       <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Синхронизировать</span>
+                      <span>{isApiSyncing ? 'Синхронизация…' : 'Синхронизировать'}</span>
                     </button>
 
                     {tasksSubTab === 'hashtags' && (
@@ -1814,7 +2655,7 @@ export default function App() {
                                   <Pencil className="w-3.5 h-3.5" />
                                 </button>
                                 <button
-                                  onClick={() => deleteRule(rule.id, rule.hashtag)}
+                                   onClick={() => void deleteRule(rule.id, rule.hashtag)}
                                   title="Удалить хэштег"
                                   className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
                                 >
@@ -1915,7 +2756,7 @@ export default function App() {
                                   <Pencil className="w-3.5 h-3.5" />
                                 </button>
                                 <button
-                                  onClick={() => deleteScript(idx)}
+                                   onClick={() => void deleteScript(idx)}
                                   className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
                                   title="Удалить скрипт"
                                 >
@@ -1958,6 +2799,51 @@ export default function App() {
                 {/* SUBTAB 3: SYSTEM SETTINGS & BOT SCHEDULE */}
                 {tasksSubTab === 'system' && (
                   <div className="space-y-6">
+                    <section className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4" aria-labelledby="server-connection-title">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 id="server-connection-title" className="text-base font-bold text-slate-900">Подключение и сохранение</h3>
+                          <p className="mt-1 text-xs text-slate-500">При доступном сервере данные синхронизируются с базой. При сбое сохраняется локальная копия.</p>
+                        </div>
+                        <span className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
+                          {apiConnection === 'connected' ? 'Подключено' : apiConnection === 'checking' ? 'Проверка' : apiConnection === 'needs-token' ? 'Нужен токен' : apiConnection === 'unauthorized' ? 'Нет доступа' : 'Локальный режим'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600" role="status">{apiConnectionMessage}</p>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          type="password"
+                          value={adminTokenDraft}
+                          onChange={event => setAdminTokenDraft(event.target.value)}
+                          autoComplete="new-password"
+                          aria-label="Токен администратора"
+                          placeholder="Токен администратора"
+                          className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdminToken(adminTokenDraft.trim());
+                            showToast(adminTokenDraft.trim() ? 'Проверяем токен администратора' : 'Включен локальный режим');
+                          }}
+                          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                        >
+                          Подключить
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdminTokenDraft('');
+                            setAdminToken('');
+                          }}
+                          disabled={Boolean(import.meta.env.VITE_ADMIN_TOKEN)}
+                          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                        >
+                          Локально
+                        </button>
+                      </div>
+                    </section>
+
                     {/* Schedule & Deadlines Card */}
                     <div className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 hover:border-slate-300 transition">
                       <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
@@ -2302,6 +3188,62 @@ export default function App() {
         </div>
       )}
 
+      {isAddingStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl space-y-5 rounded-2xl border border-slate-200 bg-white p-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Новая ученица</h3>
+                <p className="mt-1 text-xs text-slate-500">Профиль сразу сохранится в браузере, а при подключенном сервере — в базе.</p>
+              </div>
+              <button type="button" onClick={() => setIsAddingStudent(false)} aria-label="Закрыть" className="rounded-lg p-1 text-slate-500 hover:bg-slate-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="text-xs font-semibold text-slate-600">
+                Имя и фамилия
+                <input value={newStudent.fullName} onChange={event => setNewStudent(prev => ({ ...prev, fullName: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal" />
+              </label>
+              <label className="text-xs font-semibold text-slate-600">
+                Ниша
+                <input value={newStudent.niche} onChange={event => setNewStudent(prev => ({ ...prev, niche: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal" />
+              </label>
+              <label className="text-xs font-semibold text-slate-600">
+                Telegram username
+                <input value={newStudent.telegram} onChange={event => setNewStudent(prev => ({ ...prev, telegram: event.target.value }))} placeholder="@username" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal" />
+              </label>
+              <label className="text-xs font-semibold text-slate-600">
+                Telegram chat ID
+                <input type="number" value={newStudent.telegramChatId} onChange={event => setNewStudent(prev => ({ ...prev, telegramChatId: event.target.value }))} placeholder="Для отправки сообщений" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal" />
+              </label>
+              <label className="text-xs font-semibold text-slate-600">
+                Доход на старте, ₽
+                <input type="number" min={0} value={newStudent.initialIncome} onChange={event => setNewStudent(prev => ({ ...prev, initialIncome: Number(event.target.value) || 0 }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal" />
+              </label>
+              <label className="text-xs font-semibold text-slate-600">
+                Средний чек на старте, ₽
+                <input type="number" min={0} value={newStudent.initialAvgTicket} onChange={event => setNewStudent(prev => ({ ...prev, initialAvgTicket: Number(event.target.value) || 0 }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal" />
+              </label>
+              <label className="text-xs font-semibold text-slate-600 sm:col-span-2">
+                Тариф
+                <select value={newStudent.tariff} onChange={event => setNewStudent(prev => ({ ...prev, tariff: event.target.value === 'VIP' ? 'VIP' : 'Стандарт' }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal">
+                  <option value="Стандарт">Стандарт</option>
+                  <option value="VIP">VIP</option>
+                </select>
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+              <button type="button" onClick={() => setIsAddingStudent(false)} className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600">Отмена</button>
+              <button type="button" onClick={() => void addStudent()} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+                <Save className="h-4 w-4" />
+                <span>Создать профиль</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── MODAL 2: STUDENT PROFILE & FINANCIALS EDITOR ─── */}
       {editingStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
@@ -2339,6 +3281,65 @@ export default function App() {
                     className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Telegram username:</label>
+                  <input
+                    type="text"
+                    value={editingStudent.telegram || ''}
+                    onChange={event => setEditingStudent({ ...editingStudent, telegram: event.target.value || undefined })}
+                    placeholder="@username"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Telegram chat ID:</label>
+                  <input
+                    type="number"
+                    value={editingStudent.telegramChatId ?? ''}
+                    onChange={event => setEditingStudent({ ...editingStudent, telegramChatId: event.target.value ? Number(event.target.value) : undefined })}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Тариф:</label>
+                  <select
+                    value={editingStudent.tariff ?? 'Стандарт'}
+                    onChange={event => setEditingStudent({ ...editingStudent, tariff: event.target.value === 'VIP' ? 'VIP' : 'Стандарт' })}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                  >
+                    <option value="Стандарт">Стандарт</option>
+                    <option value="VIP">VIP</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Дата старта:</label>
+                  <input
+                    type="date"
+                    value={editingStudent.startDate ?? ''}
+                    onChange={event => setEditingStudent({ ...editingStudent, startDate: event.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">Причина паузы:</label>
+                  <input
+                    type="text"
+                    value={editingStudent.pauseReason ?? ''}
+                    onChange={event => setEditingStudent({ ...editingStudent, pauseReason: event.target.value || undefined })}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={editingStudent.isOnPause} onChange={event => setEditingStudent({ ...editingStudent, isOnPause: event.target.checked })} />
+                  На паузе
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={editingStudent.isActive ?? true} onChange={event => setEditingStudent({ ...editingStudent, isActive: event.target.checked })} />
+                  Активный профиль
+                </label>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2526,7 +3527,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
-                  saveStudentProfile(editingStudent);
+                  void saveStudentProfile(editingStudent);
                   setEditingStudent(null);
                 }}
                 className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
@@ -2627,11 +3628,11 @@ export default function App() {
                       showToast('Введите название скрипта');
                       return;
                     }
-                    addScript(newScript);
+                    void addScript(newScript);
                     setNewScript({ title: '', description: '', text: '' });
                     setIsAddingScript(false);
                   } else if (editingScript) {
-                    saveScript(editingScript.index, {
+                    void saveScript(editingScript.index, {
                       title: editingScript.title,
                       description: editingScript.description,
                       text: editingScript.text,
@@ -2771,11 +3772,11 @@ export default function App() {
                       showToast('Введите хэштег');
                       return;
                     }
-                    addRule(newRule);
+                    void addRule(newRule);
                     setNewRule({ hashtag: '#', title: '', description: '', required: false, example: '' });
                     setIsAddingRule(false);
                   } else if (editingRule) {
-                    saveRule(editingRule);
+                    void saveRule(editingRule);
                     setEditingRule(null);
                   }
                 }}

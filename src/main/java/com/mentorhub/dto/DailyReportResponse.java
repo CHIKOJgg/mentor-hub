@@ -1,6 +1,7 @@
 package com.mentorhub.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 public record DailyReportResponse(
@@ -11,8 +12,10 @@ public record DailyReportResponse(
     String tgUsername,
     String tariff,
     String submittedAt,
+    LocalDate reportDate,
     Boolean isOnTime,
     String status,
+    String mentorReply,
     List<ContentDraftDto> contentDrafts,
     List<ReelDto> reels,
     BigDecimal salesAmount,

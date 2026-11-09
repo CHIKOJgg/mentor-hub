@@ -9,6 +9,7 @@ export const initialReports: DailyReport[] = [
     tgUsername: 'milana_gorohova',
     tariff: 'VIP',
     submittedAt: '18:24 (сегодня)',
+    reportDate: '2026-11-07',
     isOnTime: true,
     status: 'PENDING',
     contentDrafts: [
@@ -61,6 +62,7 @@ export const initialReports: DailyReport[] = [
     tgUsername: 'anya_petrova_style',
     tariff: 'Стандарт',
     submittedAt: '21:15 (опоздание 15 мин)',
+    reportDate: '2026-11-07',
     isOnTime: false,
     status: 'PENDING',
     contentDrafts: [
@@ -102,6 +104,7 @@ export const initialReports: DailyReport[] = [
     tgUsername: 'volkova_coach',
     tariff: 'VIP',
     submittedAt: '19:40 (сегодня)',
+    reportDate: '2026-11-07',
     isOnTime: true,
     status: 'PENDING',
     contentDrafts: [
@@ -315,22 +318,6 @@ export const studentDisciplines: StudentDiscipline[] = [
           keyTakeaway: 'Разбор переписок Ани в Direct, дожим лидов до оплаты 15 000 ₽.',
         },
       ],
-    },
-    retentionDossier: {
-      churnScore: 78,
-      riskLevel: 'HIGH',
-      aiDiagnosis: 'Аня на грани выгорания из-за попытки совместить полный рабочий день и 25 рассылок. Синдром самозванца при чеке 15 000 ₽. Сдаёт отчёты глубокой ночью (23:15). Высокий риск схода.',
-      mentorActionItems: [
-        'Сократить дневную норму рассылок с 25 до 15 целевых контактов',
-        'Дать готовый конструктор сценариев Reels на 20 минут съемки',
-        'Отработать на созвоне 12.11 страх отказа: продажа первой консультации за 15 000 ₽ уже состоялась!',
-        'Предложить субботнюю амнистию стрика (2 поста в субботу закрывают пропуск)',
-      ],
-      rehabTask: {
-        description: 'Сдать 1 дополнительный Reels и 15 рассылок в субботу',
-        rewardDisciplineRate: 92,
-        isOffered: false,
-      },
     },
     weekDays: [
       { day: 'Пн', date: '02.11', status: 'COMPLETED_ON_TIME', missedDetails: 'Reels #6, 15 рассылок' },

@@ -8,5 +8,10 @@ public record UpdateTaskRuleRequest(
     @JsonProperty("required")
     Boolean required,
     String example,
-    Boolean isActive
-) {}
+    Boolean isActive,
+    String hashtag
+) {
+    public UpdateTaskRuleRequest(String title, String description, Boolean required, String example, Boolean isActive) {
+        this(title, description, required, example, isActive, null);
+    }
+}

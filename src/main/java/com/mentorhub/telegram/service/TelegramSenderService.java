@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
+import org.telegram.telegrambots.meta.api.methods.GetMe;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
@@ -14,6 +15,9 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.util.List;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 
 @Slf4j
 @Service
@@ -24,25 +28,34 @@ public class TelegramSenderService {
     @Value("${telegram.bot.enabled:true}")
     private boolean botEnabled;
 
+    @Value("${telegram.bot.token:}")
+    private String botToken;
+
     @Autowired
     public TelegramSenderService(@Autowired(required = false) TelegramClient telegramClient) {
         this.telegramClient = telegramClient;
     }
 
     public boolean sendCaringReply(Long chatId, Integer replyToMsgId, String text) {
+        return sendCaringReply(chatId, replyToMsgId, text, null);
+    }
+
+    public boolean sendCaringReply(Long chatId, Integer replyToMsgId, String text, String businessConnectionId) {
         if (!canSend(chatId)) {
             log.debug("Telegram client not available or bot disabled. Caring reply skipped for chat {}", chatId);
             return false;
         }
 
         try {
-            SendMessage message = SendMessage.builder()
+            SendMessage.SendMessageBuilder<?, ?> builder = SendMessage.builder()
                     .chatId(chatId.toString())
                     .replyToMessageId(replyToMsgId)
-                    .text(text)
-                    .build();
+                    .text(text);
+            if (businessConnectionId != null && !businessConnectionId.isBlank()) {
+                builder.businessConnectionId(businessConnectionId);
+            }
 
-            telegramClient.execute(message);
+            telegramClient.execute(builder.build());
             log.info("Sent caring reply to chat {} (reply to #{})", chatId, replyToMsgId);
             return true;
         } catch (TelegramApiException ex) {
@@ -52,27 +65,45 @@ public class TelegramSenderService {
     }
 
     public boolean sendReminder(Long chatId, String text) {
+        return sendStudentMessage(chatId, null, text);
+    }
+
+    public boolean sendStudentMessage(Long chatId, String businessConnectionId, String text) {
         if (!canSend(chatId)) {
             log.debug("Telegram client not available or bot disabled. Reminder skipped for chat {}", chatId);
             return false;
         }
 
         try {
-            SendMessage message = SendMessage.builder()
+            SendMessage.SendMessageBuilder<?, ?> builder = SendMessage.builder()
                     .chatId(chatId.toString())
-                    .text(text)
-                    .build();
+                    .text(text);
+            if (businessConnectionId != null && !businessConnectionId.isBlank()) {
+                builder.businessConnectionId(businessConnectionId);
+            }
 
-            telegramClient.execute(message);
-            log.info("Sent evening reminder to chat {}", chatId);
+            telegramClient.execute(builder.build());
+            log.info("Sent Telegram message to chat {} (business={})", chatId, businessConnectionId != null);
             return true;
         } catch (TelegramApiException ex) {
-            log.warn("Failed to send reminder to chat {}: {}", chatId, ex.getMessage());
+            log.warn("Failed to send Telegram message to chat {}: {}", chatId, ex.getMessage());
             return false;
         }
     }
 
+    public boolean sendBusinessReply(Long chatId, String businessConnectionId, String text) {
+        if (businessConnectionId == null || businessConnectionId.isBlank()) {
+            log.warn("Cannot send a Business reply without business_connection_id (chat {})", chatId);
+            return false;
+        }
+        return sendStudentMessage(chatId, businessConnectionId, text);
+    }
+
     public boolean sendSaturdaySurveyPoll(Long chatId, Long studentId, String text) {
+        return sendSaturdaySurveyPoll(chatId, studentId, text, null);
+    }
+
+    public boolean sendSaturdaySurveyPoll(Long chatId, Long studentId, String text, String businessConnectionId) {
         if (!canSend(chatId)) {
             log.debug("Telegram client not available. Saturday survey poll skipped for chat {}", chatId);
             return false;
@@ -94,6 +125,7 @@ public class TelegramSenderService {
                     .chatId(chatId.toString())
                     .text(text)
                     .replyMarkup(keyboard)
+                    .businessConnectionId(businessConnectionId)
                     .build();
 
             telegramClient.execute(message);
@@ -144,7 +176,46 @@ public class TelegramSenderService {
         }
     }
 
+    public boolean checkBotConnection() {
+        if (!isConfigured()) return false;
+        try {
+            telegramClient.execute(new GetMe());
+            return true;
+        } catch (TelegramApiException ex) {
+            log.warn("Telegram bot connectivity check failed: {}", ex.getMessage());
+            return false;
+        }
+    }
+
+    public byte[] downloadFileBytes(String fileId, int maxBytes) {
+        if (!isConfigured() || fileId == null || fileId.isBlank() || maxBytes < 1) return null;
+        try (InputStream stream = telegramClient.downloadFileAsStream(fileId);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            if (stream == null) return null;
+            byte[] buffer = new byte[8192];
+            int total = 0;
+            int read;
+            while ((read = stream.read(buffer)) != -1) {
+                total += read;
+                if (total > maxBytes) {
+                    log.warn("Telegram attachment {} exceeds size limit of {} bytes", fileId, maxBytes);
+                    return null;
+                }
+                output.write(buffer, 0, read);
+            }
+            return output.toByteArray();
+        } catch (TelegramApiException | IOException ex) {
+            log.warn("Unable to download Telegram file {}: {}", fileId, ex.getMessage());
+            return null;
+        }
+    }
+
     private boolean canSend(Long chatId) {
-        return telegramClient != null && botEnabled && chatId != null;
+        return isConfigured() && chatId != null;
+    }
+
+    public boolean isConfigured() {
+        return telegramClient != null && botEnabled && botToken != null
+                && !botToken.isBlank() && !botToken.startsWith("mock");
     }
 }

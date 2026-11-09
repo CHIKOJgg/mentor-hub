@@ -45,6 +45,54 @@ public class MentorSetting {
     @Builder.Default
     private Boolean autoRemindersEnabled = true;
 
+    @Column(name = "morning_push_enabled", nullable = false)
+    @Builder.Default
+    private Boolean morningPushEnabled = true;
+
+    @Column(name = "morning_push_time", nullable = false)
+    @Builder.Default
+    private LocalTime morningPushTime = LocalTime.of(9, 0);
+
+    @Column(name = "evening_reminder_enabled", nullable = false)
+    @Builder.Default
+    private Boolean eveningReminderEnabled = true;
+
+    @Column(name = "evening_reminder_time", nullable = false)
+    @Builder.Default
+    private LocalTime eveningReminderTime = LocalTime.of(20, 0);
+
+    @Column(name = "strict_deadline_enabled", nullable = false)
+    @Builder.Default
+    private Boolean strictDeadlineEnabled = true;
+
+    @Column(name = "saturday_poll_enabled", nullable = false)
+    @Builder.Default
+    private Boolean saturdayPollEnabled = true;
+
+    @Column(name = "saturday_poll_time", nullable = false)
+    @Builder.Default
+    private LocalTime saturdayPollTime = LocalTime.of(18, 0);
+
+    @Column(name = "sunday_rest_enabled", nullable = false)
+    @Builder.Default
+    private Boolean sundayRestEnabled = true;
+
+    @Column(name = "ai_whisper_enabled", nullable = false)
+    @Builder.Default
+    private Boolean aiWhisperEnabled = true;
+
+    @Column(name = "ai_summary_enabled", nullable = false)
+    @Builder.Default
+    private Boolean aiSummaryEnabled = true;
+
+    @Column(name = "anti_fraud_dedup_enabled", nullable = false)
+    @Builder.Default
+    private Boolean antiFraudDedupEnabled = true;
+
+    @Column(name = "zoom_auto_detect_enabled", nullable = false)
+    @Builder.Default
+    private Boolean zoomAutoDetectEnabled = true;
+
     @Column(name = "saturday_poll_cron", length = 50)
     @Builder.Default
     private String saturdayPollCron = "0 0 18 * * SAT";

@@ -36,11 +36,11 @@ class SystemServiceTest {
         SystemStatusResponse status = systemService.getSystemStatus();
 
         assertThat(status.botUsername()).isEqualTo("MockTestBot");
-        assertThat(status.businessConnectionStatus()).isEqualTo("CONNECTED");
-        assertThat(status.canReplyOnBehalf()).isTrue();
+        assertThat(status.businessConnectionStatus()).isEqualTo("DISCONNECTED");
+        assertThat(status.canReplyOnBehalf()).isFalse();
         assertThat(status.springBootVersion()).isEqualTo("3.4.2");
         assertThat(status.virtualThreadsEnabled()).isTrue();
-        assertThat(status.springAiStatus()).isEqualTo("AVAILABLE");
+        assertThat(status.springAiStatus()).isEqualTo("NOT_CONFIGURED");
         assertThat(status.activeStudentsCount()).isEqualTo(5);
         assertThat(status.pendingReportsToday()).isGreaterThanOrEqualTo(1);
 
@@ -50,11 +50,11 @@ class SystemServiceTest {
     }
 
     @Test
-    @DisplayName("syncTelegram returns success response")
+    @DisplayName("syncTelegram reports unavailable bot honestly")
     void testSyncTelegram() {
         SyncTelegramResponse response = systemService.syncTelegram();
-        assertThat(response.success()).isTrue();
-        assertThat(response.message()).contains("успешно");
+        assertThat(response.success()).isFalse();
+        assertThat(response.message()).contains("недоступен");
         assertThat(response.syncedAt()).isNotNull();
     }
 

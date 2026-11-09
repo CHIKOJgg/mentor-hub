@@ -2,6 +2,13 @@ server:
   port: ${PORT:8080}
   shutdown: graceful
 
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  admin:
+    mentor-token: ${ADMIN_MENTOR_TOKEN:}
+    curator-token: ${ADMIN_CURATOR_TOKEN:}
+
 spring:
   application:
     name: mentor-tracker-backend

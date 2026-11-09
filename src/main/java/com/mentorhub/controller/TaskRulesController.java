@@ -1,6 +1,7 @@
 package com.mentorhub.controller;
 
 import com.mentorhub.dto.TaskRuleResponse;
+import com.mentorhub.dto.CreateTaskRuleRequest;
 import com.mentorhub.dto.UpdateTaskRuleRequest;
 import com.mentorhub.service.TaskRuleService;
 import lombok.RequiredArgsConstructor;
@@ -17,9 +18,14 @@ public class TaskRulesController {
     private final TaskRuleService taskRuleService;
 
     @GetMapping("/rules")
-    public ResponseEntity<List<TaskRuleResponse>> getAllRules() {
-        List<TaskRuleResponse> rules = taskRuleService.getAllRules();
+    public ResponseEntity<List<TaskRuleResponse>> getAllRules(@RequestParam(defaultValue = "false") boolean includeInactive) {
+        List<TaskRuleResponse> rules = taskRuleService.getAllRules(includeInactive);
         return ResponseEntity.ok(rules);
+    }
+
+    @PostMapping("/rules")
+    public ResponseEntity<TaskRuleResponse> createRule(@RequestBody @jakarta.validation.Valid CreateTaskRuleRequest request) {
+        return ResponseEntity.status(201).body(taskRuleService.createRule(request));
     }
 
     @GetMapping("/rules/{id}")
@@ -37,6 +43,12 @@ public class TaskRulesController {
         Long ruleId = parseId(id);
         TaskRuleResponse updated = taskRuleService.updateRule(ruleId, request);
         return ResponseEntity.ok(updated);
+    }
+
+    @DeleteMapping("/rules/{id}")
+    public ResponseEntity<Void> deleteRule(@PathVariable String id) {
+        taskRuleService.deleteRule(parseId(id));
+        return ResponseEntity.noContent().build();
     }
 
     private Long parseId(String idStr) {

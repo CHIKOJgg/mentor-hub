@@ -8,6 +8,7 @@ import com.mentorhub.entity.ReelSubmission;
 import com.mentorhub.entity.Student;
 import com.mentorhub.repository.ContentDraftRepository;
 import com.mentorhub.repository.DailyReportRepository;
+import com.mentorhub.repository.MentorSettingRepository;
 import com.mentorhub.repository.ReelSubmissionRepository;
 import com.mentorhub.repository.SalesEntryRepository;
 import com.mentorhub.repository.StudentRepository;
@@ -326,6 +327,7 @@ public class AdversarialEmpiricalChallengeTest {
 
         private final StudentRepository studentRepository = mock(StudentRepository.class);
         private final DailyReportRepository dailyReportRepository = mock(DailyReportRepository.class);
+        private final MentorSettingRepository mentorSettingRepository = mock(MentorSettingRepository.class);
 
         private final AtomicReference<Long> lastChatId = new AtomicReference<>();
         private final AtomicReference<String> lastText = new AtomicReference<>();
@@ -370,6 +372,7 @@ public class AdversarialEmpiricalChallengeTest {
             DailyReminderScheduler scheduler = new DailyReminderScheduler(
                     studentRepository,
                     dailyReportRepository,
+                    mentorSettingRepository,
                     stubSenderService
             );
 
@@ -388,6 +391,7 @@ public class AdversarialEmpiricalChallengeTest {
             DailyReminderScheduler scheduler = new DailyReminderScheduler(
                     studentRepository,
                     dailyReportRepository,
+                    mentorSettingRepository,
                     stubSenderService
             );
             ReflectionTestUtils.setField(scheduler, "rateLimitMs", 0L);
@@ -619,4 +623,3 @@ public class AdversarialEmpiricalChallengeTest {
         }
     }
 }
-

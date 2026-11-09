@@ -22,8 +22,18 @@ public class ZoomMeeting {
     @JoinColumn(name = "student_id", nullable = false)
     private Student student;
 
+    @Column(name = "meeting_title", nullable = false)
+    @Builder.Default
+    private String meetingTitle = "Созвон";
+
+    @Column(name = "call_number")
+    private Integer callNumber;
+
     @Column(name = "zoom_url", columnDefinition = "TEXT")
     private String zoomUrl;
+
+    @Column(name = "recording_url", columnDefinition = "TEXT")
+    private String recordingUrl;
 
     @Column(name = "scheduled_at", nullable = false)
     private Instant scheduledAt;

@@ -105,6 +105,6 @@ class InboxControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
                 .andExpect(jsonPath("$.status", is("REJECTED")))
-                .andExpect(jsonPath("$.feedbackSent", is(true)));
+                .andExpect(jsonPath("$.feedbackSent", is(false)));
     }
 }

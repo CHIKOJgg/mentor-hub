@@ -83,7 +83,8 @@ class ReportServiceTest {
         DailyReport updated = dailyReportRepository.findById(target.getId()).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo("APPROVED");
         assertThat(updated.getMentorReply()).isEqualTo(replyText);
-        assertThat(updated.getReplySentAt()).isNotNull();
+        assertThat(response.tgMessageDelivered()).isFalse();
+        assertThat(updated.getReplySentAt()).isNull();
     }
 
     @Test
@@ -114,13 +115,13 @@ class ReportServiceTest {
 
         assertThat(response.success()).isTrue();
         assertThat(response.status()).isEqualTo("REJECTED");
-        assertThat(response.feedbackSent()).isTrue();
+        assertThat(response.feedbackSent()).isFalse();
         assertThat(response.rejectedAt()).isNotNull();
 
         DailyReport updated = dailyReportRepository.findById(target.getId()).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo("REJECTED");
         assertThat(updated.getMentorReply()).isEqualTo(reason);
-        assertThat(updated.getReplySentAt()).isNotNull();
+        assertThat(updated.getReplySentAt()).isNull();
     }
 
     @Test

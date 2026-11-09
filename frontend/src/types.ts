@@ -33,8 +33,10 @@ export interface DailyReport {
   tgUsername: string;
   tariff: 'VIP' | 'Стандарт';
   submittedAt: string;
+  reportDate?: string;
   isOnTime: boolean;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  mentorReply?: string;
   contentDrafts: ContentDraft[];
   reels?: ReelSubmission[];
   salesAmount: number;
@@ -59,6 +61,7 @@ export interface DayInfo {
   date: string;
   status: DayStatus;
   missedDetails?: string;
+  isoDate?: string;
 }
 
 export interface StudentPeriodMetrics {
@@ -101,24 +104,16 @@ export interface StudentPortalData {
   zoomSessions: ZoomSessionRecord[];
 }
 
-export interface RetentionDossier {
-  churnScore: number; // e.g. 78%
-  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
-  aiDiagnosis: string;
-  mentorActionItems: string[];
-  rehabTask?: {
-    description: string;
-    rewardDisciplineRate: number;
-    isOffered: boolean;
-  };
-}
-
 export interface StudentDiscipline {
   id: string;
   fullName: string;
   avatarText: string;
   telegram?: string;
   niche: string;
+  telegramChatId?: number;
+  tariff?: 'VIP' | 'Стандарт';
+  startDate?: string;
+  isActive?: boolean;
   initialIncome: number; // Point A
   currentIncome: number; // Point B
   initialAvgTicket: number;
@@ -141,7 +136,6 @@ export interface StudentDiscipline {
     all: StudentPeriodMetrics;
   };
   portalData?: StudentPortalData;
-  retentionDossier?: RetentionDossier;
 }
 
 export interface TaskRule {

@@ -73,7 +73,10 @@ public class InitialDataSeeder {
         if (milana != null && milana.getNextZoomAt() != null) {
             zoomMeetingRepository.save(ZoomMeeting.builder()
                     .student(milana)
+                    .meetingTitle("Разбор скрипта продаж на высокий чек")
+                    .callNumber((milana.getCompletedZoomsCount() == null ? 0 : milana.getCompletedZoomsCount()) + 1)
                     .zoomUrl("https://us02web.zoom.us/j/123456789")
+                    .recordingUrl(null)
                     .scheduledAt(milana.getNextZoomAt())
                     .isCompleted(false)
                     .meetingNotes("Разбор скрипта продаж на высокий чек")
@@ -82,6 +85,8 @@ public class InitialDataSeeder {
         if (anya != null && anya.getNextZoomAt() != null) {
             zoomMeetingRepository.save(ZoomMeeting.builder()
                     .student(anya)
+                    .meetingTitle("Проработка страха продаж")
+                    .callNumber((anya.getCompletedZoomsCount() == null ? 0 : anya.getCompletedZoomsCount()) + 1)
                     .zoomUrl("https://us02web.zoom.us/j/234567890")
                     .scheduledAt(anya.getNextZoomAt())
                     .isCompleted(false)
@@ -104,6 +109,8 @@ public class InitialDataSeeder {
         for (int i = 0; i < count; i++) {
             zoomMeetingRepository.save(ZoomMeeting.builder()
                     .student(student)
+                    .meetingTitle("Созвон " + (i + 1))
+                    .callNumber(i + 1)
                     .zoomUrl("https://us02web.zoom.us/j/meeting" + student.getId() + "_" + i)
                     .scheduledAt(pastDate.plus(i * 4L, ChronoUnit.DAYS))
                     .completedAt(pastDate.plus(i * 4L, ChronoUnit.DAYS).plus(1, ChronoUnit.HOURS))

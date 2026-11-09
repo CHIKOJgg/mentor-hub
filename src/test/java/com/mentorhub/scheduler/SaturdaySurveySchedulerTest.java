@@ -2,6 +2,7 @@ package com.mentorhub.scheduler;
 
 import com.mentorhub.entity.Student;
 import com.mentorhub.repository.StudentRepository;
+import com.mentorhub.repository.MentorSettingRepository;
 import com.mentorhub.telegram.service.TelegramSenderService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ class SaturdaySurveySchedulerTest {
     @DisplayName("getEligibleStudents excludes paused students")
     void getEligibleStudents_filtersPaused() {
         StudentRepository studentRepository = mock(StudentRepository.class);
+        MentorSettingRepository settingsRepository = mock(MentorSettingRepository.class);
         TelegramSenderService stubSenderService = new TelegramSenderService(null);
 
         Student s1 = Student.builder().id(1L).fullName("Милана").tgChatId(71010101L).isActive(true).isPaused(false).build();
@@ -25,7 +27,7 @@ class SaturdaySurveySchedulerTest {
 
         when(studentRepository.findByIsActiveTrue()).thenReturn(List.of(s1, s2, s3));
 
-        SaturdaySurveyScheduler scheduler = new SaturdaySurveyScheduler(studentRepository, stubSenderService);
+        SaturdaySurveyScheduler scheduler = new SaturdaySurveyScheduler(studentRepository, settingsRepository, stubSenderService);
         List<Student> eligible = scheduler.getEligibleStudents();
 
         assertThat(eligible).hasSize(2);
@@ -36,6 +38,7 @@ class SaturdaySurveySchedulerTest {
     @DisplayName("sendSurveyToStudent calls telegramSenderService with Saturday survey poll text")
     void sendSurveyToStudent() {
         StudentRepository studentRepository = mock(StudentRepository.class);
+        MentorSettingRepository settingsRepository = mock(MentorSettingRepository.class);
 
         final Long[] sentChatId = new Long[1];
         final Long[] sentStudentId = new Long[1];
@@ -53,12 +56,12 @@ class SaturdaySurveySchedulerTest {
 
         Student s1 = Student.builder().id(1L).fullName("Милана").tgChatId(71010101L).build();
 
-        SaturdaySurveyScheduler scheduler = new SaturdaySurveyScheduler(studentRepository, stubSenderService);
+        SaturdaySurveyScheduler scheduler = new SaturdaySurveyScheduler(studentRepository, settingsRepository, stubSenderService);
         boolean sent = scheduler.sendSurveyToStudent(s1);
 
         assertThat(sent).isTrue();
         assertThat(sentChatId[0]).isEqualTo(71010101L);
         assertThat(sentStudentId[0]).isEqualTo(1L);
-        assertThat(sentText[0]).contains("Субботний чекап недели! 📊\nСколько новых клиентов ты закрыла за эту неделю?");
+        assertThat(sentText[0]).contains("Субботний чекап недели!\nСколько новых клиентов ты закрыла за эту неделю?");
     }
 }

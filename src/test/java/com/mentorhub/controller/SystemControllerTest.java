@@ -46,7 +46,7 @@ class SystemControllerTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.springBootVersion", is("3.4.2")))
                 .andExpect(jsonPath("$.virtualThreadsEnabled", is(true)))
-                .andExpect(jsonPath("$.springAiStatus", is("AVAILABLE")))
+                .andExpect(jsonPath("$.springAiStatus", is("NOT_CONFIGURED")))
                 .andExpect(jsonPath("$.zoomTracker.completedCallsTotal", is(19)))
                 .andExpect(jsonPath("$.zoomTracker.nextCallAt", notNullValue()));
     }
@@ -57,8 +57,8 @@ class SystemControllerTest {
         mockMvc.perform(post("/api/system/sync-telegram")
                         .header("X-Admin-Token", ADMIN_TOKEN))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.message", containsString("успешно")));
+                .andExpect(jsonPath("$.success", is(false)))
+                .andExpect(jsonPath("$.message", containsString("недоступен")));
     }
 
     @Test

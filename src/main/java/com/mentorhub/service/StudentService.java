@@ -3,8 +3,12 @@ package com.mentorhub.service;
 import com.mentorhub.dto.*;
 import com.mentorhub.entity.DailyReport;
 import com.mentorhub.entity.Student;
+import com.mentorhub.entity.StudentDayOverride;
+import com.mentorhub.entity.ZoomMeeting;
 import com.mentorhub.repository.DailyReportRepository;
+import com.mentorhub.repository.StudentDayOverrideRepository;
 import com.mentorhub.repository.StudentRepository;
+import com.mentorhub.repository.ZoomMeetingRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,6 +28,8 @@ public class StudentService {
 
     private final StudentRepository studentRepository;
     private final DailyReportRepository dailyReportRepository;
+    private final StudentDayOverrideRepository studentDayOverrideRepository;
+    private final ZoomMeetingRepository zoomMeetingRepository;
 
     private static final ZoneId MINSK_ZONE = ZoneId.of("Europe/Minsk");
     private static final DateTimeFormatter ZOOM_DATE_FORMATTER =
@@ -48,7 +54,7 @@ public class StudentService {
                     ? studentRepository.findByIsActiveTrue()
                     : studentRepository.findAll().stream().filter(s -> !Boolean.TRUE.equals(s.getIsActive())).toList();
         } else {
-            students = studentRepository.findAll();
+            students = studentRepository.findAllWithZoomMeetings();
         }
 
         return students.stream()
@@ -58,7 +64,7 @@ public class StudentService {
 
     @Transactional(readOnly = true)
     public StudentDisciplineResponse getStudentById(Long id) {
-        Student student = studentRepository.findById(id)
+        Student student = studentRepository.findWithZoomMeetingsById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + id));
         return mapToDisciplineResponse(student);
     }
@@ -150,6 +156,67 @@ public class StudentService {
         return buildWeeklyCalendar(student);
     }
 
+    @Transactional(readOnly = true)
+    public List<ZoomMeetingDto> getStudentZoomMeetings(Long studentId) {
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + studentId));
+        return zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(studentId).stream()
+                .map(meeting -> mapZoomMeeting(student, meeting))
+                .toList();
+    }
+
+    @Transactional
+    public List<ZoomMeetingDto> replaceStudentZoomMeetings(Long studentId, ReplaceZoomSessionsRequest request) {
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + studentId));
+        List<ZoomMeeting> existing = zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(studentId);
+        Map<Integer, ZoomMeeting> byNumber = new HashMap<>();
+        existing.forEach(meeting -> {
+            if (meeting.getCallNumber() != null) byNumber.put(meeting.getCallNumber(), meeting);
+        });
+
+        Set<Integer> requestedNumbers = new HashSet<>();
+        List<ZoomMeeting> savedMeetings = new ArrayList<>();
+        List<ZoomSessionInput> sessions = request.sessions() == null ? List.of() : request.sessions();
+        for (int index = 0; index < sessions.size(); index++) {
+            ZoomSessionInput input = sessions.get(index);
+            int callNumber = input.callNumber() == null ? index + 1 : input.callNumber();
+            if (callNumber < 1 || !requestedNumbers.add(callNumber)) {
+                throw new IllegalArgumentException("Call numbers must be unique positive integers");
+            }
+
+            ZoomMeeting meeting = byNumber.getOrDefault(callNumber, ZoomMeeting.builder().student(student).build());
+            meeting.setStudent(student);
+            meeting.setCallNumber(callNumber);
+            meeting.setMeetingTitle(input.title() == null || input.title().isBlank() ? "Этап " + callNumber : input.title().trim());
+            meeting.setZoomUrl(input.zoomUrl());
+            meeting.setRecordingUrl(input.recordingUrl());
+            meeting.setScheduledAt(input.scheduledAt());
+            meeting.setMeetingNotes(input.meetingNotes());
+            boolean completed = Boolean.TRUE.equals(input.isCompleted());
+            meeting.setIsCompleted(completed);
+            meeting.setCompletedAt(completed ? (meeting.getCompletedAt() == null ? Instant.now() : meeting.getCompletedAt()) : null);
+            savedMeetings.add(zoomMeetingRepository.save(meeting));
+        }
+
+        List<ZoomMeeting> removed = existing.stream()
+                .filter(meeting -> meeting.getCallNumber() != null && !requestedNumbers.contains(meeting.getCallNumber()))
+                .toList();
+        if (!removed.isEmpty()) zoomMeetingRepository.deleteAll(removed);
+
+        savedMeetings.sort(Comparator.comparing(ZoomMeeting::getCallNumber));
+        long completedCount = savedMeetings.stream().filter(meeting -> Boolean.TRUE.equals(meeting.getIsCompleted())).count();
+        student.setCompletedZoomsCount(Math.toIntExact(completedCount));
+        student.setNextZoomAt(savedMeetings.stream()
+                .filter(meeting -> !Boolean.TRUE.equals(meeting.getIsCompleted()))
+                .filter(meeting -> meeting.getScheduledAt() != null)
+                .map(ZoomMeeting::getScheduledAt)
+                .min(Comparator.naturalOrder())
+                .orElse(null));
+        studentRepository.save(student);
+        return savedMeetings.stream().map(meeting -> mapZoomMeeting(student, meeting)).toList();
+    }
+
     public StudentDisciplineResponse mapToDisciplineResponse(Student student) {
         List<DayInfoResponse> weekDays = buildWeeklyCalendar(student);
         int disciplineRate = calculateDisciplineRate(student, weekDays);
@@ -167,8 +234,11 @@ public class StudentService {
                 student.getFullName(),
                 student.getAvatarText(),
                 student.getTgUsername(),
+                student.getTgChatId(),
                 student.getNiche(),
                 tariff,
+                student.getStartDate(),
+                student.getIsActive(),
                 student.getInitialIncome(),
                 student.getCurrentIncome(),
                 student.getInitialAvgTicket(),
@@ -183,22 +253,73 @@ public class StudentService {
                 student.getPauseReason(),
                 nextZoomDate,
                 student.getCompletedZoomsCount() != null ? student.getCompletedZoomsCount() : 0,
-                weekDays
+                weekDays,
+                student.getZoomMeetings() == null ? List.of() : student.getZoomMeetings().stream()
+                        .sorted(Comparator.comparing(ZoomMeeting::getCallNumber, Comparator.nullsLast(Comparator.naturalOrder())))
+                        .map(meeting -> new ZoomMeetingDto(
+                                meeting.getId(),
+                                student.getId(),
+                                student.getFullName(),
+                                meeting.getMeetingTitle(),
+                                meeting.getCallNumber(),
+                                meeting.getZoomUrl(),
+                                meeting.getRecordingUrl(),
+                                meeting.getScheduledAt(),
+                                meeting.getCompletedAt(),
+                                meeting.getIsCompleted(),
+                                meeting.getMeetingNotes()
+                        )).toList()
         );
+    }
+
+    private ZoomMeetingDto mapZoomMeeting(Student student, ZoomMeeting meeting) {
+        return new ZoomMeetingDto(
+                meeting.getId(),
+                student.getId(),
+                student.getFullName(),
+                meeting.getMeetingTitle(),
+                meeting.getCallNumber(),
+                meeting.getZoomUrl(),
+                meeting.getRecordingUrl(),
+                meeting.getScheduledAt(),
+                meeting.getCompletedAt(),
+                meeting.getIsCompleted(),
+                meeting.getMeetingNotes()
+        );
+    }
+
+    @Transactional
+    public DayInfoResponse updateDisciplineDay(Long studentId, UpdateDayStatusRequest request) {
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + studentId));
+        Set<String> statuses = Set.of("COMPLETED_ON_TIME", "COMPLETED_LATE", "MISSED", "PENDING", "WEEKEND", "PAUSED");
+        String status = request.status().trim().toUpperCase(Locale.ROOT);
+        if (!statuses.contains(status)) throw new IllegalArgumentException("Unsupported day status: " + status);
+
+        LocalDate requestedDate = resolveVisibleWeekDate(request.date());
+        if (requestedDate == null) throw new IllegalArgumentException("Date is outside the currently displayed week");
+
+        StudentDayOverride override = studentDayOverrideRepository
+                .findByStudentIdAndDayDate(studentId, requestedDate)
+                .orElseGet(() -> StudentDayOverride.builder().student(student).dayDate(requestedDate).build());
+        override.setStatus(status);
+        override.setDetails(request.details());
+        studentDayOverrideRepository.save(override);
+
+        DayInfoResponse day = new DayInfoResponse(
+                RU_DAY_NAMES[requestedDate.getDayOfWeek().getValue() - 1],
+                DAY_DATE_FORMATTER.format(requestedDate),
+                status,
+                request.details(),
+                requestedDate
+        );
+        return day;
     }
 
     private List<DayInfoResponse> buildWeeklyCalendar(Student student) {
         List<DayInfoResponse> calendar = new ArrayList<>();
         LocalDate today = LocalDate.now(MINSK_ZONE);
-        LocalDate monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-
-        // Anchor to cohort active week if current calendar week has no reports
-        if (!dailyReportRepository.existsByReportDateBetween(monday, monday.plusDays(6))) {
-            LocalDate maxDate = dailyReportRepository.findMaxReportDate();
-            if (maxDate != null) {
-                monday = maxDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-            }
-        }
+        LocalDate monday = resolveVisibleWeekMonday(today);
 
         LocalDate deadlineReference = today.isBefore(monday) ? monday.plusDays(7) : today;
 
@@ -207,13 +328,20 @@ public class StudentService {
             String dayName = RU_DAY_NAMES[i];
             String dateFormatted = DAY_DATE_FORMATTER.format(dayDate);
 
+            Optional<StudentDayOverride> override = studentDayOverrideRepository.findByStudentIdAndDayDate(student.getId(), dayDate);
+            if (override.isPresent()) {
+                calendar.add(new DayInfoResponse(dayName, dateFormatted, override.get().getStatus(), override.get().getDetails(), dayDate));
+                continue;
+            }
+
             // 1. Sunday rule: official cohort rest day
             if (i == 6) {
                 calendar.add(new DayInfoResponse(
                         dayName,
                         dateFormatted,
                         "WEEKEND",
-                        "Воскресенье — общий выходной потока ☕"
+                        "Воскресенье — общий выходной потока ☕",
+                        dayDate
                 ));
                 continue;
             }
@@ -227,14 +355,16 @@ public class StudentService {
                             dayName,
                             dateFormatted,
                             "COMPLETED_ON_TIME",
-                            formatReportDetails(report)
+                            formatReportDetails(report),
+                            dayDate
                     ));
                 } else {
                     calendar.add(new DayInfoResponse(
                             dayName,
                             dateFormatted,
                             "COMPLETED_LATE",
-                            formatLateReportDetails(report)
+                            formatLateReportDetails(report),
+                            dayDate
                     ));
                 }
                 continue;
@@ -246,7 +376,8 @@ public class StudentService {
                         dayName,
                         dateFormatted,
                         "PAUSED",
-                        "Режим паузы: болезнь, стрик заморожен ☕"
+                        "Режим паузы: болезнь, стрик заморожен ☕",
+                        dayDate
                 ));
                 continue;
             }
@@ -257,19 +388,44 @@ public class StudentService {
                         dayName,
                         dateFormatted,
                         "MISSED",
-                        "Пропуск: отчёт не сдан до 21:00"
+                        "Пропуск: отчёт не сдан до 21:00",
+                        dayDate
                 ));
             } else {
                 calendar.add(new DayInfoResponse(
                         dayName,
                         dateFormatted,
                         "PENDING",
-                        null
+                        null,
+                        dayDate
                 ));
             }
         }
 
         return calendar;
+    }
+
+    private LocalDate resolveVisibleWeekMonday(LocalDate today) {
+        LocalDate monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        if (!dailyReportRepository.existsByReportDateBetween(monday, monday.plusDays(6))) {
+            LocalDate maxDate = dailyReportRepository.findMaxReportDate();
+            if (maxDate != null) monday = maxDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        }
+        return monday;
+    }
+
+    private LocalDate resolveVisibleWeekDate(String requestedDate) {
+        LocalDate today = LocalDate.now(MINSK_ZONE);
+        LocalDate monday = resolveVisibleWeekMonday(today);
+        if (requestedDate != null && requestedDate.matches("\\d{4}-\\d{2}-\\d{2}")) {
+            LocalDate isoDate = LocalDate.parse(requestedDate);
+            return !isoDate.isBefore(monday) && !isoDate.isAfter(monday.plusDays(6)) ? isoDate : null;
+        }
+        for (int offset = 0; offset < 7; offset++) {
+            LocalDate candidate = monday.plusDays(offset);
+            if (DAY_DATE_FORMATTER.format(candidate).equals(requestedDate.trim())) return candidate;
+        }
+        return null;
     }
 
     public int calculateDisciplineRate(Student student, List<DayInfoResponse> weekDays) {

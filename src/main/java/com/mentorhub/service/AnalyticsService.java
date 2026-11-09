@@ -83,16 +83,15 @@ public class AnalyticsService {
         double averageDisciplineRate = Math.round((disciplineSum / count) * 10.0) / 10.0;
 
         // Active burnout alerts count
-        long burnoutCount = dailyReportRepository.findAll().stream()
+        long burnoutCount = dailyReportRepository.findByStatus("PENDING").stream()
+                .filter(report -> report.getStudent() != null && Boolean.TRUE.equals(report.getStudent().getIsActive()))
                 .filter(r -> "BURNOUT_ALERT".equalsIgnoreCase(r.getEmotionalStatus()))
                 .count();
-        if (burnoutCount == 0) burnoutCount = 1; // Default benchmark
 
         // AI reflection processed count
         long aiReflectionCount = dailyReportRepository.findAll().stream()
-                .filter(r -> r.getReflectionEmotions() != null || r.getAiSummary() != null)
+                .filter(r -> r.getReflectionEmotions() != null || r.getReflectionActions() != null || r.getReflectionQuestion() != null)
                 .count();
-        if (aiReflectionCount == 0) aiReflectionCount = 42; // Seeded baseline
 
         return new AnalyticsSummaryResponse(
                 totalEarned,

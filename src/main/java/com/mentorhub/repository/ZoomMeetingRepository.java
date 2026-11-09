@@ -12,6 +12,8 @@ public interface ZoomMeetingRepository extends JpaRepository<ZoomMeeting, Long> 
 
     List<ZoomMeeting> findByStudentIdOrderByScheduledAtDesc(Long studentId);
 
+    List<ZoomMeeting> findByStudentIdOrderByCallNumberAscIdAsc(Long studentId);
+
     Optional<ZoomMeeting> findFirstByStudentIdAndIsCompletedFalseOrderByScheduledAtAsc(Long studentId);
 
     Optional<ZoomMeeting> findFirstByIsCompletedFalseOrderByScheduledAtAsc();

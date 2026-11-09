@@ -9,5 +9,10 @@ public record TaskRuleResponse(
     String description,
     @JsonProperty("required")
     boolean required,
-    String example
-) {}
+    String example,
+    boolean isActive
+) {
+    public TaskRuleResponse(String id, String hashtag, String title, String description, boolean required, String example) {
+        this(id, hashtag, title, description, required, example, true);
+    }
+}

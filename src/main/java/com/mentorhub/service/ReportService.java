@@ -7,6 +7,7 @@ import com.mentorhub.entity.MentorSetting;
 import com.mentorhub.entity.ReelSubmission;
 import com.mentorhub.repository.DailyReportRepository;
 import com.mentorhub.repository.MentorSettingRepository;
+import com.mentorhub.telegram.service.TelegramSenderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class ReportService {
 
     private final DailyReportRepository dailyReportRepository;
     private final MentorSettingRepository mentorSettingRepository;
+    private final TelegramSenderService telegramSenderService;
 
     private static final ZoneId MINSK_ZONE = ZoneId.of("Europe/Minsk");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm").withZone(MINSK_ZONE);
@@ -71,24 +73,28 @@ public class ReportService {
         }
 
         report.setStatus("APPROVED");
-        if (request != null && StringUtils.hasText(request.replyText())) {
-            report.setMentorReply(request.replyText());
-            report.setReplySentAt(Instant.now());
+        Boolean messageDelivered = null;
+        String replyText = request == null ? null : request.replyText();
+        if (StringUtils.hasText(replyText)) {
+            report.setMentorReply(replyText.trim());
+            Long chatId = report.getStudent() == null ? null : report.getStudent().getTgChatId();
+            MentorSetting setting = mentorSettingRepository.findAll().stream().findFirst().orElse(null);
+            String businessConnectionId = setting != null && Boolean.TRUE.equals(setting.getIsBusinessConnected())
+                    ? setting.getBusinessConnectionId()
+                    : null;
+            messageDelivered = telegramSenderService.sendStudentMessage(chatId, businessConnectionId, replyText.trim());
+            if (Boolean.TRUE.equals(messageDelivered)) report.setReplySentAt(Instant.now());
+            else log.warn("Report #{} approved but Telegram reply was not delivered (chat={})", reportId, chatId);
         }
         dailyReportRepository.save(report);
 
-        boolean businessConnected = mentorSettingRepository.findAll().stream()
-                .findFirst()
-                .map(s -> Boolean.TRUE.equals(s.getIsBusinessConnected()))
-                .orElse(true);
-
-        log.info("Report #{} approved by mentor. Telegram reply delivery status: {}", reportId, businessConnected);
+        log.info("Report #{} approved by mentor. Telegram reply delivered: {}", reportId, messageDelivered);
 
         return new ReportActionResponse(
                 true,
                 String.valueOf(report.getId()),
                 "APPROVED",
-                businessConnected,
+                messageDelivered,
                 null,
                 Instant.now(),
                 null
@@ -101,20 +107,27 @@ public class ReportService {
                 .orElseThrow(() -> new ResourceNotFoundException("DailyReport not found with id: " + reportId));
 
         report.setStatus("REJECTED");
+        Boolean feedbackSent = null;
         if (request != null && StringUtils.hasText(request.reason())) {
-            report.setMentorReply(request.reason());
-            report.setReplySentAt(Instant.now());
+            report.setMentorReply(request.reason().trim());
+            Long chatId = report.getStudent() == null ? null : report.getStudent().getTgChatId();
+            MentorSetting setting = mentorSettingRepository.findAll().stream().findFirst().orElse(null);
+            String businessConnectionId = setting != null && Boolean.TRUE.equals(setting.getIsBusinessConnected())
+                    ? setting.getBusinessConnectionId()
+                    : null;
+            feedbackSent = telegramSenderService.sendStudentMessage(chatId, businessConnectionId, request.reason().trim());
+            if (Boolean.TRUE.equals(feedbackSent)) report.setReplySentAt(Instant.now());
         }
         dailyReportRepository.save(report);
 
-        log.info("Report #{} rejected by mentor with feedback reason.", reportId);
+        log.info("Report #{} rejected by mentor. Telegram feedback delivered: {}", reportId, feedbackSent);
 
         return new ReportActionResponse(
                 true,
                 String.valueOf(report.getId()),
                 "REJECTED",
-                null,
-                true,
+                feedbackSent,
+                feedbackSent,
                 null,
                 Instant.now()
         );
@@ -157,8 +170,10 @@ public class ReportService {
                 tgUsername,
                 tariff,
                 submittedAtStr,
+                report.getReportDate(),
                 report.getIsOnTime(),
                 report.getStatus(),
+                report.getMentorReply(),
                 drafts,
                 reels,
                 report.getSalesTotal(),

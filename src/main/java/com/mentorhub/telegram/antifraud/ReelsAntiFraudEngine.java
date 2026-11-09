@@ -79,9 +79,16 @@ public class ReelsAntiFraudEngine {
      */
     @Transactional(readOnly = true)
     public AntiFraudEvaluation evaluateReel(String rawUrl, String shortcode, String canonicalUrl, Student currentStudent) {
+        return evaluateReel(rawUrl, shortcode, canonicalUrl, currentStudent, true);
+    }
+
+    @Transactional(readOnly = true)
+    public AntiFraudEvaluation evaluateReel(String rawUrl, String shortcode, String canonicalUrl, Student currentStudent, boolean deduplicationEnabled) {
         String reelHash = calculateHash(shortcode);
 
-        Optional<ReelSubmission> existingOpt = reelSubmissionRepository.findByReelHash(reelHash);
+        Optional<ReelSubmission> existingOpt = deduplicationEnabled
+                ? reelSubmissionRepository.findByReelHash(reelHash)
+                : Optional.empty();
 
         boolean isDuplicate = false;
         String duplicateDate = null;
