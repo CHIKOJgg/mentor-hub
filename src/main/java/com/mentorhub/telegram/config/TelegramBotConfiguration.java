@@ -29,8 +29,11 @@ public class TelegramBotConfiguration {
     @ConditionalOnMissingBean(MentorBotConsumer.class)
     @ConditionalOnProperty(name = "telegram.bot.mode", havingValue = "longpolling")
     @ConditionalOnExpression("!'${telegram.bot.token:}'.isEmpty() && !'${telegram.bot.token:}'.startsWith('mock')")
-    public MentorBotConsumer fallbackLongpollingConsumer(TelegramMessageRouter router) {
+    public MentorBotConsumer fallbackLongpollingConsumer(
+            TelegramMessageRouter router,
+            @Value("${telegram.bot.token:}") String botToken
+    ) {
         log.info("Registering fallback MentorBotConsumer for mode 'longpolling'");
-        return new MentorBotConsumer(router);
+        return new MentorBotConsumer(router, botToken);
     }
 }

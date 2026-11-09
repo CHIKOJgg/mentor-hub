@@ -52,7 +52,7 @@ telegram:
     enabled: ${TELEGRAM_BOT_ENABLED:true}
     token: ${TELEGRAM_BOT_TOKEN:mock-token}
     username: ${TELEGRAM_BOT_USERNAME:MentorHubBot}
-    mode: ${TELEGRAM_BOT_MODE:longpolling}
+    mode: ${TELEGRAM_BOT_MODE:long-polling}
   reminder:
     cron: "0 0 20 * * MON-SAT"
     zone: "Europe/Minsk"
