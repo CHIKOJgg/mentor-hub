@@ -1,4 +1,4 @@
-const STORAGE_VERSION = 'v1';
+const STORAGE_VERSION = 'v2';
 
 const storageKey = (key: string) => `mentor-tracker.${key}.${STORAGE_VERSION}`;
 

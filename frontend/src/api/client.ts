@@ -21,6 +21,18 @@ export const getAdminToken = (): string => {
   const configuredToken = import.meta.env.VITE_ADMIN_TOKEN?.trim();
   if (configuredToken) return configuredToken;
 
+  if (typeof window !== 'undefined') {
+    try {
+      const urlToken = new URLSearchParams(window.location.search).get('token')?.trim();
+      if (urlToken) {
+        sessionStorage.setItem(ADMIN_TOKEN_KEY, urlToken);
+        return urlToken;
+      }
+    } catch {
+      // Storage can be restricted in sandboxed iframes.
+    }
+  }
+
   try {
     return sessionStorage.getItem(ADMIN_TOKEN_KEY)?.trim() ?? '';
   } catch {
