@@ -110,20 +110,25 @@ public class TelegramReportHandler {
         boolean deduplicationEnabled = settings == null || Boolean.TRUE.equals(settings.getAntiFraudDedupEnabled());
 
         DailyReport report = dailyReportRepository.findByStudentIdAndReportDate(student.getId(), today)
-                .orElseGet(() -> DailyReport.builder()
-                        .student(student)
-                        .reportDate(today)
-                        .submittedAt(Instant.now())
-                        .isOnTime(isOnTime)
-                        .status("PENDING")
-                        .mailingsCount(0)
-                        .salesTotal(BigDecimal.ZERO)
-                        .newClientsCount(0)
-                        .contentDrafts(new ArrayList<>())
-                        .reelSubmissions(new ArrayList<>())
-                        .salesEntries(new ArrayList<>())
-                        .build()
-                );
+                .orElseGet(() -> {
+                    DailyReport newReport = DailyReport.builder()
+                            .student(student)
+                            .reportDate(today)
+                            .submittedAt(Instant.now())
+                            .isOnTime(isOnTime)
+                            .status("PENDING")
+                            .mailingsCount(0)
+                            .salesTotal(BigDecimal.ZERO)
+                            .newClientsCount(0)
+                            .contentDrafts(new ArrayList<>())
+                            .reelSubmissions(new ArrayList<>())
+                            .salesEntries(new ArrayList<>())
+                            .build();
+                    return dailyReportRepository.save(newReport);
+                });
+        if (report.getId() == null) {
+            report = dailyReportRepository.save(report);
+        }
 
         report.setSubmittedAt(Instant.now());
         report.setIsOnTime(isOnTime);
