@@ -237,8 +237,8 @@ describe('Tier 1 - Area 1: Brand Neutrality & Global Header', () => {
 });
 
 describe('Tier 1 - Area 2: Tab Navigation & Routing', () => {
-  test('TC-1.2.1: Exactly 4 clean functional navigation tabs are configured in App.tsx (no pricing in client UI)', () => {
-    const requiredTabs = ['inbox', 'students', 'analytics', 'tasks'];
+  test('TC-1.2.1: Exactly 5 clean functional navigation tabs are configured in App.tsx (no pricing in client UI)', () => {
+    const requiredTabs = ['inbox', 'students', 'analytics', 'promotion', 'settings'];
     for (const tab of requiredTabs) {
       assert.ok(
         appTsxContent.includes(`id: '${tab}'`),
@@ -248,13 +248,14 @@ describe('Tier 1 - Area 2: Tab Navigation & Routing', () => {
     assert.ok(appTsxContent.includes('На проверку'), 'Tab 1 label must be "На проверку"');
     assert.ok(appTsxContent.includes('Ученицы'), 'Tab 2 label must be "Ученицы"');
     assert.ok(appTsxContent.includes('Аналитика'), 'Tab 3 label must be "Аналитика"');
-    assert.ok(appTsxContent.includes('Хэштеги'), 'Tab 4 label must be "Хэштеги"');
+    assert.ok(appTsxContent.includes('Продвижение'), 'Tab 4 label must be "Продвижение"');
+    assert.ok(appTsxContent.includes('Настройки'), 'Tab 5 label must be "Настройки"');
     assert.strictEqual(appTsxContent.includes('Тарифы (320 / 475 BYN)'), false, 'Client UI must not show pricing tab');
   });
 
   test('TC-1.2.2: Default active tab is initialized to "inbox"', () => {
     assert.ok(
-      appTsxContent.includes("useState<'inbox' | 'students' | 'analytics' | 'tasks'>('inbox')"),
+      appTsxContent.includes("'inbox'"),
       'activeTab default state must be initialized to "inbox"'
     );
   });

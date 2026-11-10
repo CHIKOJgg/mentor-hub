@@ -164,7 +164,15 @@ export interface SystemSettings {
   zoomAutoDetectEnabled: boolean;
 }
 
-export type TabType = 'inbox' | 'students' | 'analytics' | 'tasks';
+export type TabType = 'inbox' | 'students' | 'analytics' | 'promotion' | 'settings' | 'tasks';
+
+export interface CheatsheetItem {
+  id: string;
+  title: string;
+  category: 'reels' | 'direct' | 'profile' | 'rules';
+  description: string;
+  content: string;
+}
 
 export const BEAUTY_NICHES = [
   'Бьюти-мастер (Маникюр / Брови)',

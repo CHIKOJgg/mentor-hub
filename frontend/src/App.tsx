@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { initialReports, studentDisciplines, taskRules, defaultSystemSettings } from './mockData';
-import { BEAUTY_NICHES, type DailyReport, type StudentDiscipline, type TabType, type ContentType, type TaskRule, type SystemSettings, type DayInfo, type ZoomSessionRecord } from './types';
+import { initialReports, studentDisciplines, taskRules, defaultSystemSettings, defaultCheatsheets } from './mockData';
+import { BEAUTY_NICHES, type DailyReport, type StudentDiscipline, type TabType, type ContentType, type TaskRule, type SystemSettings, type DayInfo, type ZoomSessionRecord, type CheatsheetItem } from './types';
 import type { ApiAdminSession, ApiCuratorScript, ApiDailyReport, ApiStudent, ApiSystemSettings, ApiTaskRule, ApiZoomSession } from './api/contracts';
 import { api, getAdminToken, saveAdminToken } from './api/client';
 import { readPersisted, writePersisted } from './persistence';
@@ -38,6 +38,11 @@ import {
   Save,
   Settings,
   Calendar,
+  Download,
+  Eye,
+  CheckCircle2,
+  History,
+  Sparkles,
 } from 'lucide-react';
 
 const createLocalId = (prefix: string): string => {
@@ -49,6 +54,10 @@ const createLocalId = (prefix: string): string => {
 
 const getTodayIsoDate = (): string => {
   return new Date().toISOString().slice(0, 10);
+};
+
+const getIsoTimestamp = (): string => {
+  return new Date().toISOString();
 };
 
 const calculateMultiplier = (current: number, initial: number): string => {
@@ -300,7 +309,11 @@ const getReportRange = (reports: DailyReport[], period: 'week' | 'month' | 'all'
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'inbox' | 'students' | 'analytics' | 'tasks'>('inbox');
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    const saved = readPersisted<TabType>('active-tab', 'inbox');
+    return saved === 'tasks' ? 'promotion' : saved;
+  });
+  const [inboxView, setInboxView] = useState<'pending' | 'approved'>('pending');
   const [reports, setReports] = useState<DailyReport[]>(() => readPersisted('reports', initialReports));
   const [allReports, setAllReports] = useState<DailyReport[]>(() => readPersisted('all-reports', initialReports));
   const [students, setStudents] = useState<StudentDiscipline[]>(() =>
@@ -325,11 +338,33 @@ export default function App() {
   const [analyticsPeriod, setAnalyticsPeriod] = useState<'week' | 'month' | 'all'>('all');
   const [rules, setRules] = useState<TaskRule[]>(() => readPersisted('task-rules', taskRules));
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(() => readPersisted('system-settings', defaultSystemSettings));
-  const [tasksSubTab, setTasksSubTab] = useState<'hashtags' | 'scripts' | 'system'>('hashtags');
+  const [promotionSubTab, setPromotionSubTab] = useState<'scripts' | 'cheatsheets' | 'hashtags'>('scripts');
   const [studentsFilter, setStudentsFilter] = useState<'all' | 'perfect' | 'attention' | 'pause' | 'zooms'>('all');
   const [studentsViewMode, setStudentsViewMode] = useState<'calendar' | 'zooms'>('calendar');
   const [selectedScriptCategory, setSelectedScriptCategory] = useState<string>('Все');
   const [curatorScripts, setCuratorScripts] = useState<ApiCuratorScript[]>(() => readPersisted('curator-scripts', defaultCuratorScripts));
+  const [cheatsheets, setCheatsheets] = useState<CheatsheetItem[]>(() => readPersisted('cheatsheets', defaultCheatsheets));
+  const [selectedCheatsheetCategory, setSelectedCheatsheetCategory] = useState<string>('Все');
+  const [isAddingCheatsheet, setIsAddingCheatsheet] = useState(false);
+  const [editingCheatsheet, setEditingCheatsheet] = useState<CheatsheetItem | null>(null);
+  const [newCheatsheet, setNewCheatsheet] = useState<{ title: string; category: CheatsheetItem['category']; description: string; content: string }>({
+    title: '',
+    category: 'reels',
+    description: '',
+    content: '',
+  });
+
+  const [inspectingStudent, setInspectingStudent] = useState<StudentDiscipline | null>(null);
+  const [inspectingTab, setInspectingTab] = useState<'profile' | 'reports' | 'zooms'>('profile');
+  const [managingZoomStudent, setManagingZoomStudent] = useState<StudentDiscipline | null>(null);
+  const [isAddingZoom, setIsAddingZoom] = useState(false);
+  const [zoomForm, setZoomForm] = useState({
+    title: 'Разбор офера и чека',
+    scheduledAt: '',
+    zoomUrl: 'https://us02web.zoom.us/j/',
+    meetingNotes: '',
+  });
+
   const [adminToken, setAdminToken] = useState(getAdminToken);
   const [adminTokenDraft, setAdminTokenDraft] = useState(getAdminToken);
   const [apiSession, setApiSession] = useState<ApiAdminSession | null>(null);
@@ -353,6 +388,7 @@ export default function App() {
   const [editingScheduleTime, setEditingScheduleTime] = useState<{ key: keyof SystemSettings; label: string; value: string } | null>(null);
 
   useEffect(() => {
+    writePersisted('active-tab', activeTab);
     writePersisted('reports', reports);
     writePersisted('all-reports', allReports);
     writePersisted('students', students);
@@ -363,8 +399,9 @@ export default function App() {
     writePersisted('task-rules', rules);
     writePersisted('system-settings', systemSettings);
     writePersisted('curator-scripts', curatorScripts);
+    writePersisted('cheatsheets', cheatsheets);
     writePersisted('pending-sync-domains', pendingSyncDomains);
-  }, [reports, allReports, students, replies, selectedStudentId, selectedStudent, activeAdmin, rules, systemSettings, curatorScripts, pendingSyncDomains]);
+  }, [activeTab, reports, allReports, students, replies, selectedStudentId, selectedStudent, activeAdmin, rules, systemSettings, curatorScripts, cheatsheets, pendingSyncDomains]);
 
   useEffect(() => {
     saveAdminToken(adminToken);
@@ -615,6 +652,169 @@ export default function App() {
       markLocalChange('students', localId);
     }
     showToast(`Ученица ${fullName} сохранена локально`);
+  };
+
+  const deleteStudent = async (studentId: string, fullName: string) => {
+    if (!window.confirm(`Удалить ученицу «${fullName}» из списка потока?`)) return;
+    setStudents(prev => prev.filter(s => s.id !== studentId));
+    if (editingStudent?.id === studentId) setEditingStudent(null);
+    if (inspectingStudent?.id === studentId) setInspectingStudent(null);
+    if (managingZoomStudent?.id === studentId) setManagingZoomStudent(null);
+    if (apiConnection === 'connected' && !studentId.startsWith('local-')) {
+      try {
+        await api.deleteStudent(studentId);
+        clearLocalChange('students', studentId);
+        showToast(`Ученица ${fullName} удалена с сервера`);
+        return;
+      } catch {
+        markLocalChange('students', studentId);
+        setApiConnectionMessage('Ученица удалена локально; сервер пока недоступен');
+      }
+    } else {
+      markLocalChange('students', studentId);
+    }
+    showToast(`Ученица ${fullName} удалена`);
+  };
+
+  const addZoomSessionToStudent = async (studentId: string) => {
+    const targetStudent = students.find(s => s.id === studentId);
+    if (!targetStudent) return;
+    const existing = targetStudent.zoomSessions ?? [];
+    const nextCallNumber = existing.length + 1;
+    const newSession: ZoomSessionRecord = {
+      callNumber: nextCallNumber,
+      title: zoomForm.title.trim() || `Консультация #${nextCallNumber}`,
+      date: zoomForm.scheduledAt.trim() || getTodayIsoDate(),
+      isCompleted: false,
+      zoomLink: zoomForm.zoomUrl.trim() || undefined,
+      keyTakeaway: zoomForm.meetingNotes.trim() || undefined,
+    };
+    const updatedSessions = [...existing, newSession];
+    const updatedStudent = withZoomSessionSummary(targetStudent, updatedSessions);
+    setStudents(prev => prev.map(s => s.id === studentId ? updatedStudent : s));
+    if (managingZoomStudent?.id === studentId) setManagingZoomStudent(updatedStudent);
+    if (inspectingStudent?.id === studentId) setInspectingStudent(updatedStudent);
+    setIsAddingZoom(false);
+    setZoomForm({ title: 'Разбор офера и чека', scheduledAt: '', zoomUrl: 'https://us02web.zoom.us/j/', meetingNotes: '' });
+
+    if (apiConnection === 'connected' && !studentId.startsWith('local-')) {
+      try {
+        await api.replaceStudentZoomSessions(studentId, updatedSessions);
+        showToast('Созвон сохранен на сервере');
+        return;
+      } catch {
+        markLocalChange('students', `${studentId}:zooms`);
+      }
+    } else {
+      markLocalChange('students', `${studentId}:zooms`);
+    }
+    showToast('Созвон добавлен');
+  };
+
+  const toggleZoomSessionCompleted = async (studentId: string, callNumber: number) => {
+    const targetStudent = students.find(s => s.id === studentId);
+    if (!targetStudent) return;
+    const existing = targetStudent.zoomSessions ?? [];
+    const updatedSessions = existing.map(sess =>
+      sess.callNumber === callNumber
+        ? { ...sess, isCompleted: !sess.isCompleted }
+        : sess,
+    );
+    const updatedStudent = withZoomSessionSummary(targetStudent, updatedSessions);
+    setStudents(prev => prev.map(s => s.id === studentId ? updatedStudent : s));
+    if (managingZoomStudent?.id === studentId) setManagingZoomStudent(updatedStudent);
+    if (inspectingStudent?.id === studentId) setInspectingStudent(updatedStudent);
+
+    if (apiConnection === 'connected' && !studentId.startsWith('local-')) {
+      try {
+        await api.replaceStudentZoomSessions(studentId, updatedSessions);
+        showToast('Статус созвона обновлен на сервере');
+        return;
+      } catch {
+        markLocalChange('students', `${studentId}:zooms`);
+      }
+    } else {
+      markLocalChange('students', `${studentId}:zooms`);
+    }
+    showToast('Статус созвона обновлен');
+  };
+
+  const addCheatsheet = () => {
+    if (!newCheatsheet.title.trim() || !newCheatsheet.content.trim()) {
+      showToast('Укажите заголовок и содержание шпаргалки');
+      return;
+    }
+    const item: CheatsheetItem = {
+      id: createLocalId('cheat'),
+      title: newCheatsheet.title.trim(),
+      category: newCheatsheet.category,
+      description: newCheatsheet.description.trim(),
+      content: newCheatsheet.content.trim(),
+    };
+    setCheatsheets(prev => [...prev, item]);
+    setNewCheatsheet({ title: '', category: 'reels', description: '', content: '' });
+    setIsAddingCheatsheet(false);
+    showToast(`Шпаргалка «${item.title}» добавлена`);
+  };
+
+  const saveCheatsheet = (updated: CheatsheetItem) => {
+    setCheatsheets(prev => prev.map(c => c.id === updated.id ? updated : c));
+    setEditingCheatsheet(null);
+    showToast(`Шпаргалка «${updated.title}» сохранена`);
+  };
+
+  const deleteCheatsheet = (id: string, title: string) => {
+    if (!window.confirm(`Удалить шпаргалку «${title}»?`)) return;
+    setCheatsheets(prev => prev.filter(c => c.id !== id));
+    showToast(`Шпаргалка «${title}» удалена`);
+  };
+
+  const copyCheatsheetToClipboard = (content: string, title: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(content).then(() => {
+        showToast(`Текст шпаргалки «${title}» скопирован!`);
+      }).catch(() => {
+        showToast(`Скопировано: ${title}`);
+      });
+    } else {
+      showToast(`Скопировано: ${title}`);
+    }
+  };
+
+  const exportFullBackup = () => {
+    const data = {
+      version: '2.0',
+      exportedAt: getIsoTimestamp(),
+      students,
+      reports: allReports,
+      taskRules: rules,
+      curatorScripts,
+      cheatsheets,
+      systemSettings,
+    };
+    const jsonStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mentor-hub-backup-${getTodayIsoDate()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Резервная копия базы (JSON) успешно скачана');
+  };
+
+  const copyMagicLink = (role: 'ksenia' | 'katya') => {
+    const token = role === 'ksenia' ? 'magic-ksenia-mentor-token-998877' : 'magic-katya-curator-token-112233';
+    const link = `${window.location.origin}/?token=${token}`;
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(link).then(() => {
+        showToast(`Ссылка для ${role === 'ksenia' ? 'Ксении' : 'Кати'} скопирована!`);
+      }).catch(() => {
+        showToast(`Токен: ${token}`);
+      });
+    } else {
+      showToast(`Токен: ${token}`);
+    }
   };
 
   const saveScript = async (index: number, scriptData: { title: string; description: string; text: string }) => {
@@ -1208,11 +1408,17 @@ export default function App() {
     return true;
   });
 
+  const approvedReports = useMemo(
+    () => allReports.filter(r => r.status === 'APPROVED'),
+    [allReports],
+  );
+
   const tabs: { id: TabType; label: string; icon: typeof Inbox; count?: number }[] = [
     { id: 'inbox', label: 'На проверку', icon: Inbox, count: reports.length },
     { id: 'students', label: 'Ученицы', icon: Users },
     { id: 'analytics', label: 'Аналитика', icon: BarChart3 },
-    { id: 'tasks', label: 'Хэштеги', icon: Hash },
+    { id: 'promotion', label: 'Продвижение', icon: BookOpen },
+    { id: 'settings', label: 'Настройки', icon: Settings },
   ];
 
   const periodReports = getReportRange(allReports, analyticsPeriod);
@@ -1438,20 +1644,50 @@ export default function App() {
             {/* ════════════ TAB: INBOX ════════════ */}
                 {activeTab === 'inbox' && (
               <div>
-                <div className="mb-8 flex items-center justify-between">
+                <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">На проверку</h2>
+                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Проверка отчётов</h2>
                     <p id="inbox-subtitle" className="text-sm sm:text-base text-slate-500 mt-1">
-                      {reports.length > 0
-                        ? `${reports.length} ${reports.length === 1 ? 'черновик ожидает' : 'черновика ожидают'} проверки`
-                        : 'Все отчёты проверены'
+                      {inboxView === 'pending'
+                        ? (reports.length > 0
+                            ? `${reports.length} ${reports.length === 1 ? 'черновик ожидает' : 'черновика ожидают'} проверки`
+                            : 'Все отчёты проверены')
+                        : `Архив проверенных отчётов: ${approvedReports.length} ${approvedReports.length === 1 ? 'отчёт' : 'отчётов'}`
                       }
                     </p>
                   </div>
+
+                  <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200/60 rounded-xl self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setInboxView('pending')}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        inboxView === 'pending'
+                          ? 'bg-slate-900 text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>На проверку ({reports.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInboxView('approved')}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        inboxView === 'approved'
+                          ? 'bg-slate-900 text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>Проверенные ({approvedReports.length})</span>
+                    </button>
+                  </div>
                 </div>
 
-                {reports.length === 0 ? (
-                  <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/60 p-8">
+                {inboxView === 'pending' ? (
+                  reports.length === 0 ? (
+                    <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/60 p-8">
                     <CheckCheck className="w-8 h-8 text-slate-400 mx-auto mb-3" strokeWidth={1.5} />
                     <p className="text-lg font-bold text-slate-800">Все черновики проверены</p>
                     <p className="text-sm text-slate-500 mt-1">Всё проверено. Ученицы получили обратную связь в чатах.</p>
@@ -1641,6 +1877,82 @@ export default function App() {
                       </div>
                     ))}
                   </div>
+                )) : (
+                  approvedReports.length === 0 ? (
+                    <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/60 p-8">
+                      <History className="w-8 h-8 text-slate-400 mx-auto mb-3" strokeWidth={1.5} />
+                      <p className="text-lg font-bold text-slate-800">Архив проверенных отчётов пуст</p>
+                      <p className="text-sm text-slate-500 mt-1">Одобренные отчёты с комментариями наставника будут сохраняться здесь.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {approvedReports.map(r => (
+                        <div key={`approved-${r.id}`} className="bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
+                          {/* Header */}
+                          <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
+                            <div className="flex items-center gap-3.5">
+                              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold shrink-0">
+                                {r.avatarText}
+                              </div>
+                              <div>
+                                <div className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                  <span>{r.studentName}</span>
+                                  <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    Одобрено
+                                  </span>
+                                </div>
+                                <div className="text-xs text-slate-500 mt-0.5">
+                                  @{r.tgUsername} · Сдано: {r.submittedAt} · Отчёт за {r.reportDate}
+                                </div>
+                              </div>
+                            </div>
+                            <span className="text-xs font-bold text-slate-700 bg-white px-3 py-1 rounded-lg border border-slate-200">
+                              {r.tariff}
+                            </span>
+                          </div>
+
+                          <div className="p-6 space-y-4">
+                            {/* Drafts */}
+                            {r.contentDrafts && r.contentDrafts.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {r.contentDrafts.map((draft, idx) => (
+                                  <div key={idx} className="inline-flex items-center gap-2 text-xs bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
+                                    <Video className="w-3.5 h-3.5 text-indigo-500" />
+                                    <span className="font-medium text-slate-700">{draft.label}</span>
+                                    {draft.url && (
+                                      <a href={draft.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+                                        <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Stats */}
+                            <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-700 bg-slate-50/60 p-3 rounded-xl border border-slate-100">
+                              <span>Продажи: <strong className="text-emerald-700 text-sm">{r.salesAmount.toLocaleString('ru-RU')} ₽</strong></span>
+                              <span>·</span>
+                              <span>Рассылки: <strong>{r.mailingsCount} шт</strong></span>
+                              <span>·</span>
+                              <span>Новые клиенты: <strong className="text-indigo-700">+{r.newClientsCount}</strong></span>
+                            </div>
+
+                            {/* Mentor Reply Callout */}
+                            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200/70">
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900 uppercase tracking-wider mb-1.5">
+                                <CheckCheck className="w-4 h-4 text-emerald-600" />
+                                <span>Ответ наставника (отправлен в Telegram):</span>
+                              </div>
+                              <p className="text-sm text-emerald-950 font-medium whitespace-pre-line leading-relaxed">
+                                {r.mentorReply || 'Отчёт принят и зачтён в общий прогресс'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
                 )}
               </div>
             )}
@@ -1809,8 +2121,26 @@ export default function App() {
                                       {s.avatarText}
                                     </div>
                                     <div>
-                                      <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
                                         <span className="text-base font-bold text-slate-900">{s.fullName}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => { setInspectingStudent(s); setInspectingTab('profile'); }}
+                                          title="Открыть личное дело и историю отчётов"
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+                                        >
+                                          <Eye className="w-3 h-3 text-indigo-600" />
+                                          <span>Досье</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setManagingZoomStudent(s)}
+                                          title="Управление Zoom-созвонами и записями"
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition cursor-pointer"
+                                        >
+                                          <Video className="w-3 h-3 text-indigo-600" />
+                                          <span>Созвоны</span>
+                                        </button>
                                         <button
                                           type="button"
                                           onClick={() => setEditingStudent(s)}
@@ -1818,6 +2148,14 @@ export default function App() {
                                           className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
                                         >
                                           <Pencil className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => void deleteStudent(s.id, s.fullName)}
+                                          title="Удалить ученицу"
+                                          className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
                                         </button>
                                         {s.telegram && (
                                           <button
@@ -2536,14 +2874,14 @@ export default function App() {
               </div>
             )}
 
-            {/* ════════════ TAB: TASKS / RULES & SETTINGS ════════════ */}
-            {activeTab === 'tasks' && (
+            {/* ════════════ TAB: PROMOTION (SCRIPTS, CHEATSHEETS, HASHTAGS) ════════════ */}
+            {(activeTab === 'promotion' || activeTab === 'tasks') && (
               <div>
                 {/* Header: Title & Actions */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                   <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Хэштеги и Регламент</h2>
-                    <p className="text-sm sm:text-base text-slate-500 mt-1">Правила сдачи отчётов в рабочих чатах наставничества</p>
+                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Продвижение и база знаний</h2>
+                    <p className="text-sm sm:text-base text-slate-500 mt-1">Скрипты продаж, шпаргалки для учениц и хэштеги с регламентом сдачи</p>
                   </div>
 
                   <div className="flex items-center gap-2.5 self-start sm:self-auto">
@@ -2557,20 +2895,7 @@ export default function App() {
                       <span>{isApiSyncing ? 'Синхронизация…' : 'Синхронизировать'}</span>
                     </button>
 
-                    {tasksSubTab === 'hashtags' && (
-                      <button
-                        onClick={() => {
-                          setNewRule({ hashtag: '#', title: '', description: '', required: false, example: '' });
-                          setIsAddingRule(true);
-                        }}
-                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Добавить хэштег</span>
-                      </button>
-                    )}
-
-                    {tasksSubTab === 'scripts' && (
+                    {promotionSubTab === 'scripts' && (
                       <button
                         onClick={() => {
                           setEditingScript(null);
@@ -2583,128 +2908,75 @@ export default function App() {
                         <span>Добавить скрипт</span>
                       </button>
                     )}
+
+                    {promotionSubTab === 'cheatsheets' && (
+                      <button
+                        onClick={() => {
+                          setEditingCheatsheet(null);
+                          setNewCheatsheet({ title: '', category: 'reels', description: '', content: '' });
+                          setIsAddingCheatsheet(true);
+                        }}
+                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Добавить шпаргалку</span>
+                      </button>
+                    )}
+
+                    {promotionSubTab === 'hashtags' && (
+                      <button
+                        onClick={() => {
+                          setNewRule({ hashtag: '#', title: '', description: '', required: false, example: '' });
+                          setIsAddingRule(true);
+                        }}
+                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Добавить хэштег</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* Subtab Segmented Bar (Full width, zero wrapping) */}
+                {/* Subtab Segmented Bar */}
                 <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200/60 rounded-xl mb-7 overflow-x-auto">
                   <button
-                    onClick={() => setTasksSubTab('hashtags')}
+                    onClick={() => setPromotionSubTab('scripts')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
-                      tasksSubTab === 'hashtags'
-                        ? 'bg-slate-900 text-white '
+                      promotionSubTab === 'scripts'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Скрипты продаж ({curatorScripts.length})</span>
+                  </button>
+                  <button
+                    onClick={() => setPromotionSubTab('cheatsheets')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
+                      promotionSubTab === 'cheatsheets'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Шпаргалки для учениц ({cheatsheets.length})</span>
+                  </button>
+                  <button
+                    onClick={() => setPromotionSubTab('hashtags')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
+                      promotionSubTab === 'hashtags'
+                        ? 'bg-slate-900 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
                     <Hash className="w-3.5 h-3.5" />
                     <span>Хэштеги ({rules.filter(r => r.enabled !== false).length}/{rules.length})</span>
                   </button>
-                  <button
-                    onClick={() => setTasksSubTab('scripts')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
-                      tasksSubTab === 'scripts'
-                        ? 'bg-slate-900 text-white '
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span>Скрипты & Шпаргалки ({curatorScripts.length})</span>
-                  </button>
-                  <button
-                    onClick={() => setTasksSubTab('system')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
-                      tasksSubTab === 'system'
-                        ? 'bg-slate-900 text-white '
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                    <span>Системные настройки бота</span>
-                  </button>
                 </div>
 
-                {/* SUBTAB 1: HASHTAGS & TASK RULES (Behance Clean Minimal) */}
-                {tasksSubTab === 'hashtags' && (
-                  <div className="space-y-4">
-                    <div className="space-y-3">
-                      {rules.map(rule => (
-                        <div
-                          key={rule.id}
-                          className={`bg-white rounded-2xl border border-slate-100 p-6 sm:p-7 space-y-3.5 transition group hover:border-slate-200 ${
-                            rule.enabled === false ? 'opacity-60 bg-slate-50/50' : ''
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <code className="text-base font-bold text-slate-900 font-mono tracking-tight">{rule.hashtag}</code>
-                              {rule.enabled === false && (
-                                <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
-                                  выключен в боте
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              {/* Hover quick action buttons: Pencil, Trash & Toggle Switch (hidden in resting state) */}
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 mr-1">
-                                <button
-                                  onClick={() => setEditingRule(rule)}
-                                  title="Редактировать регламент хэштега"
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                   onClick={() => void deleteRule(rule.id, rule.hashtag)}
-                                  title="Удалить хэштег"
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => toggleRuleEnabled(rule.id)}
-                                  title={rule.enabled !== false ? 'Выключить приём хэштега в Telegram-боте' : 'Включить приём хэштега'}
-                                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ml-1 ${
-                                    rule.enabled !== false ? 'bg-indigo-600' : 'bg-slate-200'
-                                  }`}
-                                >
-                                  <span
-                                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
-                                      rule.enabled !== false ? 'translate-x-4' : 'translate-x-0'
-                                    }`}
-                                  />
-                                </button>
-                              </div>
-
-                              {/* Required / Optional pill badge - ALWAYS VISIBLE, 100% matches Behance design */}
-                              <button
-                                onClick={() => toggleRuleRequired(rule.id)}
-                                title="Нажмите для смены статуса (обязательно / по факту)"
-                                className={`text-xs px-3 py-1 rounded-full font-medium transition cursor-pointer select-none ${
-                                  rule.required
-                                    ? 'bg-rose-50 text-rose-500 hover:bg-rose-100/80'
-                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200/70'
-                                }`}
-                              >
-                                {rule.required ? 'обязательно' : 'по факту'}
-                              </button>
-                            </div>
-                          </div>
-
-                          <p className="text-sm text-slate-500 leading-relaxed font-normal">{rule.description}</p>
-
-                          <div className="text-xs sm:text-sm text-slate-500 font-mono bg-[#F8FAFC] border border-slate-100/80 rounded-xl px-5 py-3.5 flex items-center gap-2">
-                            <span className="text-slate-400 font-normal">Пример:</span>
-                            <span className="text-slate-800 font-semibold">{rule.example}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* SUBTAB 2: CURATOR SCRIPTS PLAYBOOK */}
-                {tasksSubTab === 'scripts' && (
+                {/* SUBTAB 1: SCRIPTS */}
+                {promotionSubTab === 'scripts' && (
                   <div className="space-y-4">
                     {/* Category Filter Bar */}
                     <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/60">
@@ -2796,287 +3068,637 @@ export default function App() {
                   </div>
                 )}
 
-                {/* SUBTAB 3: SYSTEM SETTINGS & BOT SCHEDULE */}
-                {tasksSubTab === 'system' && (
-                  <div className="space-y-6">
-                    <section className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4" aria-labelledby="server-connection-title">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <h3 id="server-connection-title" className="text-base font-bold text-slate-900">Подключение и сохранение</h3>
-                          <p className="mt-1 text-xs text-slate-500">При доступном сервере данные синхронизируются с базой. При сбое сохраняется локальная копия.</p>
-                        </div>
-                        <span className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
-                          {apiConnection === 'connected' ? 'Подключено' : apiConnection === 'checking' ? 'Проверка' : apiConnection === 'needs-token' ? 'Нужен токен' : apiConnection === 'unauthorized' ? 'Нет доступа' : 'Локальный режим'}
-                        </span>
-                      </div>
-                      <p className="text-sm text-slate-600" role="status">{apiConnectionMessage}</p>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <input
-                          type="password"
-                          value={adminTokenDraft}
-                          onChange={event => setAdminTokenDraft(event.target.value)}
-                          autoComplete="new-password"
-                          aria-label="Токен администратора"
-                          placeholder="Токен администратора"
-                          className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAdminToken(adminTokenDraft.trim());
-                            showToast(adminTokenDraft.trim() ? 'Проверяем токен администратора' : 'Включен локальный режим');
-                          }}
-                          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                        >
-                          Подключить
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAdminTokenDraft('');
-                            setAdminToken('');
-                          }}
-                          disabled={Boolean(import.meta.env.VITE_ADMIN_TOKEN)}
-                          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
-                        >
-                          Локально
-                        </button>
-                      </div>
-                    </section>
-
-                    {/* Schedule & Deadlines Card */}
-                    <div className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 hover:border-slate-300 transition">
-                      <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                        <Clock className="w-5 h-5 text-indigo-600" />
-                        <div>
-                          <h3 className="text-base font-bold text-slate-900">Расписание и дедлайны бота</h3>
-                          <p className="text-xs text-slate-500">Автоматические триггеры рассылок, напоминаний и выходных (нажмите на время для изменения)</p>
-                        </div>
-                      </div>
-
-                      <div className="divide-y divide-slate-100">
-                        {/* Setting 1: Morning Push */}
-                        <div className="py-3.5 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900">Утренний мотивационный пуш ({systemSettings.morningPushTime})</div>
-                            <div className="text-xs text-slate-500">Бот отправляет напоминание о фокусе дня в мини-группы учениц (Пн-Сб)</div>
-                          </div>
-                          <div className="flex items-center gap-2.5">
-                            <button
-                              onClick={() => setEditingScheduleTime({ key: 'morningPushTime', label: 'Утренний мотивационный пуш', value: systemSettings.morningPushTime })}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-mono font-semibold text-slate-700 transition cursor-pointer"
-                              title="Нажмите для изменения времени пуша"
-                            >
-                              <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                              <span>{systemSettings.morningPushTime}</span>
-                              <Pencil className="w-2.5 h-2.5 text-slate-400" />
-                            </button>
-                            <button
-                              onClick={() => toggleSystemSetting('morningPushEnabled', `Утренний пуш в ${systemSettings.morningPushTime}`)}
-                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                systemSettings.morningPushEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                              }`}
-                            >
-                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
-                                systemSettings.morningPushEnabled ? 'translate-x-4' : 'translate-x-0'
-                              }`} />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Setting 2: Evening Reminder */}
-                        <div className="py-3.5 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900">Вечернее напоминание должникам ({systemSettings.eveningReminderTime})</div>
-                            <div className="text-xs text-slate-500">Автопуш тем, кто еще не сдал отчёт за 1 час до дедлайна</div>
-                          </div>
-                          <div className="flex items-center gap-2.5">
-                            <button
-                              onClick={() => setEditingScheduleTime({ key: 'eveningReminderTime', label: 'Вечернее напоминание', value: systemSettings.eveningReminderTime })}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-mono font-semibold text-slate-700 transition cursor-pointer"
-                              title="Нажмите для изменения времени напоминания"
-                            >
-                              <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                              <span>{systemSettings.eveningReminderTime}</span>
-                              <Pencil className="w-2.5 h-2.5 text-slate-400" />
-                            </button>
-                            <button
-                              onClick={() => toggleSystemSetting('eveningReminderEnabled', `Вечернее напоминание в ${systemSettings.eveningReminderTime}`)}
-                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                systemSettings.eveningReminderEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                              }`}
-                            >
-                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
-                                systemSettings.eveningReminderEnabled ? 'translate-x-4' : 'translate-x-0'
-                              }`} />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Setting 3: Daily Deadline */}
-                        <div className="py-3.5 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900">Строгий дедлайн сдачи ({systemSettings.dailyDeadlineTime})</div>
-                            <div className="text-xs text-slate-500">Фиксация опозданий и пропусков в календаре дисциплины наставника</div>
-                          </div>
-                          <div className="flex items-center gap-2.5">
-                            <button
-                              onClick={() => setEditingScheduleTime({ key: 'dailyDeadlineTime', label: 'Дедлайн сдачи отчётов', value: systemSettings.dailyDeadlineTime })}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-mono font-semibold text-slate-700 transition cursor-pointer"
-                              title="Нажмите для изменения времени дедлайна"
-                            >
-                              <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                              <span>{systemSettings.dailyDeadlineTime}</span>
-                              <Pencil className="w-2.5 h-2.5 text-slate-400" />
-                            </button>
-                            <button
-                              onClick={() => toggleSystemSetting('strictDeadlineEnabled', 'Режим строгого дедлайна')}
-                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                systemSettings.strictDeadlineEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                              }`}
-                            >
-                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
-                                systemSettings.strictDeadlineEnabled ? 'translate-x-4' : 'translate-x-0'
-                              }`} />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Setting 4: Saturday Survey */}
-                        <div className="py-3.5 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900">Субботний срез по выручке ({systemSettings.saturdayPollTime})</div>
-                            <div className="text-xs text-slate-500">Еженедельный опрос бота по факту продаж и рассылок за 6 рабочих дней</div>
-                          </div>
-                          <div className="flex items-center gap-2.5">
-                            <button
-                              onClick={() => setEditingScheduleTime({ key: 'saturdayPollTime', label: 'Субботний срез по выручке', value: systemSettings.saturdayPollTime })}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-mono font-semibold text-slate-700 transition cursor-pointer"
-                              title="Нажмите для изменения времени субботнего среза"
-                            >
-                              <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                              <span>{systemSettings.saturdayPollTime}</span>
-                              <Pencil className="w-2.5 h-2.5 text-slate-400" />
-                            </button>
-                            <button
-                              onClick={() => toggleSystemSetting('saturdayPollEnabled', `Субботний срез в ${systemSettings.saturdayPollTime}`)}
-                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                systemSettings.saturdayPollEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                              }`}
-                            >
-                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
-                                systemSettings.saturdayPollEnabled ? 'translate-x-4' : 'translate-x-0'
-                              }`} />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Setting 5: Sunday Rest */}
-                        <div className="py-3.5 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900">Воскресенье — выходной (стрики не сгорают)</div>
-                            <div className="text-xs text-slate-500">Бот отключает дедлайны в воскресенье и напоминает ученицам восстановить силы</div>
-                          </div>
+                {/* SUBTAB 2: CHEATSHEETS */}
+                {promotionSubTab === 'cheatsheets' && (
+                  <div className="space-y-4">
+                    {/* Category Filter Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/60">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {[
+                          { id: 'Все', label: 'Все шпаргалки' },
+                          { id: 'reels', label: 'Reels и контент' },
+                          { id: 'direct', label: 'Продажи в Direct' },
+                          { id: 'profile', label: 'Упаковка профиля' },
+                          { id: 'rules', label: 'Регламент' },
+                        ].map(cat => (
                           <button
-                            onClick={() => toggleSystemSetting('sundayRestEnabled', 'Режим отдыха в воскресенье')}
-                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                              systemSettings.sundayRestEnabled ? 'bg-indigo-600' : 'bg-slate-200'
+                            key={cat.id}
+                            onClick={() => setSelectedCheatsheetCategory(cat.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                              selectedCheatsheetCategory === cat.id
+                                ? 'bg-slate-900 text-white'
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                             }`}
                           >
-                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
-                              systemSettings.sundayRestEnabled ? 'translate-x-4' : 'translate-x-0'
-                            }`} />
+                            {cat.label}
                           </button>
-                        </div>
+                        ))}
                       </div>
+                      <span className="text-xs text-slate-400">Готовые регламенты и материалы для отправки ученицам в чат</span>
                     </div>
 
-                    {/* Message processing and integrity controls */}
-                    <div className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 hover:border-slate-300 transition">
-                      <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                        <ShieldCheck className="w-5 h-5 text-indigo-600" />
-                        <div>
-                          <h3 className="text-base font-bold text-slate-900">Обработка сообщений и контроль данных</h3>
-                          <p className="text-xs text-slate-500">Расшифровка голосовых сообщений, сводки и проверка повторов</p>
-                        </div>
-                      </div>
-
-                      <div className="divide-y divide-slate-100">
-                        {/* Setting 6: Voice transcription */}
-                        <div className="py-3.5 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900">Расшифровка голосовых сообщений</div>
-                            <div className="text-xs text-slate-500">Преобразование аудио учениц в текст для наставника</div>
-                          </div>
-                          <button
-                              onClick={() => toggleSystemSetting('aiWhisperEnabled', 'Расшифровка голосовых')}
-                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                              systemSettings.aiWhisperEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                            }`}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {cheatsheets
+                        .filter(sheet => selectedCheatsheetCategory === 'Все' || sheet.category === selectedCheatsheetCategory)
+                        .map(sheet => (
+                          <div
+                            key={sheet.id}
+                            className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 flex flex-col justify-between hover:border-slate-300 transition group"
                           >
-                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
-                              systemSettings.aiWhisperEnabled ? 'translate-x-4' : 'translate-x-0'
-                            }`} />
-                          </button>
-                        </div>
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-md border ${
+                                  sheet.category === 'reels'
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                    : sheet.category === 'direct'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : sheet.category === 'profile'
+                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                                }`}>
+                                  {sheet.category === 'reels' ? 'Reels' : sheet.category === 'direct' ? 'Продажи' : sheet.category === 'profile' ? 'Упаковка' : 'Регламент'}
+                                </span>
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                                  <button
+                                    onClick={() => setEditingCheatsheet(sheet)}
+                                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                                    title="Редактировать шпаргалку"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => deleteCheatsheet(sheet.id, sheet.title)}
+                                    className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                    title="Удалить шпаргалку"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                              <h3 className="text-base font-bold text-slate-900 leading-snug">{sheet.title}</h3>
+                              <p className="text-xs text-slate-500 leading-relaxed">{sheet.description}</p>
+                            </div>
 
-                        {/* Setting 7: Reflection summary */}
-                        <div className="py-3.5 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900">Сводка рефлексии (эмоции, действия, вопрос наставнику)</div>
-                            <div className="text-xs text-slate-500">Формирует 3 главных тезиса из длинных сообщений учениц в ленту «На проверку»</div>
-                          </div>
-                          <button
-                              onClick={() => toggleSystemSetting('aiSummaryEnabled', 'Сводка рефлексии')}
-                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                              systemSettings.aiSummaryEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                            }`}
-                          >
-                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
-                              systemSettings.aiSummaryEnabled ? 'translate-x-4' : 'translate-x-0'
-                            }`} />
-                          </button>
-                        </div>
+                            <div className="text-xs text-slate-700 bg-slate-50/70 border border-slate-100 rounded-xl p-3.5 font-mono leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+                              {sheet.content}
+                            </div>
 
-                        {/* Setting 8: Anti-Fraud Reels Deduplication */}
-                        <div className="py-3.5 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900">Защита от повторной сдачи старых Reels (Анти-фрод)</div>
-                            <div className="text-xs text-slate-500">Автоматическая проверка ссылок на Instagram Reels по базе за 60 дней и подсветка дубликатов</div>
+                            <div className="pt-3 flex items-center justify-between gap-2 border-t border-slate-100">
+                              <span className="text-xs text-slate-400">Формат Telegram</span>
+                              <button
+                                onClick={() => copyCheatsheetToClipboard(sheet.content, sheet.title)}
+                                className="px-3.5 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                                <span>Скопировать для чата</span>
+                              </button>
+                            </div>
                           </div>
-                          <button
-                            onClick={() => toggleSystemSetting('antiFraudDedupEnabled', 'Анти-фрод дедупликация Reels')}
-                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                              systemSettings.antiFraudDedupEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                            }`}
-                          >
-                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
-                              systemSettings.antiFraudDedupEnabled ? 'translate-x-4' : 'translate-x-0'
-                            }`} />
-                          </button>
-                        </div>
-
-                        {/* Setting 9: Zoom Auto Detect */}
-                        <div className="py-3.5 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900">Авто-определение Zoom-созвонов и синхронизация календаря</div>
-                            <div className="text-xs text-slate-500">Автоматический учёт проведённых этапов наставничества при загрузке ссылки на запись</div>
-                          </div>
-                          <button
-                            onClick={() => toggleSystemSetting('zoomAutoDetectEnabled', 'Авто-определение Zoom-созвонов')}
-                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                              systemSettings.zoomAutoDetectEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                            }`}
-                          >
-                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white  transition duration-200 ease-in-out ${
-                              systemSettings.zoomAutoDetectEnabled ? 'translate-x-4' : 'translate-x-0'
-                            }`} />
-                          </button>
-                        </div>
-                      </div>
+                        ))}
                     </div>
                   </div>
                 )}
+
+                {/* SUBTAB 3: HASHTAGS & RULES */}
+                {promotionSubTab === 'hashtags' && (
+                  <div className="space-y-4">
+                    <div className="space-y-3">
+                      {rules.map(rule => (
+                        <div
+                          key={rule.id}
+                          className={`bg-white rounded-2xl border border-slate-100 p-6 sm:p-7 space-y-3.5 transition group hover:border-slate-200 ${
+                            rule.enabled === false ? 'opacity-60 bg-slate-50/50' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <code className="text-base font-bold text-slate-900 font-mono tracking-tight">{rule.hashtag}</code>
+                              {rule.enabled === false && (
+                                <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
+                                  выключен в боте
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {/* Hover quick action buttons */}
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 mr-1">
+                                <button
+                                  onClick={() => setEditingRule(rule)}
+                                  title="Редактировать регламент хэштега"
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => void deleteRule(rule.id, rule.hashtag)}
+                                  title="Удалить хэштег"
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <button
+                                onClick={() => void toggleRuleEnabled(rule.id)}
+                                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                  rule.enabled !== false ? 'bg-indigo-600' : 'bg-slate-200'
+                                }`}
+                              >
+                                <span
+                                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                    rule.enabled !== false ? 'translate-x-4' : 'translate-x-0'
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-bold text-slate-900">{rule.title}</span>
+                              <button
+                                type="button"
+                                onClick={() => toggleRuleRequired(rule.id)}
+                                title="Нажмите для переключения: обязательный / опциональный"
+                                className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md cursor-pointer transition ${
+                                  rule.required ? 'bg-rose-50 text-rose-700 hover:bg-rose-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                              >
+                                {rule.required ? 'Обязательный' : 'Опциональный'}
+                              </button>
+                            </div>
+                            <p className="text-xs text-slate-500">{rule.description}</p>
+                          </div>
+
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                              Пример сдачи в чат:
+                            </span>
+                            <code className="text-xs text-slate-700 font-mono block whitespace-pre-wrap">
+                              {rule.example}
+                            </code>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ════════════ TAB: SETTINGS ════════════ */}
+            {activeTab === 'settings' && (
+              <div className="space-y-6">
+                {/* Header: Title & Actions */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Настройки</h2>
+                    <p className="text-sm sm:text-base text-slate-500 mt-1">Дедлайны сдачи, Telegram-бот, доступы и бэкапы данных</p>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 self-start sm:self-auto">
+                    <button
+                      onClick={() => void handleApiSync()}
+                      disabled={isApiSyncing}
+                      className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5"
+                      title="Синхронизировать данные с сервером и Telegram"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{isApiSyncing ? 'Синхронизация…' : 'Синхронизировать'}</span>
+                    </button>
+                    <button
+                      onClick={exportFullBackup}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
+                      title="Скачать полную резервную копию базы"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Скачать бэкап (JSON)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Deadlines Selector Card */}
+                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 hover:border-slate-300 transition">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5">
+                      <Clock className="w-5 h-5 text-indigo-600" />
+                      <div>
+                        <h3 className="text-base font-bold text-slate-900">Дедлайн сдачи отчётов</h3>
+                        <p className="text-xs text-slate-500">Текущий дедлайн: <strong className="text-indigo-600 font-mono text-sm">{systemSettings.dailyDeadlineTime}</strong> по МСК</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {['20:00', '21:00', '22:00', '23:00'].map(t => (
+                        <button
+                          key={t}
+                          onClick={() => updateScheduleTime('dailyDeadlineTime', t, 'Дедлайн сдачи')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
+                            systemSettings.dailyDeadlineTime === t
+                              ? 'bg-slate-900 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Detailed Schedule Items */}
+                  <div className="divide-y divide-slate-100">
+                    {/* Setting 1: Morning Push */}
+                    <div className="py-3.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Утренний мотивационный пуш ({systemSettings.morningPushTime})</div>
+                        <div className="text-xs text-slate-500">Бот отправляет напоминание о фокусе дня в мини-группы учениц (Пн-Сб)</div>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          onClick={() => setEditingScheduleTime({ key: 'morningPushTime', label: 'Утренний мотивационный пуш', value: systemSettings.morningPushTime })}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-mono font-semibold text-slate-700 transition cursor-pointer"
+                          title="Нажмите для изменения времени пуша"
+                        >
+                          <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>{systemSettings.morningPushTime}</span>
+                          <Pencil className="w-2.5 h-2.5 text-slate-400" />
+                        </button>
+                        <button
+                          onClick={() => toggleSystemSetting('morningPushEnabled', `Утренний пуш в ${systemSettings.morningPushTime}`)}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            systemSettings.morningPushEnabled ? 'bg-indigo-600' : 'bg-slate-200'
+                          }`}
+                        >
+                          <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                            systemSettings.morningPushEnabled ? 'translate-x-4' : 'translate-x-0'
+                          }`} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Setting 2: Evening Reminder */}
+                    <div className="py-3.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Вечернее напоминание должникам ({systemSettings.eveningReminderTime})</div>
+                        <div className="text-xs text-slate-500">Автопуш тем, кто еще не сдал отчёт за 1 час до дедлайна</div>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          onClick={() => setEditingScheduleTime({ key: 'eveningReminderTime', label: 'Вечернее напоминание', value: systemSettings.eveningReminderTime })}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-mono font-semibold text-slate-700 transition cursor-pointer"
+                          title="Нажмите для изменения времени напоминания"
+                        >
+                          <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>{systemSettings.eveningReminderTime}</span>
+                          <Pencil className="w-2.5 h-2.5 text-slate-400" />
+                        </button>
+                        <button
+                          onClick={() => toggleSystemSetting('eveningReminderEnabled', `Вечернее напоминание в ${systemSettings.eveningReminderTime}`)}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            systemSettings.eveningReminderEnabled ? 'bg-indigo-600' : 'bg-slate-200'
+                          }`}
+                        >
+                          <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                            systemSettings.eveningReminderEnabled ? 'translate-x-4' : 'translate-x-0'
+                          }`} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Setting 3: Daily Deadline */}
+                    <div className="py-3.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Строгий дедлайн сдачи ({systemSettings.dailyDeadlineTime})</div>
+                        <div className="text-xs text-slate-500">Фиксация опозданий и пропусков в календаре дисциплины наставника</div>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          onClick={() => setEditingScheduleTime({ key: 'dailyDeadlineTime', label: 'Дедлайн сдачи отчётов', value: systemSettings.dailyDeadlineTime })}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-mono font-semibold text-slate-700 transition cursor-pointer"
+                          title="Нажмите для изменения времени дедлайна"
+                        >
+                          <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>{systemSettings.dailyDeadlineTime}</span>
+                          <Pencil className="w-2.5 h-2.5 text-slate-400" />
+                        </button>
+                        <button
+                          onClick={() => toggleSystemSetting('strictDeadlineEnabled', 'Режим строгого дедлайна')}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            systemSettings.strictDeadlineEnabled ? 'bg-indigo-600' : 'bg-slate-200'
+                          }`}
+                        >
+                          <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                            systemSettings.strictDeadlineEnabled ? 'translate-x-4' : 'translate-x-0'
+                          }`} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Setting 4: Saturday Survey */}
+                    <div className="py-3.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Субботний срез по выручке ({systemSettings.saturdayPollTime})</div>
+                        <div className="text-xs text-slate-500">Еженедельный опрос бота по факту продаж и рассылок за 6 рабочих дней</div>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          onClick={() => setEditingScheduleTime({ key: 'saturdayPollTime', label: 'Субботний срез по выручке', value: systemSettings.saturdayPollTime })}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-mono font-semibold text-slate-700 transition cursor-pointer"
+                          title="Нажмите для изменения времени субботнего среза"
+                        >
+                          <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>{systemSettings.saturdayPollTime}</span>
+                          <Pencil className="w-2.5 h-2.5 text-slate-400" />
+                        </button>
+                        <button
+                          onClick={() => toggleSystemSetting('saturdayPollEnabled', `Субботний срез в ${systemSettings.saturdayPollTime}`)}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            systemSettings.saturdayPollEnabled ? 'bg-indigo-600' : 'bg-slate-200'
+                          }`}
+                        >
+                          <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                            systemSettings.saturdayPollEnabled ? 'translate-x-4' : 'translate-x-0'
+                          }`} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Setting 5: Sunday Rest */}
+                    <div className="py-3.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Воскресенье — выходной (стрики не сгорают)</div>
+                        <div className="text-xs text-slate-500">Бот отключает дедлайны в воскресенье и напоминает ученицам восстановить силы</div>
+                      </div>
+                      <button
+                        onClick={() => toggleSystemSetting('sundayRestEnabled', 'Режим отдыха в воскресенье')}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          systemSettings.sundayRestEnabled ? 'bg-indigo-600' : 'bg-slate-200'
+                        }`}
+                      >
+                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                          systemSettings.sundayRestEnabled ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Telegram Bot & Auto Group Binding Guide */}
+                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 hover:border-slate-300 transition">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5">
+                      <Send className="w-5 h-5 text-indigo-600" />
+                      <div>
+                        <h3 className="text-base font-bold text-slate-900">Рабочий Telegram-бот</h3>
+                        <p className="text-xs text-slate-500">Авто-привязка мини-групп без необходимости знать Chat ID или Telegram username</p>
+                      </div>
+                    </div>
+                    <a
+                      href="https://t.me/nastav_beauty_bot"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>Открыть бота</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                      <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[11px] font-bold">1</span>
+                        <span>Создайте группу</span>
+                      </div>
+                      <p className="text-xs text-slate-500">Создайте мини-чат в Telegram с Ксенией, Катей и новой ученицей</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                      <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[11px] font-bold">2</span>
+                        <span>Добавьте бота</span>
+                      </div>
+                      <p className="text-xs text-slate-500">Добавьте бота администратором с правом чтения сообщений</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                      <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[11px] font-bold">3</span>
+                        <span>Отправьте отчёт</span>
+                      </div>
+                      <p className="text-xs text-slate-500">Бот сам определит группу и автоматически привяжет её к дашборду наставника</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Direct Magic Links / Access Tokens Card */}
+                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 hover:border-slate-300 transition">
+                  <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+                    <ShieldCheck className="w-5 h-5 text-indigo-600" />
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">Быстрый вход и Magic-ссылки</h3>
+                      <p className="text-xs text-slate-500">Ссылки для мгновенного входа без ввода паролей для Ксении и Кати</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-xl border border-slate-200/70 bg-slate-50/50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-bold text-slate-900 block">Ксения (Главный наставник)</span>
+                          <span className="text-xs text-slate-500">Полный доступ ко всем тарифам, кейсам и финансам</span>
+                        </div>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                          Наставник
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => copyMagicLink('ksenia')}
+                        className="w-full px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Скопировать ссылку для Ксении</span>
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200/70 bg-slate-50/50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-bold text-slate-900 block">Катя (Куратор потока)</span>
+                          <span className="text-xs text-slate-500">Проверка отчётов, скрипты удержания, созвоны</span>
+                        </div>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          Куратор
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => copyMagicLink('katya')}
+                        className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Скопировать ссылку для Кати</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Server Connection & Token Override */}
+                <section className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4" aria-labelledby="server-connection-title">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 id="server-connection-title" className="text-base font-bold text-slate-900">Подключение и синхронизация базы</h3>
+                      <p className="mt-1 text-xs text-slate-500">При доступном сервере данные синхронизируются с базой. При сбое сохраняется локальная копия.</p>
+                    </div>
+                    <span className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
+                      {apiConnection === 'connected' ? 'Подключено' : apiConnection === 'checking' ? 'Проверка' : apiConnection === 'needs-token' ? 'Нужен токен' : apiConnection === 'unauthorized' ? 'Нет доступа' : 'Локальный режим'}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600" role="status">{apiConnectionMessage}</p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="password"
+                      value={adminTokenDraft}
+                      onChange={event => setAdminTokenDraft(event.target.value)}
+                      autoComplete="new-password"
+                      aria-label="Токен администратора"
+                      placeholder="Токен администратора"
+                      className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminToken(adminTokenDraft.trim());
+                        showToast(adminTokenDraft.trim() ? 'Проверяем токен администратора' : 'Включен локальный режим');
+                      }}
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white cursor-pointer"
+                    >
+                      Подключить
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminTokenDraft('');
+                        setAdminToken('');
+                      }}
+                      disabled={Boolean(import.meta.env.VITE_ADMIN_TOKEN)}
+                      className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 cursor-pointer"
+                    >
+                      Локально
+                    </button>
+                  </div>
+                </section>
+
+                {/* Message processing and integrity controls */}
+                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 hover:border-slate-300 transition">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                    <ShieldCheck className="w-5 h-5 text-indigo-600" />
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">Обработка сообщений и контроль данных</h3>
+                      <p className="text-xs text-slate-500">Расшифровка голосовых сообщений, сводки и проверка повторов</p>
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-slate-100">
+                    {/* Setting 6: Voice transcription */}
+                    <div className="py-3.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Расшифровка голосовых сообщений</div>
+                        <div className="text-xs text-slate-500">Преобразование аудио учениц в текст для наставника</div>
+                      </div>
+                      <button
+                        onClick={() => toggleSystemSetting('aiWhisperEnabled', 'Расшифровка голосовых')}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          systemSettings.aiWhisperEnabled ? 'bg-indigo-600' : 'bg-slate-200'
+                        }`}
+                      >
+                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                          systemSettings.aiWhisperEnabled ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </button>
+                    </div>
+
+                    {/* Setting 7: Reflection summary */}
+                    <div className="py-3.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Сводка рефлексии (эмоции, действия, вопрос наставнику)</div>
+                        <div className="text-xs text-slate-500">Формирует 3 главных тезиса из длинных сообщений учениц в ленту «На проверку»</div>
+                      </div>
+                      <button
+                        onClick={() => toggleSystemSetting('aiSummaryEnabled', 'Сводка рефлексии')}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          systemSettings.aiSummaryEnabled ? 'bg-indigo-600' : 'bg-slate-200'
+                        }`}
+                      >
+                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                          systemSettings.aiSummaryEnabled ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </button>
+                    </div>
+
+                    {/* Setting 8: Anti-Fraud Reels Deduplication */}
+                    <div className="py-3.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Защита от повторной сдачи старых Reels (Анти-фрод)</div>
+                        <div className="text-xs text-slate-500">Автоматическая проверка ссылок на Instagram Reels по базе за 60 дней и подсветка дубликатов</div>
+                      </div>
+                      <button
+                        onClick={() => toggleSystemSetting('antiFraudDedupEnabled', 'Анти-фрод дедупликация Reels')}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          systemSettings.antiFraudDedupEnabled ? 'bg-indigo-600' : 'bg-slate-200'
+                        }`}
+                      >
+                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                          systemSettings.antiFraudDedupEnabled ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </button>
+                    </div>
+
+                    {/* Setting 9: Zoom Auto Detect */}
+                    <div className="py-3.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Авто-определение Zoom-созвонов и синхронизация календаря</div>
+                        <div className="text-xs text-slate-500">Автоматический учёт проведённых этапов наставничества при загрузке ссылки на запись</div>
+                      </div>
+                      <button
+                        onClick={() => toggleSystemSetting('zoomAutoDetectEnabled', 'Авто-определение Zoom-созвонов')}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          systemSettings.zoomAutoDetectEnabled ? 'bg-indigo-600' : 'bg-slate-200'
+                        }`}
+                      >
+                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                          systemSettings.zoomAutoDetectEnabled ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Backup & Reset Card */}
+                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Экспорт данных потока</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Скачать локальный снимок учениц, отчётов, Zoom-созвонов и регламентов в формате JSON</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={exportFullBackup}
+                      className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Скачать бэкап</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Сбросить данные к первоначальным демонстрационным значениям?')) {
+                          localStorage.clear();
+                          window.location.reload();
+                        }
+                      }}
+                      className="px-4 py-2 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition cursor-pointer"
+                    >
+                      Сброс к демо
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -3900,7 +4522,535 @@ export default function App() {
         </div>
       )}
 
-      {/* Toast */}
+            {/* ─── MODAL 6: STUDENT DOSSIER (PROFILE, HISTORY, ZOOMS) ─── */}
+      {inspectingStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 border border-slate-200 space-y-5 my-8">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-slate-900 text-white flex items-center justify-center text-sm font-bold">
+                  {inspectingStudent.avatarText}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-slate-900">{inspectingStudent.fullName}</h3>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      {inspectingStudent.tariff}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {inspectingStudent.niche} · Онлайн
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setInspectingStudent(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Dossier Tabs */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100/70 rounded-xl">
+              <button
+                onClick={() => setInspectingTab('profile')}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
+                  inspectingTab === 'profile' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Профиль и цели
+              </button>
+              <button
+                onClick={() => setInspectingTab('reports')}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
+                  inspectingTab === 'reports' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                История отчётов ({allReports.filter(r => r.studentId === inspectingStudent.id).length})
+              </button>
+              <button
+                onClick={() => setInspectingTab('zooms')}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
+                  inspectingTab === 'zooms' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Zoom-созвоны ({inspectingStudent.zoomSessions?.length || 0})
+              </button>
+            </div>
+
+            {/* TAB: PROFILE & FINANCIALS */}
+            {inspectingTab === 'profile' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-[11px] text-slate-400 block font-medium">Точка А (старт)</span>
+                    <span className="text-base font-bold text-slate-900 font-mono mt-0.5 block">
+                      {inspectingStudent.initialIncome.toLocaleString('ru-RU')} ₽
+                    </span>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-100">
+                    <span className="text-[11px] text-emerald-600 block font-medium">Текущий факт</span>
+                    <span className="text-base font-bold text-emerald-800 font-mono mt-0.5 block">
+                      {inspectingStudent.currentIncome.toLocaleString('ru-RU')} ₽
+                    </span>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-100">
+                    <span className="text-[11px] text-indigo-600 block font-medium">Цель на поток (Б)</span>
+                    <span className="text-base font-bold text-indigo-800 font-mono mt-0.5 block">
+                      {(inspectingStudent.portalData?.targetIncome || inspectingStudent.initialIncome * 2).toLocaleString('ru-RU')} ₽
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress bar to Point B */}
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700">Прогресс к цели Точки Б:</span>
+                    <span className="font-mono font-bold text-indigo-600">
+                      {Math.min(100, Math.round((inspectingStudent.currentIncome / (inspectingStudent.portalData?.targetIncome || inspectingStudent.initialIncome * 2 || 1)) * 100))}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
+                    <div
+                      className="h-full bg-indigo-600 rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(100, Math.round((inspectingStudent.currentIncome / (inspectingStudent.portalData?.targetIncome || inspectingStudent.initialIncome * 2 || 1)) * 100))}%`
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-xl border border-slate-100 space-y-1">
+                    <span className="text-slate-400">Средний чек:</span>
+                    <div className="text-sm font-bold text-slate-900 font-mono">
+                      {inspectingStudent.currentAvgTicket.toLocaleString('ru-RU')} ₽ (было {inspectingStudent.initialAvgTicket.toLocaleString('ru-RU')} ₽)
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl border border-slate-100 space-y-1">
+                    <span className="text-slate-400">Новых клиентов / Рассылок:</span>
+                    <div className="text-sm font-bold text-slate-900 font-mono">
+                      +{inspectingStudent.totalNewClients} клиентов · {inspectingStudent.totalMailings} рассылок
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-semibold text-slate-900 block">Telegram мини-группа:</span>
+                    <span className="text-slate-500">{inspectingStudent.telegramChatId ? `Chat ID: ${inspectingStudent.telegramChatId}` : 'Авто-привязка через бота'}</span>
+                  </div>
+                  <button
+                    onClick={() => sendStudentMessage(inspectingStudent, `Привет, ${inspectingStudent.fullName}! Как продвигается выполнение заданий?`)}
+                    className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Send className="w-3 h-3" />
+                    <span>Написать</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: SUBMITTED REPORTS HISTORY */}
+            {inspectingTab === 'reports' && (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {allReports.filter(r => r.studentId === inspectingStudent.id).length === 0 ? (
+                  <div className="text-center py-12 text-xs text-slate-400">
+                    Ученица пока не сдала ни одного отчёта
+                  </div>
+                ) : (
+                  allReports
+                    .filter(r => r.studentId === inspectingStudent.id)
+                    .map(r => (
+                      <div key={r.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-2.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900">{r.reportDate}</span>
+                            <span className={`px-2 py-0.5 rounded-md font-semibold text-[10px] ${
+                              r.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {r.status === 'APPROVED' ? 'Одобрен' : 'На проверке'}
+                            </span>
+                          </div>
+                          <span className="text-slate-400 font-mono">{r.submittedAt}</span>
+                        </div>
+
+                        <div className="flex items-center gap-3 text-xs font-semibold text-slate-700">
+                          <span>Продажи: <strong className="text-emerald-700">{r.salesAmount.toLocaleString('ru-RU')} ₽</strong></span>
+                          <span>·</span>
+                          <span>Клиенты: +{r.newClientsCount}</span>
+                          <span>·</span>
+                          <span>Рассылки: {r.mailingsCount} шт</span>
+                        </div>
+
+                        {r.reflectionSummary && (
+                          <div className="text-xs text-slate-600 bg-white p-2.5 rounded-lg border border-slate-100 space-y-1">
+                            <div><strong>Действия:</strong> {r.reflectionSummary.actions}</div>
+                            {r.reflectionSummary.questionToMentor && (
+                              <div className="text-indigo-900 font-medium"><strong>Вопрос наставнику:</strong> {r.reflectionSummary.questionToMentor}</div>
+                            )}
+                          </div>
+                        )}
+
+                        {r.mentorReply && (
+                          <div className="text-xs bg-emerald-50 text-emerald-950 p-2.5 rounded-lg border border-emerald-100">
+                            <strong>Ответ наставника:</strong> {r.mentorReply}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                )}
+              </div>
+            )}
+
+            {/* TAB: ZOOM SESSIONS */}
+            {inspectingTab === 'zooms' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Список назначенных и проведённых сессий</span>
+                  <button
+                    onClick={() => {
+                      setManagingZoomStudent(inspectingStudent);
+                      setInspectingStudent(null);
+                    }}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer flex items-center gap-1"
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    <span>Управление созвонами</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {(inspectingStudent.zoomSessions || []).map(sess => (
+                    <div
+                      key={sess.callNumber}
+                      className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          onClick={() => toggleZoomSessionCompleted(inspectingStudent.id, sess.callNumber)}
+                          className={`w-5 h-5 rounded-md border flex items-center justify-center transition cursor-pointer ${
+                            sess.isCompleted ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 bg-white'
+                          }`}
+                        >
+                          {sess.isCompleted && <Check className="w-3.5 h-3.5" />}
+                        </button>
+                        <div>
+                          <span className={`text-xs font-bold block ${sess.isCompleted ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                            {sess.title}
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            {sess.date ? `Назначен: ${sess.date}` : 'Дата не назначена'}
+                            {sess.keyTakeaway ? ` · ${sess.keyTakeaway}` : ''}
+                          </span>
+                        </div>
+                      </div>
+
+                      {(sess.zoomLink || sess.recordingUrl) && (
+                        <a
+                          href={sess.zoomLink || sess.recordingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer flex items-center gap-1 shrink-0"
+                        >
+                          <span>Zoom</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
+              <button
+                onClick={() => setInspectingStudent(null)}
+                className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer"
+              >
+                Закрыть досье
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL 7: ZOOM MANAGEMENT MODAL ─── */}
+      {managingZoomStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 border border-slate-200 space-y-5 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Zoom-созвоны ученицы</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {managingZoomStudent.fullName} · {managingZoomStudent.tariff}
+                </p>
+              </div>
+              <button
+                onClick={() => setManagingZoomStudent(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* List of current Zoom sessions */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                <span>Этапы наставничества:</span>
+                <span>Статус / Запись</span>
+              </div>
+
+              {(managingZoomStudent.zoomSessions || []).map(sess => (
+                <div
+                  key={sess.callNumber}
+                  className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      onClick={() => toggleZoomSessionCompleted(managingZoomStudent.id, sess.callNumber)}
+                      className={`w-5 h-5 rounded-md border flex items-center justify-center transition cursor-pointer ${
+                        sess.isCompleted ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 bg-white'
+                      }`}
+                    >
+                      {sess.isCompleted && <Check className="w-3.5 h-3.5" />}
+                    </button>
+                    <div>
+                      <span className={`text-xs font-bold block ${sess.isCompleted ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                        {sess.title}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        {sess.date || 'Дата не назначена'}
+                        {sess.keyTakeaway ? ` · ${sess.keyTakeaway}` : ''}
+                      </span>
+                    </div>
+                  </div>
+
+                  {(sess.zoomLink || sess.recordingUrl) && (
+                    <a
+                      href={sess.zoomLink || sess.recordingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer flex items-center gap-1 shrink-0"
+                    >
+                      <span>Ссылка</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Schedule New Call Form Toggle */}
+            {!isAddingZoom ? (
+              <button
+                onClick={() => setIsAddingZoom(true)}
+                className="w-full py-2.5 rounded-xl border-2 border-dashed border-slate-200 text-slate-600 hover:border-slate-400 hover:text-slate-900 text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Запланировать новый созвон</span>
+              </button>
+            ) : (
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900">Новый созвон</span>
+                  <button
+                    onClick={() => setIsAddingZoom(false)}
+                    className="text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    Скрыть
+                  </button>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">Название этапа:</label>
+                    <input
+                      type="text"
+                      value={zoomForm.title}
+                      onChange={e => setZoomForm({ ...zoomForm, title: e.target.value })}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white"
+                      placeholder="Например: Аудит воронки и оффера"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">Дата и время:</label>
+                      <input
+                        type="text"
+                        value={zoomForm.scheduledAt}
+                        onChange={e => setZoomForm({ ...zoomForm, scheduledAt: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white"
+                        placeholder="12.11 в 15:00"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">Zoom / Запись ссылка:</label>
+                      <input
+                        type="text"
+                        value={zoomForm.zoomUrl}
+                        onChange={e => setZoomForm({ ...zoomForm, zoomUrl: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white"
+                        placeholder="https://zoom.us/..."
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">Заметки наставника:</label>
+                    <input
+                      type="text"
+                      value={zoomForm.meetingNotes}
+                      onChange={e => setZoomForm({ ...zoomForm, meetingNotes: e.target.value })}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white"
+                      placeholder="Фокус созвона, домашнее задание..."
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setIsAddingZoom(false)}
+                    className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    onClick={() => void addZoomSessionToStudent(managingZoomStudent.id)}
+                    className="px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                  >
+                    Сохранить созвон
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
+              <button
+                onClick={() => setManagingZoomStudent(null)}
+                className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer"
+              >
+                Готово
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL 8: CHEATSHEET EDITOR / CREATOR ─── */}
+      {(isAddingCheatsheet || editingCheatsheet) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 border border-slate-200 space-y-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {isAddingCheatsheet ? 'Новая шпаргалка для учениц' : 'Редактировать шпаргалку'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Материал для быстрой отправки в рабочие чаты Telegram</p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAddingCheatsheet(false);
+                  setEditingCheatsheet(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Категория:</label>
+                <select
+                  value={editingCheatsheet ? editingCheatsheet.category : newCheatsheet.category}
+                  onChange={e => {
+                    const cat = e.target.value as CheatsheetItem['category'];
+                    if (editingCheatsheet) setEditingCheatsheet({ ...editingCheatsheet, category: cat });
+                    else setNewCheatsheet({ ...newCheatsheet, category: cat });
+                  }}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
+                >
+                  <option value="reels">Reels и контент</option>
+                  <option value="sales">Продажи в Direct</option>
+                  <option value="packaging">Упаковка профиля</option>
+                  <option value="rules">Регламент и отчёты</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Заголовок шпаргалки:</label>
+                <input
+                  type="text"
+                  value={editingCheatsheet ? editingCheatsheet.title : newCheatsheet.title}
+                  onChange={e => {
+                    if (editingCheatsheet) setEditingCheatsheet({ ...editingCheatsheet, title: e.target.value });
+                    else setNewCheatsheet({ ...newCheatsheet, title: e.target.value });
+                  }}
+                  placeholder="Например: Чек-лист проверки рилс перед публикацией"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Краткое описание (для кого и когда):</label>
+                <input
+                  type="text"
+                  value={editingCheatsheet ? editingCheatsheet.description : newCheatsheet.description}
+                  onChange={e => {
+                    if (editingCheatsheet) setEditingCheatsheet({ ...editingCheatsheet, description: e.target.value });
+                    else setNewCheatsheet({ ...newCheatsheet, description: e.target.value });
+                  }}
+                  placeholder="Отправлять ученицам, когда проседает глубина досмотра"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Текст шпаргалки (в формате Telegram):</label>
+                <textarea
+                  rows={8}
+                  value={editingCheatsheet ? editingCheatsheet.content : newCheatsheet.content}
+                  onChange={e => {
+                    if (editingCheatsheet) setEditingCheatsheet({ ...editingCheatsheet, content: e.target.value });
+                    else setNewCheatsheet({ ...newCheatsheet, content: e.target.value });
+                  }}
+                  placeholder="Вставьте готовый текст, структуру сообщений или чек-лист..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-mono text-xs leading-relaxed"
+                />
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <button
+                onClick={() => {
+                  setIsAddingCheatsheet(false);
+                  setEditingCheatsheet(null);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={() => {
+                  if (editingCheatsheet) {
+                    saveCheatsheet(editingCheatsheet);
+                    setEditingCheatsheet(null);
+                  } else {
+                    addCheatsheet();
+                  }
+                }}
+                className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{isAddingCheatsheet ? 'Добавить шпаргалку' : 'Сохранить изменения'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+{/* Toast */}
       {toastMessage && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl text-sm font-semibold">
           {toastMessage}
