@@ -8,6 +8,7 @@ import org.springframework.ai.audio.transcription.AudioTranscriptionResponse;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiAudioTranscriptionModel;
 import org.springframework.ai.openai.OpenAiAudioTranscriptionOptions;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
@@ -163,14 +164,36 @@ public class SpringAiReportExtractor {
             Верни результат строго в формате JSON, соответствующем схеме ExtractedReportDto.
             """.formatted(studentName);
 
-        ExtractedReportDto result = chatClient.prompt()
-                .system(systemPrompt)
-                .user(rawMessage)
-                .call()
-                .entity(ExtractedReportDto.class);
+        try {
+            ExtractedReportDto result = chatClient.prompt()
+                    .system(systemPrompt)
+                    .user(rawMessage)
+                    .call()
+                    .entity(ExtractedReportDto.class);
 
-        if (result != null) {
-            return result;
+            if (result != null) {
+                return result;
+            }
+        } catch (Exception ex) {
+            log.warn("Primary AI chat model call failed: {}. Trying active Groq model fallbacks...", ex.getMessage());
+            java.util.List<String> fallbacks = java.util.List.of("openai/gpt-oss-20b", "llama-3.1-8b-instant", "qwen/qwen3.8-27b");
+            for (String fallbackModel : fallbacks) {
+                try {
+                    log.info("Attempting AI model fallback '{}' for student '{}'...", fallbackModel, studentName);
+                    ExtractedReportDto fallbackResult = chatClient.prompt()
+                            .system(systemPrompt)
+                            .user(rawMessage)
+                            .options(OpenAiChatOptions.builder().model(fallbackModel).temperature(0.2).build())
+                            .call()
+                            .entity(ExtractedReportDto.class);
+                    if (fallbackResult != null) {
+                        log.info("AI model fallback '{}' succeeded for student '{}'", fallbackModel, studentName);
+                        return fallbackResult;
+                    }
+                } catch (Exception fallbackEx) {
+                    log.warn("AI fallback model '{}' failed: {}", fallbackModel, fallbackEx.getMessage());
+                }
+            }
         }
 
         return fallbackService.extractFacts(rawMessage, studentName);
