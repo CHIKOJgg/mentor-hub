@@ -67,9 +67,9 @@ public class DeterministicAiFallbackService {
 
         String emotionsBullet;
         if ("BURNOUT_ALERT".equals(emotionalStatus)) {
-            emotionsBullet = "Обнаружены маркеры выгорания / апатии (детерминированный фолбэк)";
+            emotionsBullet = "Обнаружены маркеры выгорания / апатии (требуется поддержка ментора)";
         } else {
-            emotionsBullet = "Состояние рабочее (детерминированный фолбэк)";
+            emotionsBullet = "Состояние рабочее";
         }
 
         String actionsBullet = String.format(Locale.ROOT,
@@ -85,9 +85,10 @@ public class DeterministicAiFallbackService {
         );
 
         String aiSummary = String.format(Locale.ROOT,
-                "Режим офлайн/мок AI: обработано по хэштегам %d рассылок, продаж %s ₽",
+                "Сдано по отчёту: %d рассылок, продажи %s ₽.%s",
                 mailings != null ? mailings : 0,
-                sales != null ? sales.setScale(2, RoundingMode.HALF_UP).toPlainString() : "0.00"
+                sales != null ? sales.setScale(2, RoundingMode.HALF_UP).toPlainString() : "0.00",
+                "BURNOUT_ALERT".equals(emotionalStatus) ? " ⚠️ Сигнал выгорания в тексте." : ""
         );
 
         log.debug("Deterministic AI fallback extracted facts for {}: mailings={}, sales={}, status={}",

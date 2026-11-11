@@ -142,14 +142,28 @@ public class TelegramReportHandler {
         String caption = message.getCaption();
         String rawContent = StringUtils.hasText(text) ? text : (StringUtils.hasText(caption) ? caption : "");
 
-        // 1. Process Voice / Audio attachments
+        // 1. Process Voice / Audio / VideoNote attachments via Whisper STT
         if (message.hasVoice() && (settings == null || Boolean.TRUE.equals(settings.getAiWhisperEnabled()))) {
             String voiceFileId = message.getVoice().getFileId();
             byte[] audioBytes = telegramSenderService.downloadFileBytes(voiceFileId, 20 * 1024 * 1024);
             String voiceTranscript = audioBytes == null ? "" : springAiReportExtractor.transcribeAudio(audioBytes, "voice.oga");
-            if (StringUtils.hasText(voiceTranscript)) report.setVoiceTranscript(voiceTranscript);
-            if (StringUtils.hasText(voiceTranscript)) {
+            if (StringUtils.hasText(voiceTranscript) && !voiceTranscript.startsWith("[")) {
+                report.setVoiceTranscript(StringUtils.hasText(report.getVoiceTranscript())
+                        ? report.getVoiceTranscript() + "\n" + voiceTranscript
+                        : voiceTranscript);
                 rawContent = (StringUtils.hasText(rawContent) ? rawContent + "\n" : "") + voiceTranscript;
+            }
+        }
+
+        if (message.hasVideoNote() && (settings == null || Boolean.TRUE.equals(settings.getAiWhisperEnabled()))) {
+            String videoFileId = message.getVideoNote().getFileId();
+            byte[] videoBytes = telegramSenderService.downloadFileBytes(videoFileId, 25 * 1024 * 1024);
+            String videoTranscript = videoBytes == null ? "" : springAiReportExtractor.transcribeAudio(videoBytes, "videonote.mp4");
+            if (StringUtils.hasText(videoTranscript) && !videoTranscript.startsWith("[")) {
+                report.setVoiceTranscript(StringUtils.hasText(report.getVoiceTranscript())
+                        ? report.getVoiceTranscript() + "\n" + videoTranscript
+                        : videoTranscript);
+                rawContent = (StringUtils.hasText(rawContent) ? rawContent + "\n" : "") + videoTranscript;
             }
         }
 
@@ -204,17 +218,34 @@ public class TelegramReportHandler {
         }
 
         // 8. Spring AI 3-bullet reflection & Burnout Sentiment Detection
+        String cumulativeContext = StringUtils.hasText(report.getRawMessageText())
+                ? report.getRawMessageText() + (StringUtils.hasText(rawContent) && !report.getRawMessageText().contains(rawContent) ? "\n---\n" + rawContent : "")
+                : rawContent;
+
         ExtractedReportDto aiFacts = settings == null || Boolean.TRUE.equals(settings.getAiSummaryEnabled())
-                ? springAiReportExtractor.extractFacts(rawContent, student.getFullName())
+                ? springAiReportExtractor.extractFacts(cumulativeContext, student.getFullName())
                 : null;
         if (aiFacts != null) {
             if (aiFacts.reflectionSummary() != null) {
-                report.setReflectionEmotions(aiFacts.reflectionSummary().emotions());
-                report.setReflectionActions(aiFacts.reflectionSummary().actions());
-                report.setReflectionQuestion(aiFacts.reflectionSummary().questionToMentor());
+                if (StringUtils.hasText(aiFacts.reflectionSummary().emotions())) {
+                    report.setReflectionEmotions(aiFacts.reflectionSummary().emotions());
+                }
 
-                if (!StringUtils.hasText(extractedQuestion) && StringUtils.hasText(aiFacts.reflectionSummary().questionToMentor())) {
-                    appendQuestion(report, aiFacts.reflectionSummary().questionToMentor());
+                String currentActions = report.getReflectionActions();
+                String aiActions = aiFacts.reflectionSummary().actions();
+                if (StringUtils.hasText(aiActions)) {
+                    if (StringUtils.hasText(currentActions) && currentActions.startsWith("🎯 Фокус дня:")) {
+                        report.setReflectionActions(currentActions + "\n✅ Факт: " + aiActions);
+                    } else {
+                        report.setReflectionActions(aiActions);
+                    }
+                }
+
+                if (StringUtils.hasText(aiFacts.reflectionSummary().questionToMentor())) {
+                    report.setReflectionQuestion(aiFacts.reflectionSummary().questionToMentor());
+                    if (!StringUtils.hasText(extractedQuestion)) {
+                        appendQuestion(report, aiFacts.reflectionSummary().questionToMentor());
+                    }
                 }
             }
 
@@ -224,6 +255,30 @@ public class TelegramReportHandler {
 
             if (StringUtils.hasText(aiFacts.aiSummary())) {
                 report.setAiSummary(aiFacts.aiSummary());
+            }
+
+            // Natural language sales fallback if hashtag was omitted
+            if ((salesAmount == null || salesAmount.compareTo(BigDecimal.ZERO) == 0) &&
+                    aiFacts.salesAmount() != null && aiFacts.salesAmount().compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal currentSales = report.getSalesTotal() != null ? report.getSalesTotal() : BigDecimal.ZERO;
+                report.setSalesTotal(currentSales.add(aiFacts.salesAmount()));
+                SalesEntry entry = SalesEntry.builder()
+                        .report(report)
+                        .student(student)
+                        .amount(aiFacts.salesAmount())
+                        .description("AI: " + (rawContent.length() > 180 ? rawContent.substring(0, 180) : rawContent))
+                        .createdAt(Instant.now())
+                        .build();
+                salesEntryRepository.save(entry);
+                report.getSalesEntries().add(entry);
+                student.setCurrentIncome((student.getCurrentIncome() != null ? student.getCurrentIncome() : BigDecimal.ZERO).add(aiFacts.salesAmount()));
+            }
+
+            // Natural language mailings fallback if hashtag was omitted
+            if ((mailings == null || mailings == 0) && aiFacts.mailingsCount() != null && aiFacts.mailingsCount() > 0) {
+                int prev = report.getMailingsCount() != null ? report.getMailingsCount() : 0;
+                report.setMailingsCount(prev + aiFacts.mailingsCount());
+                student.setTotalMailings((student.getTotalMailings() != null ? student.getTotalMailings() : 0) + aiFacts.mailingsCount());
             }
         }
 

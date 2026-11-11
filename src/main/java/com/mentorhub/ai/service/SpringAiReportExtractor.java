@@ -21,7 +21,7 @@ import java.util.concurrent.*;
 @Service
 public class SpringAiReportExtractor {
 
-    private static final long AI_CHAT_TIMEOUT_MS = 3500L;
+    private static final long AI_CHAT_TIMEOUT_MS = 15000L;
     private static final long AI_WHISPER_TIMEOUT_MS = 15000L;
 
     private final DeterministicAiFallbackService fallbackService;
