@@ -1,5 +1,7 @@
 package com.mentorhub.ai.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mentorhub.ai.dto.ExtractedReportDto;
 import com.mentorhub.dto.ReflectionSummaryDto;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +17,10 @@ import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClient;
 
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 
 @Slf4j
@@ -28,9 +33,16 @@ public class SpringAiReportExtractor {
     private final DeterministicAiFallbackService fallbackService;
     private final ChatClient chatClient;
     private final OpenAiAudioTranscriptionModel transcriptionModel;
+    private final ObjectMapper objectMapper;
 
     @Value("${spring.ai.openai.api-key:mock-key}")
     private String apiKey;
+
+    @Value("${spring.ai.openai.base-url:https://api.openai.com}")
+    private String baseUrl;
+
+    @Value("${OPENROUTER_API_KEY:${AI_OPENROUTER_API_KEY:}}")
+    private String openrouterApiKey;
 
     private final ExecutorService aiExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
@@ -38,11 +50,13 @@ public class SpringAiReportExtractor {
     public SpringAiReportExtractor(
             DeterministicAiFallbackService fallbackService,
             @Autowired(required = false) ChatClient.Builder chatClientBuilder,
-            @Autowired(required = false) OpenAiAudioTranscriptionModel transcriptionModel
+            @Autowired(required = false) OpenAiAudioTranscriptionModel transcriptionModel,
+            @Autowired(required = false) ObjectMapper objectMapper
     ) {
         this.fallbackService = fallbackService;
         this.chatClient = (chatClientBuilder != null) ? chatClientBuilder.build() : null;
         this.transcriptionModel = transcriptionModel;
+        this.objectMapper = (objectMapper != null) ? objectMapper : new ObjectMapper();
     }
 
     // Direct constructor for unit testing
@@ -56,6 +70,7 @@ public class SpringAiReportExtractor {
         this.chatClient = chatClient;
         this.transcriptionModel = transcriptionModel;
         this.apiKey = apiKey;
+        this.objectMapper = new ObjectMapper();
     }
 
     public boolean isAiConfigured() {
@@ -175,15 +190,28 @@ public class SpringAiReportExtractor {
                 return result;
             }
         } catch (Exception ex) {
-            log.warn("Primary AI chat model call failed: {}. Trying active Groq model fallbacks...", ex.getMessage());
-            java.util.List<String> fallbacks = java.util.List.of("openai/gpt-oss-20b", "llama-3.1-8b-instant", "qwen/qwen3.8-27b");
+            log.warn("Primary AI chat model call failed: {}. Trying active provider fallbacks...", ex.getMessage());
+            boolean isOpenRouter = baseUrl != null && baseUrl.contains("openrouter");
+            List<String> fallbacks = isOpenRouter
+                    ? List.of("openrouter/free", "meta-llama/llama-3.3-70b-instruct:free", "meta-llama/llama-3.1-8b-instruct:free", "qwen/qwen-2.5-72b-instruct:free")
+                    : List.of("llama-3.1-8b-instant", "openai/gpt-oss-20b", "qwen/qwen3.8-27b");
+
             for (String fallbackModel : fallbacks) {
                 try {
                     log.info("Attempting AI model fallback '{}' for student '{}'...", fallbackModel, studentName);
+                    OpenAiChatOptions options = OpenAiChatOptions.builder()
+                            .model(fallbackModel)
+                            .temperature(0.2)
+                            .httpHeaders(Map.of(
+                                    "HTTP-Referer", "https://mentorhub.app",
+                                    "X-Title", "Mentor Hub"
+                            ))
+                            .build();
+
                     ExtractedReportDto fallbackResult = chatClient.prompt()
                             .system(systemPrompt)
                             .user(rawMessage)
-                            .options(OpenAiChatOptions.builder().model(fallbackModel).temperature(0.2).build())
+                            .options(options)
                             .call()
                             .entity(ExtractedReportDto.class);
                     if (fallbackResult != null) {
@@ -194,8 +222,77 @@ public class SpringAiReportExtractor {
                     log.warn("AI fallback model '{}' failed: {}", fallbackModel, fallbackEx.getMessage());
                 }
             }
+
+            // Cross-provider bonus: If primary is Groq or OpenAI, but OPENROUTER_API_KEY is configured, try OpenRouter free models
+            if (!isOpenRouter && StringUtils.hasText(openrouterApiKey)) {
+                ExtractedReportDto orResult = tryOpenRouterBonus(systemPrompt, rawMessage, studentName);
+                if (orResult != null) {
+                    return orResult;
+                }
+            }
         }
 
         return fallbackService.extractFacts(rawMessage, studentName);
+    }
+
+    private ExtractedReportDto tryOpenRouterBonus(String systemPrompt, String rawMessage, String studentName) {
+        log.info("Attempting cross-provider OpenRouter bonus for student '{}'...", studentName);
+        List<String> freeModels = List.of(
+                "openrouter/free",
+                "meta-llama/llama-3.3-70b-instruct:free",
+                "meta-llama/llama-3.1-8b-instruct:free"
+        );
+
+        RestClient restClient = RestClient.builder()
+                .baseUrl("https://openrouter.ai/api/v1")
+                .defaultHeader("Authorization", "Bearer " + openrouterApiKey)
+                .defaultHeader("HTTP-Referer", "https://mentorhub.app")
+                .defaultHeader("X-Title", "Mentor Hub")
+                .defaultHeader("Content-Type", "application/json")
+                .build();
+
+        for (String freeModel : freeModels) {
+            try {
+                String payload = """
+                    {
+                      "model": "%s",
+                      "messages": [
+                        {"role": "system", "content": %s},
+                        {"role": "user", "content": %s}
+                      ],
+                      "response_format": {"type": "json_object"},
+                      "temperature": 0.2
+                    }
+                    """.formatted(
+                            freeModel,
+                            objectMapper.writeValueAsString(systemPrompt),
+                            objectMapper.writeValueAsString(rawMessage)
+                    );
+
+                String responseBody = restClient.post()
+                        .uri("/chat/completions")
+                        .body(payload)
+                        .retrieve()
+                        .body(String.class);
+
+                if (StringUtils.hasText(responseBody)) {
+                    JsonNode root = objectMapper.readTree(responseBody);
+                    JsonNode choices = root.path("choices");
+                    if (choices.isArray() && !choices.isEmpty()) {
+                        String content = choices.get(0).path("message").path("content").asText();
+                        if (StringUtils.hasText(content)) {
+                            ExtractedReportDto dto = objectMapper.readValue(content, ExtractedReportDto.class);
+                            if (dto != null) {
+                                log.info("Cross-provider OpenRouter bonus ({}) succeeded for student '{}'", freeModel, studentName);
+                                return dto;
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                log.warn("OpenRouter bonus free model '{}' failed: {}", freeModel, ex.getMessage());
+            }
+        }
+        return null;
     }
 }
