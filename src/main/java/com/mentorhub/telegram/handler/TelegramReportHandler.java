@@ -30,6 +30,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -132,6 +133,11 @@ public class TelegramReportHandler {
 
         int initialDraftsCount = report.getContentDrafts() != null ? report.getContentDrafts().size() : 0;
         int initialReelsCount = report.getReelSubmissions() != null ? report.getReelSubmissions().size() : 0;
+        boolean wasAlreadySubmitted = report.getSubmittedAt() != null &&
+                ((report.getSalesTotal() != null && report.getSalesTotal().compareTo(BigDecimal.ZERO) > 0)
+                        || (report.getMailingsCount() != null && report.getMailingsCount() > 0)
+                        || initialDraftsCount > 0
+                        || initialReelsCount > 0);
 
         // In mini-groups, bind the active group chatId to the student automatically
         if (message.getChat() != null && (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat())) {
@@ -173,42 +179,81 @@ public class TelegramReportHandler {
         // 3. Process Instagram Reels with Anti-Fraud (SHA-256 deduplication & accessibility)
         processReelsAntiFraud(report, student, rawContent, deduplicationEnabled);
 
-        // 4. Sales amount normalization (Russian grouping separators: #продажи 35.500 руб -> 35500.00, 80к -> 80000.00)
+        // 4. Sales amount normalization with deduplication (Russian grouping separators: #продажи 35.500 руб -> 35500.00, 80к -> 80000.00)
         BigDecimal salesAmount = deterministicAiFallbackService.extractSalesAmount(rawContent);
         if (salesAmount != null && salesAmount.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal currentSales = report.getSalesTotal() != null ? report.getSalesTotal() : BigDecimal.ZERO;
-            report.setSalesTotal(currentSales.add(salesAmount));
+            String entryDesc = rawContent.length() > 200 ? rawContent.substring(0, 200) : rawContent;
+            boolean isDuplicateSale = false;
+            if (report.getSalesEntries() != null && !report.getSalesEntries().isEmpty()) {
+                for (SalesEntry existing : report.getSalesEntries()) {
+                    if (existing.getAmount() != null && existing.getAmount().compareTo(salesAmount) == 0) {
+                        String existingDesc = existing.getDescription() != null ? existing.getDescription().trim() : "";
+                        String currentDesc = rawContent.trim();
+                        if (existingDesc.equals(currentDesc)
+                                || (existingDesc.contains("#продажи") && currentDesc.contains("#продажи"))
+                                || (existingDesc.isEmpty() && currentDesc.replaceAll("[^0-9]", "").equals(String.valueOf(salesAmount.longValue())))) {
+                            isDuplicateSale = true;
+                            break;
+                        }
+                    }
+                }
+            }
 
-            SalesEntry entry = SalesEntry.builder()
-                    .report(report)
-                    .student(student)
-                    .amount(salesAmount)
-                    .description(rawContent.length() > 200 ? rawContent.substring(0, 200) : rawContent)
-                    .createdAt(Instant.now())
-                    .build();
-            salesEntryRepository.save(entry);
-            report.getSalesEntries().add(entry);
+            if (!isDuplicateSale) {
+                BigDecimal currentSales = report.getSalesTotal() != null ? report.getSalesTotal() : BigDecimal.ZERO;
+                report.setSalesTotal(currentSales.add(salesAmount));
 
-            BigDecimal currentIncome = student.getCurrentIncome() != null ? student.getCurrentIncome() : BigDecimal.ZERO;
-            student.setCurrentIncome(currentIncome.add(salesAmount));
+                SalesEntry entry = SalesEntry.builder()
+                        .report(report)
+                        .student(student)
+                        .amount(salesAmount)
+                        .description(entryDesc)
+                        .createdAt(Instant.now())
+                        .build();
+                salesEntryRepository.save(entry);
+                if (report.getSalesEntries() == null) {
+                    report.setSalesEntries(new ArrayList<>());
+                }
+                report.getSalesEntries().add(entry);
+
+                BigDecimal currentIncome = student.getCurrentIncome() != null ? student.getCurrentIncome() : BigDecimal.ZERO;
+                student.setCurrentIncome(currentIncome.add(salesAmount));
+            } else {
+                log.info("Duplicate sales entry ignored for student '{}' in report #{}: amount={}",
+                        student.getFullName(), report.getId(), salesAmount);
+            }
         }
 
-        // 5. Mailings / Outreach count (#рассылки 25)
+        // 5. Mailings / Outreach count (#рассылки 25) - accumulator with duplicate protection
         Integer mailings = deterministicAiFallbackService.extractMailingsCount(rawContent);
         if (mailings != null && mailings > 0) {
-            int prevMailings = report.getMailingsCount() != null ? report.getMailingsCount() : 0;
-            report.setMailingsCount(prevMailings + mailings);
+            String existingRaw = report.getRawMessageText() != null ? report.getRawMessageText() : "";
+            boolean isDuplicateMailing = existingRaw.contains(rawContent.trim())
+                    || (existingRaw.contains("#рассылки") && existingRaw.contains(String.valueOf(mailings)));
 
-            int totalMailings = student.getTotalMailings() != null ? student.getTotalMailings() : 0;
-            student.setTotalMailings(totalMailings + mailings);
+            if (!isDuplicateMailing) {
+                int prevMailings = report.getMailingsCount() != null ? report.getMailingsCount() : 0;
+                report.setMailingsCount(prevMailings + mailings);
+
+                int totalMailings = student.getTotalMailings() != null ? student.getTotalMailings() : 0;
+                student.setTotalMailings(totalMailings + mailings);
+            } else {
+                log.info("Duplicate mailing count #{} ignored for student '{}' in report #{}",
+                        mailings, student.getFullName(), report.getId());
+            }
         }
 
         // 6. Saturday Survey Clients (#клиенты 2)
         Integer newClients = deterministicAiFallbackService.extractNewClientsCount(rawContent);
         if (newClients != null && newClients > 0) {
-            report.setNewClientsCount(newClients);
-            int totalClients = student.getTotalNewClients() != null ? student.getTotalNewClients() : 0;
-            student.setTotalNewClients(totalClients + newClients);
+            String existingRaw = report.getRawMessageText() != null ? report.getRawMessageText() : "";
+            boolean isDuplicateClients = existingRaw.contains(rawContent.trim())
+                    || (existingRaw.contains("#клиенты") && existingRaw.contains(String.valueOf(newClients)));
+            if (!isDuplicateClients) {
+                report.setNewClientsCount(newClients);
+                int totalClients = student.getTotalNewClients() != null ? student.getTotalNewClients() : 0;
+                student.setTotalNewClients(totalClients + newClients);
+            }
         }
 
         // 7. Question recognition (#вопрос, direct address "Ксения, ...", and AI extraction)
@@ -260,25 +305,35 @@ public class TelegramReportHandler {
             // Natural language sales fallback if hashtag was omitted
             if ((salesAmount == null || salesAmount.compareTo(BigDecimal.ZERO) == 0) &&
                     aiFacts.salesAmount() != null && aiFacts.salesAmount().compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal currentSales = report.getSalesTotal() != null ? report.getSalesTotal() : BigDecimal.ZERO;
-                report.setSalesTotal(currentSales.add(aiFacts.salesAmount()));
-                SalesEntry entry = SalesEntry.builder()
-                        .report(report)
-                        .student(student)
-                        .amount(aiFacts.salesAmount())
-                        .description("AI: " + (rawContent.length() > 180 ? rawContent.substring(0, 180) : rawContent))
-                        .createdAt(Instant.now())
-                        .build();
-                salesEntryRepository.save(entry);
-                report.getSalesEntries().add(entry);
-                student.setCurrentIncome((student.getCurrentIncome() != null ? student.getCurrentIncome() : BigDecimal.ZERO).add(aiFacts.salesAmount()));
+                boolean isDuplicateAiSale = report.getSalesEntries() != null && report.getSalesEntries().stream()
+                        .anyMatch(se -> se.getAmount() != null && se.getAmount().compareTo(aiFacts.salesAmount()) == 0);
+                if (!isDuplicateAiSale) {
+                    BigDecimal currentSales = report.getSalesTotal() != null ? report.getSalesTotal() : BigDecimal.ZERO;
+                    report.setSalesTotal(currentSales.add(aiFacts.salesAmount()));
+                    SalesEntry entry = SalesEntry.builder()
+                            .report(report)
+                            .student(student)
+                            .amount(aiFacts.salesAmount())
+                            .description("AI: " + (rawContent.length() > 180 ? rawContent.substring(0, 180) : rawContent))
+                            .createdAt(Instant.now())
+                            .build();
+                    salesEntryRepository.save(entry);
+                    if (report.getSalesEntries() == null) {
+                        report.setSalesEntries(new ArrayList<>());
+                    }
+                    report.getSalesEntries().add(entry);
+                    student.setCurrentIncome((student.getCurrentIncome() != null ? student.getCurrentIncome() : BigDecimal.ZERO).add(aiFacts.salesAmount()));
+                }
             }
 
-            // Natural language mailings fallback if hashtag was omitted
+            // Natural language mailings fallback if hashtag was omitted - delta tracking
             if ((mailings == null || mailings == 0) && aiFacts.mailingsCount() != null && aiFacts.mailingsCount() > 0) {
-                int prev = report.getMailingsCount() != null ? report.getMailingsCount() : 0;
-                report.setMailingsCount(prev + aiFacts.mailingsCount());
-                student.setTotalMailings((student.getTotalMailings() != null ? student.getTotalMailings() : 0) + aiFacts.mailingsCount());
+                int currentReportMailings = report.getMailingsCount() != null ? report.getMailingsCount() : 0;
+                if (aiFacts.mailingsCount() > currentReportMailings) {
+                    int delta = aiFacts.mailingsCount() - currentReportMailings;
+                    report.setMailingsCount(aiFacts.mailingsCount());
+                    student.setTotalMailings((student.getTotalMailings() != null ? student.getTotalMailings() : 0) + delta);
+                }
             }
         }
 
@@ -286,11 +341,16 @@ public class TelegramReportHandler {
             completeZoomFromMessage(student, rawContent);
         }
 
-        // 9. Accumulate Raw message text
+        // 9. Accumulate Raw message text without duplicating identical blocks
         String existingRaw = report.getRawMessageText();
-        report.setRawMessageText(StringUtils.hasText(existingRaw)
-                ? existingRaw + "\n---\n" + rawContent
-                : rawContent);
+        String trimmedRaw = rawContent.trim();
+        if (StringUtils.hasText(existingRaw)) {
+            if (!existingRaw.trim().endsWith(trimmedRaw) && !existingRaw.contains(trimmedRaw)) {
+                report.setRawMessageText(existingRaw + "\n---\n" + rawContent);
+            }
+        } else {
+            report.setRawMessageText(rawContent);
+        }
 
         int newDraftsAdded = (report.getContentDrafts() != null ? report.getContentDrafts().size() : 0) - initialDraftsCount;
         int newReelsAdded = (report.getReelSubmissions() != null ? report.getReelSubmissions().size() : 0) - initialReelsCount;
@@ -310,7 +370,9 @@ public class TelegramReportHandler {
             // 10. Send caring acknowledgment reply in mini-group only when actual report submitted
             Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
             String timeStr = TIME_FORMATTER.format(report.getSubmittedAt());
-            String acknowledgement = "Принято на проверку Ксении и Кате (" + timeStr + ")! ✍️ Черновик сохранён.";
+            String acknowledgement = wasAlreadySubmitted
+                    ? "Принято на проверку Ксении и Кате (" + timeStr + ")! ✍️ Черновик обновлён."
+                    : "Принято на проверку Ксении и Кате (" + timeStr + ")! ✍️ Черновик сохранён.";
             String businessConnectionId = message.getBusinessConnectionId();
             if (StringUtils.hasText(businessConnectionId)) {
                 telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement, businessConnectionId);
@@ -413,16 +475,20 @@ public class TelegramReportHandler {
         if (message.hasVideo()) {
             String fileId = message.getVideo().getFileId();
             String fileUniqueId = message.getVideo().getFileUniqueId();
-            createOrUpdateDraft(report, student, "REEL", "Черновик видео Reels", null, fileId, fileUniqueId, deduplicationEnabled);
-            student.setTotalReels((student.getTotalReels() != null ? student.getTotalReels() : 0) + 1);
+            boolean added = createOrUpdateDraft(report, student, "REEL", "Черновик видео Reels", null, fileId, fileUniqueId, deduplicationEnabled);
+            if (added) {
+                student.setTotalReels((student.getTotalReels() != null ? student.getTotalReels() : 0) + 1);
+            }
         }
 
         // Video note (кружочек)
         if (message.hasVideoNote()) {
             String fileId = message.getVideoNote().getFileId();
             String fileUniqueId = message.getVideoNote().getFileUniqueId();
-            createOrUpdateDraft(report, student, "REEL", "Черновик Reels (видеозаметка)", null, fileId, fileUniqueId, deduplicationEnabled);
-            student.setTotalReels((student.getTotalReels() != null ? student.getTotalReels() : 0) + 1);
+            boolean added = createOrUpdateDraft(report, student, "REEL", "Черновик Reels (видеозаметка)", null, fileId, fileUniqueId, deduplicationEnabled);
+            if (added) {
+                student.setTotalReels((student.getTotalReels() != null ? student.getTotalReels() : 0) + 1);
+            }
         }
 
         // PDF document attachment -> Carousel draft
@@ -431,52 +497,79 @@ public class TelegramReportHandler {
             String fileId = message.getDocument().getFileId();
             String fileUniqueId = message.getDocument().getFileUniqueId();
             String label = StringUtils.hasText(fileName) ? "Черновик карусели: " + fileName : "Черновик карусели (PDF)";
-            createOrUpdateDraft(report, student, "CAROUSEL", label, null, fileId, fileUniqueId, deduplicationEnabled);
-            student.setTotalCarousels((student.getTotalCarousels() != null ? student.getTotalCarousels() : 0) + 1);
+            boolean added = createOrUpdateDraft(report, student, "CAROUSEL", label, null, fileId, fileUniqueId, deduplicationEnabled);
+            if (added) {
+                student.setTotalCarousels((student.getTotalCarousels() != null ? student.getTotalCarousels() : 0) + 1);
+            }
         }
 
         // Photos attachment -> Carousel draft
         if (message.hasPhoto() && !message.getPhoto().isEmpty()) {
             List<PhotoSize> photos = message.getPhoto();
             PhotoSize largest = photos.stream().max(Comparator.comparing(PhotoSize::getFileSize)).orElse(photos.get(photos.size() - 1));
-            createOrUpdateDraft(report, student, "CAROUSEL", "Черновик карусели (фото)", null, largest.getFileId(), largest.getFileUniqueId(), deduplicationEnabled);
-            student.setTotalCarousels((student.getTotalCarousels() != null ? student.getTotalCarousels() : 0) + 1);
+            boolean added = createOrUpdateDraft(report, student, "CAROUSEL", "Черновик карусели (фото)", null, largest.getFileId(), largest.getFileUniqueId(), deduplicationEnabled);
+            if (added) {
+                student.setTotalCarousels((student.getTotalCarousels() != null ? student.getTotalCarousels() : 0) + 1);
+            }
         }
 
         // Text drafts matching #контент, #рилс, #карусель, #сторителл
+        boolean hasReelsUrl = StringUtils.hasText(rawContent) && !reelsAntiFraudEngine.extractReels(rawContent).isEmpty();
         if (StringUtils.hasText(rawContent)) {
             Matcher m = HASHTAG_DRAFT_PATTERN.matcher(rawContent);
             while (m.find()) {
                 String tag = m.group(1).toLowerCase();
                 String snippet = m.group(2).trim();
 
+                // If #рилс contains a link to Instagram Reels, let processReelsAntiFraud handle it!
+                if (tag.contains("рилс") && (hasReelsUrl || snippet.contains("instagram.com") || snippet.contains("http://") || snippet.contains("https://"))) {
+                    continue;
+                }
+
                 String draftType;
                 String defaultLabel;
                 if (tag.contains("рилс")) {
                     draftType = "REEL";
                     defaultLabel = "Черновик Reels: " + (StringUtils.hasText(snippet) ? snippet : "сценарий");
-                    student.setTotalReels((student.getTotalReels() != null ? student.getTotalReels() : 0) + 1);
                 } else if (tag.contains("карусел")) {
                     draftType = "CAROUSEL";
                     defaultLabel = "Черновик карусели: " + (StringUtils.hasText(snippet) ? snippet : "слайды");
-                    student.setTotalCarousels((student.getTotalCarousels() != null ? student.getTotalCarousels() : 0) + 1);
                 } else if (tag.contains("стори")) {
                     draftType = "STORYTELL";
                     defaultLabel = "Сценарий сторителлинга: " + (StringUtils.hasText(snippet) ? snippet : "серия историй");
-                    student.setTotalStorytells((student.getTotalStorytells() != null ? student.getTotalStorytells() : 0) + 1);
                 } else {
                     draftType = "STORYTELL";
                     defaultLabel = "Черновик контента: " + (StringUtils.hasText(snippet) ? snippet : "материал");
-                    student.setTotalStorytells((student.getTotalStorytells() != null ? student.getTotalStorytells() : 0) + 1);
                 }
 
-                createOrUpdateDraft(report, student, draftType, defaultLabel, null, null, null, deduplicationEnabled);
+                boolean added = createOrUpdateDraft(report, student, draftType, defaultLabel, null, null, null, deduplicationEnabled);
+                if (added) {
+                    if ("REEL".equals(draftType)) {
+                        student.setTotalReels((student.getTotalReels() != null ? student.getTotalReels() : 0) + 1);
+                    } else if ("CAROUSEL".equals(draftType)) {
+                        student.setTotalCarousels((student.getTotalCarousels() != null ? student.getTotalCarousels() : 0) + 1);
+                    } else {
+                        student.setTotalStorytells((student.getTotalStorytells() != null ? student.getTotalStorytells() : 0) + 1);
+                    }
+                }
             }
         }
     }
 
-    private void createOrUpdateDraft(DailyReport report, Student student, String draftType, String label,
-                                     String url, String fileTgId, String fileUniqueId, boolean deduplicationEnabled) {
+    private boolean createOrUpdateDraft(DailyReport report, Student student, String draftType, String label,
+                                        String url, String fileTgId, String fileUniqueId, boolean deduplicationEnabled) {
+        if (report.getContentDrafts() != null) {
+            boolean alreadyPresent = report.getContentDrafts().stream().anyMatch(d ->
+                    (StringUtils.hasText(fileTgId) && Objects.equals(d.getFileTgId(), fileTgId))
+                    || (StringUtils.hasText(url) && Objects.equals(d.getUrl(), url))
+                    || (Objects.equals(d.getLabel(), label) && Objects.equals(d.getDraftType(), draftType))
+            );
+            if (alreadyPresent) {
+                log.info("Draft '{}' already present in report #{}, skipping duplicate", label, report.getId());
+                return false;
+            }
+        }
+
         boolean isDuplicate = false;
         String duplicateDate = null;
 
@@ -500,13 +593,29 @@ public class TelegramReportHandler {
                 .build();
 
         contentDraftRepository.save(draft);
+        if (report.getContentDrafts() == null) {
+            report.setContentDrafts(new ArrayList<>());
+        }
         report.getContentDrafts().add(draft);
+        return true;
     }
 
     private void processReelsAntiFraud(DailyReport report, Student student, String rawContent, boolean deduplicationEnabled) {
         List<ReelsAntiFraudEngine.ExtractedReel> extractedReels = reelsAntiFraudEngine.extractReels(rawContent);
 
         for (ReelsAntiFraudEngine.ExtractedReel reel : extractedReels) {
+            // Check if this reel was ALREADY registered in today's report
+            boolean alreadyInReport = report.getReelSubmissions() != null && report.getReelSubmissions().stream()
+                    .anyMatch(rs -> Objects.equals(rs.getShortcode(), reel.shortcode())
+                            || Objects.equals(rs.getCanonicalUrl(), reel.canonicalUrl())
+                            || Objects.equals(rs.getReelUrl(), reel.rawUrl()));
+
+            if (alreadyInReport) {
+                log.info("Reel '{}' already registered in report #{}, skipping duplicate reel submission",
+                        reel.shortcode(), report.getId());
+                continue;
+            }
+
             ReelsAntiFraudEngine.AntiFraudEvaluation eval = reelsAntiFraudEngine.evaluateReel(
                     reel.rawUrl(),
                     reel.shortcode(),
@@ -530,6 +639,9 @@ public class TelegramReportHandler {
                     .build();
 
             reelSubmissionRepository.save(submission);
+            if (report.getReelSubmissions() == null) {
+                report.setReelSubmissions(new ArrayList<>());
+            }
             report.getReelSubmissions().add(submission);
 
             // Add corresponding ContentDraft
@@ -548,6 +660,9 @@ public class TelegramReportHandler {
                     .build();
 
             contentDraftRepository.save(draft);
+            if (report.getContentDrafts() == null) {
+                report.setContentDrafts(new ArrayList<>());
+            }
             report.getContentDrafts().add(draft);
 
             if (!eval.isDuplicate()) {

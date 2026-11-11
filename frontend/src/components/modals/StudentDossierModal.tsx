@@ -43,9 +43,6 @@ export const StudentDossierModal = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-slate-900">{student.fullName}</h3>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
-                  {student.tariff || 'Стандарт'}
-                </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
                 {student.niche} · Онлайн

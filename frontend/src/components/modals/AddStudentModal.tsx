@@ -8,7 +8,7 @@ export interface NewStudentForm {
   telegramChatId: string;
   initialIncome: number;
   initialAvgTicket: number;
-  tariff: 'Стандарт' | 'VIP';
+  tariff?: string;
 }
 
 export interface AddStudentModalProps {
@@ -99,18 +99,6 @@ export function AddStudentModal({
               placeholder="3000"
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500"
             />
-          </label>
-
-          <label className="text-xs font-semibold text-slate-600 sm:col-span-2">
-            Тариф обучения
-            <select
-              value={newStudent.tariff}
-              onChange={event => onUpdate(prev => ({ ...prev, tariff: event.target.value === 'VIP' ? 'VIP' : 'Стандарт' }))}
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500 bg-white"
-            >
-              <option value="Стандарт">Стандарт</option>
-              <option value="VIP">VIP</option>
-            </select>
           </label>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">

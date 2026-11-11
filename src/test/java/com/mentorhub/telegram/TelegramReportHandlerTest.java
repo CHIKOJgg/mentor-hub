@@ -272,4 +272,74 @@ class TelegramReportHandlerTest {
         // Sent custom focus confirmation instead of generic draft acknowledgment
         assertThat(sentReplyText).contains("🎯 Цель на сегодня зафиксирована: «Сегодня я буду делать рилсы»!");
     }
+
+    @Test
+    @DisplayName("Repeated submissions of the exact same report do NOT multiply sales, mailings or drafts")
+    void handleStudentMessage_repeatedReportDeduplication() {
+        Student student = Student.builder()
+                .id(1L)
+                .fullName("Милана Горохова")
+                .tgChatId(71010101L)
+                .currentIncome(new BigDecimal("180000.00"))
+                .totalMailings(100)
+                .totalReels(10)
+                .build();
+
+        DailyReport report = DailyReport.builder()
+                .id(10L)
+                .student(student)
+                .reportDate(LocalDate.now())
+                .status("PENDING")
+                .mailingsCount(0)
+                .salesTotal(BigDecimal.ZERO)
+                .contentDrafts(new ArrayList<>())
+                .reelSubmissions(new ArrayList<>())
+                .salesEntries(new ArrayList<>())
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.of(report));
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message msg1 = Message.builder()
+                .messageId(601)
+                .chat(chat)
+                .text("#рилс https://instagram.com/reel/DC194kaP91m\n#рассылки 40\n#продажи 60000")
+                .build();
+
+        // First submission
+        DailyReport r1 = handler.handleStudentMessage(student, msg1);
+        assertThat(r1.getMailingsCount()).isEqualTo(40);
+        assertThat(r1.getSalesTotal()).isEqualByComparingTo(new BigDecimal("60000.00"));
+        assertThat(student.getTotalMailings()).isEqualTo(140);
+        assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("240000.00"));
+        assertThat(sentReplyText).contains("✍️ Черновик сохранён.");
+
+        // Second submission of the exact same text (simulating repeated Telegram sends like in user's test log)
+        Message msg2 = Message.builder()
+                .messageId(602)
+                .chat(chat)
+                .text("#рилс https://instagram.com/reel/DC194kaP91m\n#рассылки 40\n#продажи 60000")
+                .build();
+
+        DailyReport r2 = handler.handleStudentMessage(student, msg2);
+        // Metrics must NOT be multiplied!
+        assertThat(r2.getMailingsCount()).isEqualTo(40);
+        assertThat(r2.getSalesTotal()).isEqualByComparingTo(new BigDecimal("60000.00"));
+        assertThat(student.getTotalMailings()).isEqualTo(140);
+        assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("240000.00"));
+        // Acknowledgment on update
+        assertThat(sentReplyText).contains("✍️ Черновик обновлён.");
+
+        // Third submission: standalone #продажи 60000 repeated
+        Message msg3 = Message.builder()
+                .messageId(603)
+                .chat(chat)
+                .text("#продажи 60000")
+                .build();
+
+        DailyReport r3 = handler.handleStudentMessage(student, msg3);
+        assertThat(r3.getSalesTotal()).isEqualByComparingTo(new BigDecimal("60000.00"));
+        assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("240000.00"));
+    }
 }

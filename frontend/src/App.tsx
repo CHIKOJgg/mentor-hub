@@ -148,7 +148,6 @@ const newStudentTemplate = {
   telegramChatId: '',
   initialIncome: 0,
   initialAvgTicket: 0,
-  tariff: 'Стандарт' as const,
 };
 
 const makeInitialWeekDays = (): DayInfo[] => {
@@ -382,7 +381,7 @@ export default function App() {
   const [apiRefreshKey, setApiRefreshKey] = useState(0);
   const [pendingSyncDomains, setPendingSyncDomains] = useState<string[]>(() => readPersisted('pending-sync-domains', []));
   const [isAddingStudent, setIsAddingStudent] = useState(false);
-  const [newStudent, setNewStudent] = useState<{ fullName: string; niche: string; telegram: string; telegramChatId: string; initialIncome: number; initialAvgTicket: number; tariff: 'VIP' | 'Стандарт' }>(newStudentTemplate);
+  const [newStudent, setNewStudent] = useState<{ fullName: string; niche: string; telegram: string; telegramChatId: string; initialIncome: number; initialAvgTicket: number; tariff?: string }>(newStudentTemplate);
 
   // Edit Modals State
   const [editingStudent, setEditingStudent] = useState<StudentDiscipline | null>(null);
@@ -2061,9 +2060,6 @@ export default function App() {
                                 </div>
                               </div>
                             </div>
-                            <span className="text-xs font-bold text-slate-700 bg-white px-3 py-1 rounded-lg border border-slate-200">
-                              {r.tariff}
-                            </span>
                           </div>
 
                           <div className="p-6 space-y-4">

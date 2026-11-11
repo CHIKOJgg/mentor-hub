@@ -107,17 +107,6 @@ export const EditStudentModal = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Тариф:</label>
-              <select
-                value={student.tariff ?? 'Стандарт'}
-                onChange={event => setEditingStudent({ ...student, tariff: event.target.value === 'VIP' ? 'VIP' : 'Стандарт' })}
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-              >
-                <option value="Стандарт">Стандарт</option>
-                <option value="VIP">VIP</option>
-              </select>
-            </div>
-            <div>
               <label className="text-xs font-semibold text-slate-600 block mb-1">Дата старта:</label>
               <input
                 type="date"

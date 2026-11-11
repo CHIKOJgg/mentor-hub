@@ -45,7 +45,7 @@ export const ZoomModal = ({
           <div>
             <h3 className="text-base font-bold text-slate-900">Zoom-созвоны ученицы</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              {student.fullName} · {student.tariff || 'Стандарт'}
+              {student.fullName}
             </p>
           </div>
           <button

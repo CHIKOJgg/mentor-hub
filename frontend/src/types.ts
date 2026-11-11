@@ -31,7 +31,7 @@ export interface DailyReport {
   studentName: string;
   avatarText: string;
   tgUsername: string;
-  tariff: 'VIP' | 'Стандарт';
+  tariff?: string;
   submittedAt: string;
   reportDate?: string;
   isOnTime: boolean;
@@ -111,7 +111,7 @@ export interface StudentDiscipline {
   telegram?: string;
   niche: string;
   telegramChatId?: number;
-  tariff?: 'VIP' | 'Стандарт';
+  tariff?: string;
   startDate?: string;
   isActive?: boolean;
   initialIncome: number; // Point A
