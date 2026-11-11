@@ -3731,11 +3731,42 @@ export default function App() {
                       onClick={() => {
                         setAdminTokenDraft('');
                         setAdminToken('');
+                        saveAdminToken('');
                       }}
                       disabled={Boolean(import.meta.env.VITE_ADMIN_TOKEN)}
                       className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 cursor-pointer"
                     >
                       Локально
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                    <span className="text-slate-400">Быстрый вход:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const token = 'magic-ksenia-mentor-token-998877';
+                        setAdminTokenDraft(token);
+                        setAdminToken(token);
+                        saveAdminToken(token);
+                        showToast('Вход выполнен: Наставник Ксения');
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-medium transition cursor-pointer"
+                    >
+                      🌸 Ксения (Наставник)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const token = 'magic-katya-curator-token-112233';
+                        setAdminTokenDraft(token);
+                        setAdminToken(token);
+                        saveAdminToken(token);
+                        showToast('Вход выполнен: Куратор Катя');
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium transition cursor-pointer"
+                    >
+                      📋 Катя (Куратор)
                     </button>
                   </div>
                 </section>

@@ -25,6 +25,7 @@ export const getAdminToken = (): string => {
     try {
       const urlToken = new URLSearchParams(window.location.search).get('token')?.trim();
       if (urlToken) {
+        localStorage.setItem(ADMIN_TOKEN_KEY, urlToken);
         sessionStorage.setItem(ADMIN_TOKEN_KEY, urlToken);
         return urlToken;
       }
@@ -34,7 +35,14 @@ export const getAdminToken = (): string => {
   }
 
   try {
-    return sessionStorage.getItem(ADMIN_TOKEN_KEY)?.trim() ?? '';
+    const sessionToken = sessionStorage.getItem(ADMIN_TOKEN_KEY)?.trim();
+    if (sessionToken) return sessionToken;
+    const localToken = localStorage.getItem(ADMIN_TOKEN_KEY)?.trim();
+    if (localToken) {
+      sessionStorage.setItem(ADMIN_TOKEN_KEY, localToken);
+      return localToken;
+    }
+    return '';
   } catch {
     return '';
   }
@@ -42,8 +50,13 @@ export const getAdminToken = (): string => {
 
 export const saveAdminToken = (token: string): void => {
   try {
-    if (token.trim()) sessionStorage.setItem(ADMIN_TOKEN_KEY, token.trim());
-    else sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+    if (token.trim()) {
+      sessionStorage.setItem(ADMIN_TOKEN_KEY, token.trim());
+      localStorage.setItem(ADMIN_TOKEN_KEY, token.trim());
+    } else {
+      sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+    }
   } catch {
     // Storage can be unavailable in private or restricted browser contexts.
   }
