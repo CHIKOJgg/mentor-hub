@@ -43,6 +43,7 @@ import {
   CheckCircle2,
   History,
   Sparkles,
+  Info,
 } from 'lucide-react';
 
 const createLocalId = (prefix: string): string => {
@@ -386,6 +387,102 @@ export default function App() {
   const [isAddingRule, setIsAddingRule] = useState(false);
   const [newRule, setNewRule] = useState({ hashtag: '#', title: '', description: '', required: false, example: '' });
   const [editingScheduleTime, setEditingScheduleTime] = useState<{ key: keyof SystemSettings; label: string; value: string } | null>(null);
+  const [rejectErrorReportId, setRejectErrorReportId] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    isDanger?: boolean;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
+
+  const requestConfirm = (options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    isDanger?: boolean;
+    onConfirm: () => void | Promise<void>;
+  }) => {
+    setConfirmModal({
+      isOpen: true,
+      title: options.title,
+      message: options.message,
+      confirmLabel: options.confirmLabel || 'Подтвердить',
+      cancelLabel: options.cancelLabel || 'Отмена',
+      isDanger: options.isDanger !== false,
+      onConfirm: options.onConfirm,
+    });
+  };
+
+  // Global Escape key listener to close active modals gracefully
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (confirmModal) {
+          setConfirmModal(null);
+          return;
+        }
+        if (editingScheduleTime) {
+          setEditingScheduleTime(null);
+          return;
+        }
+        if (isAddingStudent) {
+          setIsAddingStudent(false);
+          return;
+        }
+        if (editingStudent) {
+          setEditingStudent(null);
+          return;
+        }
+        if (editingDay) {
+          setEditingDay(null);
+          return;
+        }
+        if (isAddingScript || editingScript) {
+          setIsAddingScript(false);
+          setEditingScript(null);
+          return;
+        }
+        if (isAddingRule || editingRule) {
+          setIsAddingRule(false);
+          setEditingRule(null);
+          return;
+        }
+        if (isAddingCheatsheet || editingCheatsheet) {
+          setIsAddingCheatsheet(false);
+          setEditingCheatsheet(null);
+          return;
+        }
+        if (managingZoomStudent) {
+          setManagingZoomStudent(null);
+          return;
+        }
+        if (inspectingStudent) {
+          setInspectingStudent(null);
+          return;
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    confirmModal,
+    editingScheduleTime,
+    isAddingStudent,
+    editingStudent,
+    editingDay,
+    isAddingScript,
+    editingScript,
+    isAddingRule,
+    editingRule,
+    isAddingCheatsheet,
+    editingCheatsheet,
+    managingZoomStudent,
+    inspectingStudent,
+  ]);
 
   useEffect(() => {
     writePersisted('active-tab', activeTab);
@@ -654,26 +751,33 @@ export default function App() {
     showToast(`Ученица ${fullName} сохранена локально`);
   };
 
-  const deleteStudent = async (studentId: string, fullName: string) => {
-    if (!window.confirm(`Удалить ученицу «${fullName}» из списка потока?`)) return;
-    setStudents(prev => prev.filter(s => s.id !== studentId));
-    if (editingStudent?.id === studentId) setEditingStudent(null);
-    if (inspectingStudent?.id === studentId) setInspectingStudent(null);
-    if (managingZoomStudent?.id === studentId) setManagingZoomStudent(null);
-    if (apiConnection === 'connected' && !studentId.startsWith('local-')) {
-      try {
-        await api.deleteStudent(studentId);
-        clearLocalChange('students', studentId);
-        showToast(`Ученица ${fullName} удалена с сервера`);
-        return;
-      } catch {
-        markLocalChange('students', studentId);
-        setApiConnectionMessage('Ученица удалена локально; сервер пока недоступен');
-      }
-    } else {
-      markLocalChange('students', studentId);
-    }
-    showToast(`Ученица ${fullName} удалена`);
+  const deleteStudent = (studentId: string, fullName: string) => {
+    requestConfirm({
+      title: 'Удалить ученицу?',
+      message: `Удалить ученицу «${fullName}» из списка потока? Все данные и история отчётов будут удалены.`,
+      confirmLabel: 'Удалить ученицу',
+      isDanger: true,
+      onConfirm: async () => {
+        setStudents(prev => prev.filter(s => s.id !== studentId));
+        if (editingStudent?.id === studentId) setEditingStudent(null);
+        if (inspectingStudent?.id === studentId) setInspectingStudent(null);
+        if (managingZoomStudent?.id === studentId) setManagingZoomStudent(null);
+        if (apiConnection === 'connected' && !studentId.startsWith('local-')) {
+          try {
+            await api.deleteStudent(studentId);
+            clearLocalChange('students', studentId);
+            showToast(`Ученица ${fullName} удалена с сервера`);
+            return;
+          } catch {
+            markLocalChange('students', studentId);
+            setApiConnectionMessage('Ученица удалена локально; сервер пока недоступен');
+          }
+        } else {
+          markLocalChange('students', studentId);
+        }
+        showToast(`Ученица ${fullName} удалена`);
+      },
+    });
   };
 
   const addZoomSessionToStudent = async (studentId: string) => {
@@ -764,9 +868,16 @@ export default function App() {
   };
 
   const deleteCheatsheet = (id: string, title: string) => {
-    if (!window.confirm(`Удалить шпаргалку «${title}»?`)) return;
-    setCheatsheets(prev => prev.filter(c => c.id !== id));
-    showToast(`Шпаргалка «${title}» удалена`);
+    requestConfirm({
+      title: 'Удалить шпаргалку?',
+      message: `Удалить шпаргалку «${title}» из базы быстрых материалов?`,
+      confirmLabel: 'Удалить шпаргалку',
+      isDanger: true,
+      onConfirm: () => {
+        setCheatsheets(prev => prev.filter(c => c.id !== id));
+        showToast(`Шпаргалка «${title}» удалена`);
+      },
+    });
   };
 
   const copyCheatsheetToClipboard = (content: string, title: string) => {
@@ -862,26 +973,35 @@ export default function App() {
     showToast(`Скрипт «${scriptData.title}» сохранен локально`);
   };
 
-  const deleteScript = async (index: number) => {
+  const deleteScript = (index: number) => {
     const script = curatorScripts[index];
-    const localKey = script?.id?.startsWith('local-')
-      ? `deleted-title:${encodeURIComponent(script.title)}`
-      : script?.id ?? `index-${index}`;
-    setCuratorScripts(prev => prev.filter((_, itemIndex) => itemIndex !== index));
-    if (apiConnection === 'connected' && script?.id && !script.id.startsWith('local-')) {
-      try {
-        await api.deleteScript(script.id);
-        clearLocalChange('curator-scripts', localKey);
-        showToast('Скрипт удален с сервера');
-        return;
-      } catch {
-        markLocalChange('curator-scripts', localKey);
-        setApiConnectionMessage('Скрипт скрыт локально; сервер не принял удаление');
-      }
-    } else {
-      markLocalChange('curator-scripts', localKey);
-    }
-    showToast('Скрипт удален локально');
+    const scriptTitle = script?.title || `Скрипт #${index + 1}`;
+    requestConfirm({
+      title: 'Удалить скрипт?',
+      message: `Удалить скрипт «${scriptTitle}»? Действие нельзя будет отменить.`,
+      confirmLabel: 'Удалить скрипт',
+      isDanger: true,
+      onConfirm: async () => {
+        const localKey = script?.id?.startsWith('local-')
+          ? `deleted-title:${encodeURIComponent(script.title)}`
+          : script?.id ?? `index-${index}`;
+        setCuratorScripts(prev => prev.filter((_, itemIndex) => itemIndex !== index));
+        if (apiConnection === 'connected' && script?.id && !script.id.startsWith('local-')) {
+          try {
+            await api.deleteScript(script.id);
+            clearLocalChange('curator-scripts', localKey);
+            showToast('Скрипт удален с сервера');
+            return;
+          } catch {
+            markLocalChange('curator-scripts', localKey);
+            setApiConnectionMessage('Скрипт скрыт локально; сервер не принял удаление');
+          }
+        } else {
+          markLocalChange('curator-scripts', localKey);
+        }
+        showToast('Скрипт удален локально');
+      },
+    });
   };
 
   const saveRule = async (updatedRule: TaskRule) => {
@@ -930,22 +1050,30 @@ export default function App() {
     showToast(`Хэштег ${ruleData.hashtag} сохранен локально`);
   };
 
-  const deleteRule = async (ruleId: string, tag: string) => {
-    setRules(prev => prev.filter(r => r.id !== ruleId));
-    if (apiConnection === 'connected' && !ruleId.startsWith('local-')) {
-      try {
-        await api.deleteTaskRule(ruleId);
-        clearLocalChange('task-rules', ruleId);
-        showToast(`Хэштег ${tag} удален с сервера`);
-        return;
-      } catch {
-        markLocalChange('task-rules', ruleId);
-        setApiConnectionMessage('Правило удалено локально; сервер не принял удаление');
-      }
-    } else {
-      markLocalChange('task-rules', ruleId);
-    }
-    showToast(`Хэштег ${tag} удален локально`);
+  const deleteRule = (ruleId: string, tag: string) => {
+    requestConfirm({
+      title: 'Удалить правило хэштега?',
+      message: `Удалить правило для хэштега «${tag}»? Бот перестанет требовать и парсить этот пункт в отчётах.`,
+      confirmLabel: 'Удалить правило',
+      isDanger: true,
+      onConfirm: async () => {
+        setRules(prev => prev.filter(r => r.id !== ruleId));
+        if (apiConnection === 'connected' && !ruleId.startsWith('local-')) {
+          try {
+            await api.deleteTaskRule(ruleId);
+            clearLocalChange('task-rules', ruleId);
+            showToast(`Хэштег ${tag} удален с сервера`);
+            return;
+          } catch {
+            markLocalChange('task-rules', ruleId);
+            setApiConnectionMessage('Правило удалено локально; сервер не принял удаление');
+          }
+        } else {
+          markLocalChange('task-rules', ruleId);
+        }
+        showToast(`Хэштег ${tag} удален локально`);
+      },
+    });
   };
 
   const persistSystemSettings = async (settings: SystemSettings, label: string) => {
@@ -1311,9 +1439,15 @@ export default function App() {
   const handleReject = async (reportId: string, name: string) => {
     const reason = replies[reportId]?.trim() ?? '';
     if (!reason) {
-      showToast('Укажите причину возврата на доработку');
+      setRejectErrorReportId(reportId);
+      const inputEl = document.getElementById(`reply-input-${reportId}`);
+      if (inputEl) {
+        inputEl.focus();
+      }
+      showToast('Укажите причину возврата на доработку в строке комментария');
       return;
     }
+    setRejectErrorReportId(null);
     let messageDelivered = false;
     if (apiConnection === 'connected') {
       try {
@@ -1857,14 +1991,28 @@ export default function App() {
                           <div className="flex gap-2.5 pt-2">
                             <input
                               type="text"
+                              id={`reply-input-${r.id}`}
                               value={replies[r.id] || ''}
-                              onChange={e => setReplies({ ...replies, [r.id]: e.target.value })}
-                              placeholder="Написать правки или подтверждение ученице..."
-                              className="flex-1 text-sm px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-500 transition placeholder:text-slate-400"
+                              onChange={e => {
+                                if (rejectErrorReportId === r.id) setRejectErrorReportId(null);
+                                setReplies({ ...replies, [r.id]: e.target.value });
+                              }}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  void handleApprove(r.id, r.studentName);
+                                }
+                              }}
+                              placeholder="Написать правки или подтверждение ученице (Enter чтобы одобрить)..."
+                              className={`flex-1 text-sm px-4 py-2.5 rounded-xl border bg-white focus:outline-none transition placeholder:text-slate-400 ${
+                                rejectErrorReportId === r.id
+                                  ? 'border-rose-400 ring-2 ring-rose-100 bg-rose-50/20'
+                                  : 'border-slate-200 focus:border-indigo-500'
+                              }`}
                             />
                             <button
                               onClick={() => void handleApprove(r.id, r.studentName)}
-                              className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer shrink-0"
+                              title="Одобрить отчёт (нажмите Enter в строке ввода)"
+                              className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer shrink-0 shadow-xs"
                             >
                               <CheckCheck className="w-4 h-4" strokeWidth={1.8} />
                               <span>Одобрить</span>
@@ -1872,7 +2020,8 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() => void handleReject(r.id, r.studentName)}
-                              className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 shrink-0"
+                              title="Вернуть отчёт на доработку с указанием правок"
+                              className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition shrink-0 cursor-pointer"
                             >
                               Вернуть
                             </button>
@@ -3692,10 +3841,16 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => {
-                        if (window.confirm('Сбросить данные к первоначальным демонстрационным значениям?')) {
-                          localStorage.clear();
-                          window.location.reload();
-                        }
+                        requestConfirm({
+                          title: 'Сбросить демо-данные?',
+                          message: 'Сбросить все данные к первоначальным демонстрационным значениям? Сохранённые локально изменения будут очищены.',
+                          confirmLabel: 'Сбросить к демо',
+                          isDanger: true,
+                          onConfirm: () => {
+                            localStorage.clear();
+                            window.location.reload();
+                          },
+                        });
                       }}
                       className="px-4 py-2 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition cursor-pointer"
                     >
@@ -3712,8 +3867,14 @@ export default function App() {
 
 {/* ─── MODAL 1: DAY STATUS & DETAILS EDITOR ─── */}
       {editingDay && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200 space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          onClick={() => setEditingDay(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200 space-y-4 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Редактировать статус дня</h3>
@@ -3815,8 +3976,14 @@ export default function App() {
       )}
 
       {isAddingStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-xl space-y-5 rounded-2xl border border-slate-200 bg-white p-6">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          onClick={() => setIsAddingStudent(false)}
+        >
+          <div
+            className="w-full max-w-xl space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Новая ученица</h3>
@@ -3911,8 +4078,14 @@ export default function App() {
 
       {/* ─── MODAL 2: STUDENT PROFILE & FINANCIALS EDITOR ─── */}
       {editingStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          onClick={() => setEditingStudent(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Профиль и созвоны</h3>
@@ -4226,8 +4399,17 @@ export default function App() {
 
       {/* ─── MODAL 3: SCRIPT EDITOR / CREATOR ─── */}
       {(editingScript || isAddingScript) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          onClick={() => {
+            setEditingScript(null);
+            setIsAddingScript(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
@@ -4336,8 +4518,17 @@ export default function App() {
 
       {/* ─── MODAL 4: HASHTAG RULE EDITOR / CREATOR ─── */}
       {(editingRule || isAddingRule) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          onClick={() => {
+            setEditingRule(null);
+            setIsAddingRule(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
@@ -4476,8 +4667,14 @@ export default function App() {
 
       {/* ─── MODAL 5: SCHEDULE TIME EDITOR ─── */}
       {editingScheduleTime && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 border border-slate-200 space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          onClick={() => setEditingScheduleTime(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-sm w-full p-6 border border-slate-200 space-y-4 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Изменить время расписания</h3>
@@ -4528,8 +4725,14 @@ export default function App() {
 
             {/* ─── MODAL 6: STUDENT DOSSIER (PROFILE, HISTORY, ZOOMS) ─── */}
       {inspectingStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 border border-slate-200 space-y-5 my-8">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-150"
+          onClick={() => setInspectingStudent(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-2xl w-full p-6 border border-slate-200 space-y-5 my-8 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
             {/* Header */}
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
@@ -4783,8 +4986,14 @@ export default function App() {
 
       {/* ─── MODAL 7: ZOOM MANAGEMENT MODAL ─── */}
       {managingZoomStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 border border-slate-200 space-y-5 my-8">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-150"
+          onClick={() => setManagingZoomStudent(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-xl w-full p-6 border border-slate-200 space-y-5 my-8 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Zoom-созвоны ученицы</h3>
@@ -4944,8 +5153,17 @@ export default function App() {
 
       {/* ─── MODAL 8: CHEATSHEET EDITOR / CREATOR ─── */}
       {(isAddingCheatsheet || editingCheatsheet) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 border border-slate-200 space-y-4 my-8">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-150"
+          onClick={() => {
+            setIsAddingCheatsheet(false);
+            setEditingCheatsheet(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-xl w-full p-6 border border-slate-200 space-y-4 my-8 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
@@ -5054,6 +5272,55 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* ─── CONFIRMATION DIALOG MODAL ─── */}
+      {confirmModal && confirmModal.isOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          onClick={() => setConfirmModal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200/80 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3.5">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                confirmModal.isDanger ? 'bg-rose-100 text-rose-600' : 'bg-indigo-100 text-indigo-600'
+              }`}>
+                {confirmModal.isDanger ? <AlertTriangle className="w-5 h-5" /> : <Info className="w-5 h-5" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-slate-900">{confirmModal.title}</h3>
+                <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">{confirmModal.message}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+              >
+                {confirmModal.cancelLabel || 'Отмена'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const onConfirm = confirmModal.onConfirm;
+                  setConfirmModal(null);
+                  void onConfirm();
+                }}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-white transition cursor-pointer ${
+                  confirmModal.isDanger
+                    ? 'bg-rose-600 hover:bg-rose-700 shadow-xs'
+                    : 'bg-slate-900 hover:bg-slate-800 shadow-xs'
+                }`}
+              >
+                {confirmModal.confirmLabel || 'Подтвердить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 {/* Toast */}
       {toastMessage && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl text-sm font-semibold">
