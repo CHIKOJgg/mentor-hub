@@ -151,7 +151,7 @@ class TelegramReportHandlerTest {
     }
 
     @Test
-    @DisplayName("Accumulator upsert accumulates second message on same day and concatenates questions")
+    @DisplayName("Latest report snapshot updates unapproved report metrics and adjusts student totals with exact delta")
     void handleStudentMessage_accumulatesSecondMessage() {
         Student student = Student.builder()
                 .id(1L)
@@ -181,23 +181,23 @@ class TelegramReportHandlerTest {
         Message message = Message.builder()
                 .messageId(502)
                 .chat(chat)
-                .text("#рассылки 10\n#продажи 80к\n#вопрос Клиентка хочет скидку")
+                .text("#рассылки 40\n#продажи 80к\n#вопрос Клиентка хочет скидку")
                 .build();
 
         DailyReport result = handler.handleStudentMessage(student, message);
 
-        // Summed up values
-        assertThat(result.getMailingsCount()).isEqualTo(35);
-        assertThat(result.getSalesTotal()).isEqualByComparingTo(new BigDecimal("115500.00"));
+        // Latest report snapshot metrics
+        assertThat(result.getMailingsCount()).isEqualTo(40);
+        assertThat(result.getSalesTotal()).isEqualByComparingTo(new BigDecimal("80000.00"));
 
         // Concatenated questions
         assertThat(result.getMentorQuestion())
                 .contains("[14:15] Как составить оферту?")
                 .contains("Клиентка хочет скидку");
 
-        // Student stats updated
-        assertThat(student.getTotalMailings()).isEqualTo(135);
-        assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("295500.00"));
+        // Student stats updated with exact delta (mailings +15, income +44500)
+        assertThat(student.getTotalMailings()).isEqualTo(140);
+        assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("260000.00"));
     }
 
     @Test
@@ -340,6 +340,8 @@ class TelegramReportHandlerTest {
 
         DailyReport r3 = handler.handleStudentMessage(student, msg3);
         assertThat(r3.getSalesTotal()).isEqualByComparingTo(new BigDecimal("60000.00"));
+        assertThat(r3.getMailingsCount()).isEqualTo(40);
         assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("240000.00"));
+        assertThat(student.getTotalMailings()).isEqualTo(140);
     }
 }

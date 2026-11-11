@@ -315,6 +315,18 @@ const getReportRange = (reports: DailyReport[], period: 'week' | 'month' | 'all'
   });
 };
 
+const getUniqueDrafts = (drafts?: DailyReport['contentDrafts']) => {
+  if (!drafts || drafts.length === 0) return [];
+  return drafts.filter((draft, idx, self) =>
+    idx === self.findIndex(d => {
+      if (d.url && draft.url && (d.url === draft.url || d.url.includes(draft.url) || draft.url.includes(d.url))) return true;
+      if (draft.label && d.url && draft.label.includes(d.url)) return true;
+      if (d.label && draft.url && d.label.includes(draft.url)) return true;
+      return d.label === draft.label && d.type === draft.type;
+    })
+  );
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const saved = readPersisted<TabType>('active-tab', 'inbox');
@@ -1886,7 +1898,7 @@ export default function App() {
                               <div className="text-xs font-medium text-slate-400 uppercase tracking-wider">
                                 Сдано на проверку:
                               </div>
-                              {r.contentDrafts.map(draft => {
+                              {getUniqueDrafts(r.contentDrafts).map(draft => {
                                 const badge = getContentTypeBadge(draft.type);
                                 return (
                                   <div
@@ -2066,7 +2078,7 @@ export default function App() {
                             {/* Drafts */}
                             {r.contentDrafts && r.contentDrafts.length > 0 && (
                               <div className="flex flex-wrap gap-2">
-                                {r.contentDrafts.map((draft, idx) => (
+                                {getUniqueDrafts(r.contentDrafts).map((draft, idx) => (
                                   <div key={idx} className="inline-flex items-center gap-2 text-xs bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
                                     <Video className="w-3.5 h-3.5 text-indigo-500" />
                                     <span className="font-medium text-slate-700">{draft.label}</span>
