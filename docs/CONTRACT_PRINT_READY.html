@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Договор № 2026/11-MH — Разработка ПО «Mentor Hub»</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm 15mm 20mm 25mm; /* Стандартные поля: левое 25-30мм, правое 15мм, верх/низ 20мм */
+    }
+    
+    body {
+      font-family: "Times New Roman", Times, serif;
+      font-size: 13pt;
+      line-height: 1.25;
+      color: #111;
+      background-color: #f4f6f9;
+      margin: 0;
+      padding: 0;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      background: #1e293b;
+      color: #fff;
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+    }
+
+    .toolbar h1 {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 16px;
+      margin: 0;
+      font-weight: 600;
+    }
+
+    .toolbar button {
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+
+    .toolbar button:hover {
+      background: #1d4ed8;
+    }
+
+    .page-sheet {
+      background: white;
+      width: 210mm;
+      min-height: 297mm;
+      margin: 24px auto;
+      padding: 20mm 15mm 20mm 25mm;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    .page-break {
+      page-break-before: always;
+      break-before: page;
+    }
+
+    h1.doc-title {
+      text-align: center;
+      font-size: 16pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    h2.doc-subtitle {
+      text-align: center;
+      font-size: 13pt;
+      font-weight: bold;
+      margin-top: 0;
+      margin-bottom: 20px;
+    }
+
+    .doc-meta {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      font-weight: bold;
+    }
+
+    p {
+      text-align: justify;
+      text-indent: 1.25cm;
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+
+    p.no-indent {
+      text-indent: 0;
+    }
+
+    h3.section-title {
+      font-size: 13pt;
+      font-weight: bold;
+      margin-top: 18px;
+      margin-bottom: 8px;
+      text-indent: 0;
+    }
+
+    ul, ol {
+      margin-top: 4px;
+      margin-bottom: 8px;
+      padding-left: 2cm;
+      text-align: justify;
+    }
+
+    li {
+      margin-bottom: 4px;
+    }
+
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 11pt;
+    }
+
+    table.data-table th, table.data-table td {
+      border: 1px solid #333;
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    table.data-table th {
+      background-color: #f1f5f9;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .parties-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      font-size: 11.5pt;
+    }
+
+    .parties-table td {
+      width: 50%;
+      vertical-align: top;
+      padding: 0 10px;
+    }
+
+    .stamp-container {
+      margin-top: 25px;
+      position: relative;
+    }
+
+    .signature-line {
+      margin-top: 45px;
+      border-top: 1px solid #111;
+      display: inline-block;
+      width: 80%;
+      text-align: center;
+      font-size: 10.5pt;
+      padding-top: 4px;
+    }
+
+    .seal-box {
+      display: inline-block;
+      border: 2px dashed #1e40af;
+      border-radius: 50%;
+      width: 115px;
+      height: 115px;
+      color: #1e40af;
+      text-align: center;
+      font-size: 8pt;
+      font-family: -apple-system, sans-serif;
+      padding: 10px;
+      box-sizing: border-box;
+      opacity: 0.85;
+      transform: rotate(-8deg);
+      position: absolute;
+      right: 25px;
+      top: 10px;
+    }
+
+    .seal-inner {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      text-transform: uppercase;
+      font-weight: bold;
+      line-height: 1.1;
+    }
+
+    @media print {
+      body {
+        background: transparent;
+      }
+      .toolbar {
+        display: none !important;
+      }
+      .page-sheet {
+        box-shadow: none;
+        margin: 0;
+        width: 100%;
+        min-height: auto;
+        padding: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <div>
+      <h1>Договор на разработку ПО «Mentor Hub» — ИП Писарик М. И. & Сидоренко К. С.</h1>
+      <span style="font-size: 12px; color: #94a3b8;">Готов к печати и экспорту в PDF (A4, Times New Roman, печати и подписи)</span>
+    </div>
+    <button onclick="window.print()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><path d="M6 14h12v8H6z"></path></svg>
+      Печать / Сохранить в PDF
+    </button>
+  </div>
+
+  <div class="page-sheet">
+    <h1 class="doc-title">ДОГОВОР № 2026/11-MH</h1>
+    <h2 class="doc-subtitle">на разработку, внедрение и передачу прав на программный комплекс «Mentor Hub»</h2>
+
+    <div class="doc-meta">
+      <span>г. Ереван / г. Минск</span>
+      <span>«10» ноября 2026 г.</span>
+    </div>
+
+    <p>
+      <strong>Индивидуальный предприниматель Писарик Мирослав Игоревич</strong> (ԱՁ Պիսարիկ Միրոսլավ Իգորևիչ), действующий на основании свидетельства о государственной регистрации физического лица в качестве индивидуального предпринимателя № 264.1284953 от 14 февраля 2024 г., выданного Агентством государственного регистра юридических лиц Министерства юстиции Республики Армения, учетный номер налогоплательщика (TIN / ՀՎՀՀ): 74981624, именуемый в дальнейшем <strong>«Исполнитель»</strong>, с одной стороны,
+    </p>
+    <p>
+      и <strong>гражданка Республики Беларусь Сидоренко Ксения Сергеевна</strong>, паспорт серии МР № 2459812, выдан Советским РУВД г. Минска 22.04.2021 г., идентификационный номер: 4210595A012PB4, проживающая по адресу: Республика Беларусь, г. Минск, пр-т Победителей, д. 38, кв. 74, именуемая в дальнейшем <strong>«Заказчик»</strong>, с другой стороны,
+    </p>
+    <p>
+      вместе именуемые <strong>«Стороны»</strong>, а по отдельности — <strong>«Сторона»</strong>, заключили настоящий Договор (далее — «Договор») о нижеследующем:
+    </p>
+
+    <h3 class="section-title">1. ПРЕДМЕТ ДОГОВОРА</h3>
+    <p>
+      1.1. По настоящему Договору Исполнитель обязуется по заданию Заказчика выполнить комплекс научно-технических и практических работ по проектированию, разработке, конфигурированию, тестированию и развертыванию программного комплекса <strong>«Mentor Hub»</strong> (далее — «Программный комплекс» / «ПО»), предназначенного для автоматизации сбора ежедневных отчетов, контроля дисциплины подопечных и формирования аналитических кейсов динамики дохода («Точка А ➡️ Точка Б»), а также передать Заказчику исключительные имущественные права на созданное ПО в полном объеме, а Заказчик обязуется принять результаты выполненных работ и оплатить их на условиях, определенных настоящим Договором.
+    </p>
+    <p>
+      1.2. Функциональные, технические, программные и эксплуатационные требования к Программному комплексу, этапы выполнения работ, состав передаваемой документации и исходного кода определяются <strong>Техническим заданием (Приложение № 1)</strong> и <strong>Календарным планом (Приложение № 2)</strong>, являющимися неотъемлемыми частями Договора.
+    </p>
+    <p>
+      1.3. В состав создаваемого Программного комплекса входят следующие ключевые компоненты:
+    </p>
+    <ul>
+      <li><strong>Фоновый шлюз интеграции с Telegram (Telegram Ingestion Gateway):</strong> сервис на базе Telegram Bot API / Telegram Business API для сбора отчетов, валидации медиа-ссылок Instagram Reels с защитой от повторной сдачи (SHA-256 хеширование) и рассылки вечерних напоминаний;</li>
+      <li><strong>Интеллектуальный модуль фильтрации и анализа (AI-Pipeline):</strong> сервис автоматической транскрибации голосовых аудиосообщений (.oga) и структурирования фактов (Reels, продажи, вопросы к наставнику);</li>
+      <li><strong>Клиентский аналитический веб-интерфейс наставника (React SPA):</strong> оптимизированный под планшеты Apple iPad и десктоп пользовательский интерфейс с функционалом «Inbox Zero», интерактивным недельным календарем дисциплины (Пн–Вс) и генератором текстов для сторис;</li>
+      <li><strong>Серверный бэкенд и база данных:</strong> серверный REST API на стеке Java 21 LTS / Spring Boot и реляционная СУБД PostgreSQL 16+.</li>
+    </ul>
+
+    <h3 class="section-title">2. СТОИМОСТЬ УСЛУГ И ПОРЯДОК РАСЧЕТОВ</h3>
+    <p>
+      2.1. Общая стоимость работ по разработке и передаче прав на Программный комплекс по настоящему Договору составляет <strong>475,00 (четыреста семьдесят пять белорусских рублей 00 копеек) BYN</strong> (без НДС в связи с применением Исполнителем специального налогового режима для IT-предпринимателей в соответствии с законодательством Республики Армения).
+    </p>
+    <p>
+      2.2. Оплата по настоящему Договору производится Заказчиком в следующем порядке:
+    </p>
+    <ul>
+      <li><strong>2.2.1. Авансовый платеж (предоплата):</strong> в размере 50% от общей стоимости Договора, что составляет <strong>237,50 (двести тридцать семь белорусских рублей 50 копеек) BYN</strong>, перечисляется Заказчиком в течение 3 (трех) банковских дней с момента подписания настоящего Договора.</li>
+      <li><strong>2.2.2. Окончательный расчет:</strong> в размере оставшихся 50% стоимости Договора, что составляет <strong>237,50 (двести тридцать семь белорусских рублей 50 копеек) BYN</strong>, перечисляется Заказчиком в течение 3 (трех) банковских дней с даты подписания Сторонами Итогового акта сдачи-приемки оказанных услуг.</li>
+    </ul>
+    <p>
+      2.3. В случае расчетов в иной валюте (AMD, USD, RUB) конвертация осуществляется по официальному курсу Центрального банка на день выставления инвойса Исполнителем.
+    </p>
+
+    <h3 class="section-title">3. СРОКИ И ЭТАПЫ ВЫПОЛНЕНИЯ РАБОТ</h3>
+    <p>
+      3.1. Сроки выполнения работ по Договору: начало — <strong>«10» ноября 2026 г.</strong>, завершение и передача ПО в опытную эксплуатацию — <strong>«24» ноября 2026 г.</strong> (общая длительность — 14 календарных дней).
+    </p>
+    <p>
+      3.2. Работы выполняются поэтапно в соответствии с Календарным планом (Приложение № 2). Исполнитель имеет право на досрочную сдачу работ.
+    </p>
+
+    <h3 class="section-title">4. ПОРЯДОК СДАЧИ И ПРИЕМКИ РАБОТ</h3>
+    <p>
+      4.1. По завершении работ Исполнитель передает Заказчику доступ к Git-репозиторию с исходным кодом, рабочий развернутый экземпляр на сервере, документацию и проект двустороннего Акта сдачи-приемки.
+    </p>
+    <p>
+      4.2. Заказчик в течение 3 (трех) рабочих дней осуществляет приемочное тестирование и направляет подписанный Акт либо мотивированный перечень замечаний. Несоответствия утвержденному ТЗ устраняются Исполнителем безвозмездно в срок до 5 рабочих дней.
+    </p>
+
+    <h3 class="section-title">5. ИНТЕЛЛЕКТУАЛЬНЫЕ ПРАВА И ГАРАНТИИ</h3>
+    <p>
+      5.1. Все исключительные имущественные права на результаты интеллектуальной деятельности, созданные в рамках настоящего Договора, передаются Заказчику в полном объеме с момента осуществления окончательного расчета.
+    </p>
+    <p>
+      5.2. Исполнитель предоставляет гарантийную техническую поддержку работоспособности ПО сроком на <strong>6 (шесть) месяцев</strong> со дня подписания Акта сдачи-приемки.
+    </p>
+
+    <h3 class="section-title">6. АДРЕСА, РЕКВИЗИТЫ И ПОДПИСИ СТОРОН</h3>
+    <table class="parties-table">
+      <tr>
+        <td>
+          <strong>ИСПОЛНИТЕЛЬ:</strong><br>
+          <strong>ИП Писарик Мирослав Игоревич</strong><br>
+          (ԱՁ Պիսարիկ Միրոսլավ Իգորևիչ)<br>
+          Свид. о рег. № 264.1284953 от 14.02.2024 г.<br>
+          Агентство гос. регистра МЮ РА<br>
+          TIN / ՀՎՀՀ: 74981624<br>
+          Адрес: Республика Армения, г. Ереван, 0010,<br>
+          р-н Кентрон, ул. Амиряна, д. 4/3, кв. 18<br>
+          Банк: ЗАО «АКБА Банк» (г. Ереван, РА)<br>
+          IBAN (AMD): AM35 0151 0001 2345 6789<br>
+          IBAN (USD/BYN): AM92 0151 0002 9876 5432<br>
+          SWIFT: ARCBAM22<br>
+          Email: pisarik.miroslav@gmail.com
+          <div class="stamp-container">
+            <div class="seal-box">
+              <div class="seal-inner">
+                <span>ՀԱՅԱՍՏԱՆԻ ՀԱՆՐԱՊԵՏՈՒԹՅՈՒՆ</span>
+                <span style="font-size:7pt;margin:2px 0;">ԱՁ ՊԻՍԱՐԻԿ ՄԻՐՈՍԼԱՎ</span>
+                <span>TIN 74981624</span>
+                <span style="font-size:6.5pt;">★ YEREVAN ★</span>
+              </div>
+            </div>
+            <div class="signature-line">
+              / М. И. Писарик /<br>
+              <small>М.П. (Подпись, печать ИП)</small>
+            </div>
+          </div>
+        </td>
+        <td>
+          <strong>ЗАКАЗЧИК:</strong><br>
+          <strong>Сидоренко Ксения Сергеевна</strong><br>
+          Гражданство: Республика Беларусь<br>
+          Паспорт: серия МР № 2459812<br>
+          выдан Советским РУВД г. Минска 22.04.2021 г.<br>
+          Идентификационный №: 4210595A012PB4<br>
+          Адрес регистрации:<br>
+          Республика Беларусь, 220035, г. Минск,<br>
+          пр-т Победителей, д. 38, кв. 74<br>
+          Телефон: +375 (29) 714-88-29<br>
+          Telegram: @ksenia_sidorenko<br>
+          Email: ksenia.mentoring@gmail.com
+          <div class="stamp-container">
+            <div class="signature-line">
+              / К. С. Сидоренко /<br>
+              <small>(Подпись Заказчика)</small>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- ВТОРАЯ СТРАНИЦА: ПРИЛОЖЕНИЕ № 1 (ТЕХНИЧЕСКОЕ ЗАДАНИЕ) -->
+  <div class="page-sheet page-break">
+    <div style="text-align: right; font-size: 11pt; margin-bottom: 15px;">
+      <strong>Приложение № 1</strong><br>
+      к Договору № 2026/11-MH от 10.11.2026 г.
+    </div>
+
+    <h1 class="doc-title" style="font-size: 14pt;">ТЕХНИЧЕСКОЕ ЗАДАНИЕ</h1>
+    <h2 class="doc-subtitle" style="font-size: 12pt;">на разработку программного комплекса «Mentor Hub»</h2>
+
+    <h3 class="section-title">1. ОБЩИЕ СВЕДЕНИЯ И ЦЕЛИ ПРОЕКТА</h3>
+    <p>
+      1.1. Система представляет собой специализированный комплекс автоматизации сбора ежедневных отчетов, контроля дисциплины учениц и генерации кейсов наставника Ксении Сидоренко.
+    </p>
+    <p>
+      1.2. <strong>Цель разработки:</strong> высвобождение 1.5–2 часов ежедневного рабочего времени наставника за счет ликвидации ручной рутины в разрозненных чатах Telegram и автоматической защиты от сдачи недействительных/повторных видеороликов Reels.
+    </p>
+
+    <h3 class="section-title">2. АРХИТЕКТУРА И СОСТАВ ПОДСИСТЕМ</h3>
+    <p>
+      2.1. <strong>Модуль сбора данных Telegram (Telegram Ingestion Gateway):</strong>
+    </p>
+    <ul>
+      <li>Взаимодействие через Telegram Business API и Telegram Bot API;</li>
+      <li>Фильтрация отчетов по хэштегам: #рилс, #продажи, #рассылки, #вопрос;</li>
+      <li>Валидация ссылок на Instagram Reels с алгоритмом вычисления SHA-256 хеша для блокировки повторной сдачи одного и того же ролика;</li>
+      <li>Автоматический фоновый триггер (cron в 20:00) для отправки напоминаний ученицам с несданными отчетами.</li>
+    </ul>
+
+    <p>
+      2.2. <strong>Модуль искусственного интеллекта (AI-пайплайн):</strong>
+    </p>
+    <ul>
+      <li>Транскрибация аудиоформата .oga голосовых сообщений учениц в текстовый формат;</li>
+      <li>Анализ сообщений с удалением бытового флуда и структурированием ключевых метрик;</li>
+      <li>Автогенерация шаблона кейса для Instagram Stories на основе динамики показателей (Точка А ➡️ Точка Б, прирост дохода и кратный множитель).</li>
+    </ul>
+
+    <p>
+      2.3. <strong>Пользовательский веб-трекер наставника (React 19 SPA):</strong>
+    </p>
+    <ul>
+      <li>Экран «На проверку (Inbox Zero)» с быстрой кнопкой подтверждения отчета и переходом в Telegram;</li>
+      <li>Экран «Ученицы & Календарь» с цветовой индикацией дисциплины по дням недели (Пн–Вс);</li>
+      <li>Экран «Аналитика & Кейсы» с кнопкой быстрого копирования продающего текста в буфер обмена.</li>
+    </ul>
+
+    <h3 class="section-title">3. СТЕК ТЕХНОЛОГИЙ</h3>
+    <p>
+      Бэкенд: Java 21 LTS / Spring Boot 3.4+, PostgreSQL 16+, TelegramBots SDK 10.3.<br>
+      Фронтенд: React 19, Vite, Tailwind CSS, Lucide Icons (адаптивная верстка с поддержкой Apple iPad).
+    </p>
+
+    <table style="width: 100%; margin-top: 40px; font-size: 11pt;">
+      <tr>
+        <td style="width: 50%;">
+          <strong>Исполнитель:</strong><br><br>
+          ________________ / М. И. Писарик /<br>
+          М.П.
+        </td>
+        <td style="width: 50%;">
+          <strong>Заказчик:</strong><br><br>
+          ________________ / К. С. Сидоренко /
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- ТРЕТЬЯ СТРАНИЦА: ПРИЛОЖЕНИЕ № 2 И ПРИЛОЖЕНИЕ № 3 -->
+  <div class="page-sheet page-break">
+    <div style="text-align: right; font-size: 11pt; margin-bottom: 15px;">
+      <strong>Приложение № 2</strong><br>
+      к Договору № 2026/11-MH от 10.11.2026 г.
+    </div>
+
+    <h1 class="doc-title" style="font-size: 13pt;">КАЛЕНДАРНЫЙ ПЛАН И СМЕТА РАБОТ</h1>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width: 5%;">№</th>
+          <th style="width: 45%;">Содержание этапа</th>
+          <th style="width: 15%;">Срок</th>
+          <th style="width: 15%;">Дата</th>
+          <th style="width: 20%;">Стоимость</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="text-align:center;">1</td>
+          <td>Анализ требований, проектирование схемы БД PostgreSQL и спецификаций REST API</td>
+          <td style="text-align:center;">2 дня</td>
+          <td style="text-align:center;">12.11.2026</td>
+          <td style="text-align:right;"><strong>75,00 BYN</strong></td>
+        </tr>
+        <tr>
+          <td style="text-align:center;">2</td>
+          <td>Разработка шлюза Telegram Ingestion Gateway, валидация Reels, SHA-256 дедупликатор</td>
+          <td style="text-align:center;">3 дня</td>
+          <td style="text-align:center;">15.11.2026</td>
+          <td style="text-align:right;"><strong>120,00 BYN</strong></td>
+        </tr>
+        <tr>
+          <td style="text-align:center;">3</td>
+          <td>Разработка пользовательского интерфейса React SPA («Inbox Zero», календарь, iPad-верстка)</td>
+          <td style="text-align:center;">4 дня</td>
+          <td style="text-align:center;">19.11.2026</td>
+          <td style="text-align:right;"><strong>130,00 BYN</strong></td>
+        </tr>
+        <tr>
+          <td style="text-align:center;">4</td>
+          <td>Интеграция AI-пайплайна транскрибации, парсинга метрик и автогенератора кейсов</td>
+          <td style="text-align:center;">3 дня</td>
+          <td style="text-align:center;">22.11.2026</td>
+          <td style="text-align:right;"><strong>100,00 BYN</strong></td>
+        </tr>
+        <tr>
+          <td style="text-align:center;">5</td>
+          <td>Интеграционное тестирование, развертывание в Docker и сдача в опытную эксплуатацию</td>
+          <td style="text-align:center;">2 дня</td>
+          <td style="text-align:center;">24.11.2026</td>
+          <td style="text-align:right;"><strong>50,00 BYN</strong></td>
+        </tr>
+        <tr style="background:#f8fafc;">
+          <td colspan="4" style="text-align:right; font-weight:bold;">ИТОГО ПО ДОГОВОРУ:</td>
+          <td style="text-align:right; font-weight:bold; color:#1e40af;">475,00 BYN</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr style="border: none; border-top: 1px dashed #cbd5e1; margin: 30px 0;">
+
+    <div style="text-align: right; font-size: 11pt; margin-bottom: 15px;">
+      <strong>Приложение № 3</strong><br>
+      к Договору № 2026/11-MH от 10.11.2026 г.
+    </div>
+
+    <h1 class="doc-title" style="font-size: 13pt;">АКТ СДАЧИ-ПРИЕМКИ ОКАЗАННЫХ УСЛУГ</h1>
+    <div class="doc-meta" style="margin-bottom: 10px;">
+      <span>г. Ереван / г. Минск</span>
+      <span>«24» ноября 2026 г.</span>
+    </div>
+
+    <p>
+      Мы, нижеподписавшиеся: <strong>ИП Писарик Мирослав Игоревич</strong> (Исполнитель), с одной стороны, и гражданка <strong>Сидоренко Ксения Сергеевна</strong> (Заказчик), с другой стороны, составили настоящий Акт о том, что:
+    </p>
+    <p>
+      1. Исполнитель выполнил в полном объеме работы по проектированию, разработке, конфигурированию, интеграции и вводу в эксплуатацию программного комплекса <strong>«Mentor Hub»</strong> в соответствии с требованиями Технического задания.
+    </p>
+    <p>
+      2. Заказчик подтверждает приемку результатов работ, передачу исходного кода и отсутствие претензий по качеству и срокам.
+    </p>
+    <p>
+      3. Общая стоимость выполненных работ составляет <strong>475,00 BYN</strong>. Ранее выплачен аванс: 237,50 BYN. Сумма к окончательному расчету составляет: <strong>237,50 (двести тридцать семь белорусских рублей 50 копеек) BYN</strong>.
+    </p>
+
+    <table style="width: 100%; margin-top: 30px; font-size: 11pt;">
+      <tr>
+        <td style="width: 50%;">
+          <strong>Исполнитель:</strong><br><br>
+          ________________ / М. И. Писарик /<br>
+          М.П. (Печать ИП)
+        </td>
+        <td style="width: 50%;">
+          <strong>Заказчик:</strong><br><br>
+          ________________ / К. С. Сидоренко /
+        </td>
+      </tr>
+    </table>
+  </div>
+
+</body>
+</html>

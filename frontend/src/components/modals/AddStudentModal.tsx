@@ -34,7 +34,7 @@ export function AddStudentModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+        className="w-full max-w-xl space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
