@@ -103,6 +103,45 @@ public class TelegramSenderService {
         return sendSaturdaySurveyPoll(chatId, studentId, text, null);
     }
 
+    public boolean sendMorningFocusPoll(Long chatId, Long studentId, String text) {
+        return sendMorningFocusPoll(chatId, studentId, text, null);
+    }
+
+    public boolean sendMorningFocusPoll(Long chatId, Long studentId, String text, String businessConnectionId) {
+        if (!canSend(chatId)) {
+            log.debug("Telegram client not available. Morning focus poll skipped for chat {}", chatId);
+            return false;
+        }
+
+        try {
+            InlineKeyboardRow row1 = new InlineKeyboardRow(
+                    InlineKeyboardButton.builder().text("🎬 Снять Reels").callbackData("focus:reels:" + studentId).build(),
+                    InlineKeyboardButton.builder().text("✉️ 20+ рассылок").callbackData("focus:outreach:" + studentId).build()
+            );
+            InlineKeyboardRow row2 = new InlineKeyboardRow(
+                    InlineKeyboardButton.builder().text("💎 Упаковка / оффер").callbackData("focus:offer:" + studentId).build(),
+                    InlineKeyboardButton.builder().text("💰 Продажи / созвон").callbackData("focus:sales:" + studentId).build()
+            );
+
+            InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(List.of(row1, row2));
+
+            SendMessage.SendMessageBuilder builder = SendMessage.builder()
+                    .chatId(chatId.toString())
+                    .text(text)
+                    .replyMarkup(keyboard);
+            if (businessConnectionId != null && !businessConnectionId.isBlank()) {
+                builder.businessConnectionId(businessConnectionId);
+            }
+
+            telegramClient.execute(builder.build());
+            log.info("Sent Morning focus poll with inline buttons to chat {} for student #{}", chatId, studentId);
+            return true;
+        } catch (TelegramApiException ex) {
+            log.warn("Failed to send Morning focus poll to chat {}: {}", chatId, ex.getMessage());
+            return false;
+        }
+    }
+
     public boolean sendSaturdaySurveyPoll(Long chatId, Long studentId, String text, String businessConnectionId) {
         if (!canSend(chatId)) {
             log.debug("Telegram client not available. Saturday survey poll skipped for chat {}", chatId);

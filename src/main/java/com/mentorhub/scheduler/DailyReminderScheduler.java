@@ -153,14 +153,12 @@ public class DailyReminderScheduler {
     }
 
     private void sendMorningFocusToStudents(MentorSetting settings) {
-        String businessConnectionId = Boolean.TRUE.equals(settings.getIsBusinessConnected())
-                ? settings.getBusinessConnectionId()
-                : null;
         for (Student student : studentRepository.findByIsActiveTrue()) {
             if (Boolean.TRUE.equals(student.getIsPaused()) || student.getTgChatId() == null) continue;
-            String text = student.getFullName() + ", доброе утро. Выберите один главный результат на сегодня и не забывайте отметить отчет до "
-                    + (settings.getDeadlineTime() == null ? "21:00" : settings.getDeadlineTime()) + ".";
-            telegramSenderService.sendStudentMessage(student.getTgChatId(), businessConnectionId, text);
+            String deadlineStr = settings.getDeadlineTime() == null ? "21:00" : settings.getDeadlineTime().toString();
+            String text = student.getFullName() + ", доброе утро! 🌸\n\n" +
+                    "Выберите один главный результат на сегодня и не забывайте сдать отчёт до " + deadlineStr + ":";
+            telegramSenderService.sendMorningFocusPoll(student.getTgChatId(), student.getId(), text);
             if (rateLimitMs > 0) {
                 try {
                     Thread.sleep(rateLimitMs);

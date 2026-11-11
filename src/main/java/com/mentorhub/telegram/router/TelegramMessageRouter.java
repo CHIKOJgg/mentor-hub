@@ -178,6 +178,22 @@ public class TelegramMessageRouter {
         Long chatId = message.getChat() != null ? message.getChat().getId() : null;
         String rawText = message.getText() != null ? message.getText() : message.getCaption();
 
+        // Filter out Telegram service events (group created, member joined/left, title changed)
+        if (isServiceMessage(message)) {
+            log.info("Telegram service message ignored (chat={}, msgId={})", chatId, message.getMessageId());
+            identifyStudent(chatId, fromId, from.getUserName(), message);
+            auditMessageLogRepository.save(AuditMessageLog.builder()
+                    .updateId(updateId)
+                    .tgChatId(chatId)
+                    .tgUserId(fromId)
+                    .sourceType(sourceType)
+                    .rawPayload("[Service Message: group creation or member update]")
+                    .processingStatus("SERVICE_EVENT_IGNORED")
+                    .createdAt(Instant.now())
+                    .build());
+            return;
+        }
+
         // Welcome / Help handling
         if (rawText != null && (rawText.startsWith("/start") || rawText.startsWith("/help"))) {
             if (telegramSenderService != null && chatId != null) {
@@ -230,22 +246,46 @@ public class TelegramMessageRouter {
 
             if (telegramSenderService != null && chatId != null) {
                 boolean isGroup = message.getChat() != null && (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat());
-                String guidance;
-                if (isGroup) {
-                    guidance = "Здравствуйте! Я бот-ассистент платформы Mentor Hub для Ксении и Кати 🌸\n\n" +
-                            "Чтобы связать эту группу с ученицей, укажите имя ученицы в названии группы (например: «VIP — Милана») или отправьте команду:\n" +
-                            "/bind [Имя ученицы] (например: /bind Милана)";
-                } else {
-                    String uName = from.getUserName() != null ? "@" + from.getUserName() : "ID: " + fromId;
-                    guidance = "Здравствуйте! Ваш Telegram (" + uName + ") пока не привязан к списку учениц в системе.\n\n" +
-                            "Добавьте меня в вашу рабочую мини-группу с Ксенией и Катей, и чат подключится автоматически!";
+                boolean hasExplicitTrigger = rawText != null && (rawText.startsWith("/") || rawText.contains("#"));
+                if (!isGroup || hasExplicitTrigger) {
+                    String guidance;
+                    if (isGroup) {
+                        guidance = "Здравствуйте! Я бот-ассистент платформы Mentor Hub для Ксении и Кати 🌸\n\n" +
+                                "Чтобы связать эту группу с ученицей, укажите имя ученицы в названии группы (например: «VIP — Милана») или отправьте команду:\n" +
+                                "/bind [Имя ученицы] (например: /bind Милана)";
+                    } else {
+                        String uName = from.getUserName() != null ? "@" + from.getUserName() : "ID: " + fromId;
+                        guidance = "Здравствуйте! Ваш Telegram (" + uName + ") пока не привязан к списку учениц в системе.\n\n" +
+                                "Добавьте меня в вашу рабочую мини-группу с Ксенией и Катей, и чат подключится автоматически!";
+                    }
+                    telegramSenderService.sendCaringReply(chatId, message.getMessageId(), guidance);
                 }
-                telegramSenderService.sendCaringReply(chatId, message.getMessageId(), guidance);
             }
             return;
         }
 
         Student student = studentOpt.get();
+
+        // Check if message is student's daily focus / reply to morning push
+        if (isMorningFocusMessage(message, rawText)) {
+            try {
+                telegramReportHandler.handleMorningFocusMessage(student, message, rawText);
+
+                auditMessageLogRepository.save(AuditMessageLog.builder()
+                        .updateId(updateId)
+                        .tgChatId(chatId)
+                        .tgUserId(fromId)
+                        .sourceType(sourceType)
+                        .rawPayload(rawText)
+                        .processingStatus("FOCUS_SET")
+                        .createdAt(Instant.now())
+                        .build());
+            } catch (Exception ex) {
+                log.error("Failed to process morning focus for student '{}' (#{}), msgId={}: {}",
+                        student.getFullName(), student.getId(), message.getMessageId(), ex.getMessage(), ex);
+            }
+            return;
+        }
 
         try {
             telegramReportHandler.handleStudentMessage(student, message);
@@ -274,6 +314,47 @@ public class TelegramMessageRouter {
                     .createdAt(Instant.now())
                     .build());
         }
+    }
+
+    public static boolean isServiceMessage(Message message) {
+        if (message == null) return false;
+        return Boolean.TRUE.equals(message.getGroupchatCreated())
+                || Boolean.TRUE.equals(message.getSuperGroupCreated())
+                || Boolean.TRUE.equals(message.getChannelChatCreated())
+                || (message.getNewChatMembers() != null && !message.getNewChatMembers().isEmpty())
+                || message.getLeftChatMember() != null
+                || message.getPinnedMessage() != null
+                || message.getNewChatTitle() != null
+                || message.getNewChatPhoto() != null
+                || Boolean.TRUE.equals(message.getDeleteChatPhoto());
+    }
+
+    public static boolean isMorningFocusMessage(Message message, String rawContent) {
+        if (!StringUtils.hasText(rawContent)) return false;
+        String lower = rawContent.trim().toLowerCase(java.util.Locale.ROOT);
+
+        // 1. Check if replying to the bot's morning focus prompt
+        Message replyTo = message != null ? message.getReplyToMessage() : null;
+        if (replyTo != null && StringUtils.hasText(replyTo.getText())) {
+            String replyLower = replyTo.getText().toLowerCase(java.util.Locale.ROOT);
+            if (replyLower.contains("доброе утро") && (replyLower.contains("главный результат") || replyLower.contains("главную цель") || replyLower.contains("отчет") || replyLower.contains("отчёт") || replyLower.contains("дедлайн") || replyLower.contains("фокус"))) {
+                return true;
+            }
+        }
+
+        // 2. Check focus keywords
+        return lower.startsWith("сегодня я буду")
+                || lower.startsWith("сегодня буду")
+                || lower.startsWith("мой фокус")
+                || lower.startsWith("фокус на сегодня")
+                || lower.startsWith("фокус дня")
+                || lower.startsWith("цель на сегодня")
+                || lower.startsWith("план на сегодня")
+                || lower.startsWith("сегодня планирую")
+                || lower.startsWith("сегодня в планах")
+                || lower.startsWith("сегодня сделаю")
+                || lower.startsWith("главный результат:")
+                || lower.startsWith("главная цель:");
     }
 
     private boolean isMentorEcho(Long fromId) {

@@ -118,4 +118,46 @@ class CallbackQueryHandlerTest {
         verifyNoInteractions(studentRepository);
         verifyNoInteractions(dailyReportRepository);
     }
+
+    @Test
+    @DisplayName("Handles focus:{key}:{studentId} callback query, updates report with daily focus, answers toast and edits message")
+    void handleCallbackQuery_validMorningFocus() {
+        Student student = Student.builder()
+                .id(1L)
+                .fullName("Милана Горохова")
+                .tgChatId(71010101L)
+                .build();
+
+        when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.empty());
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder().messageId(888).chat(chat).build();
+
+        CallbackQuery query = new CallbackQuery();
+        query.setId("cb_focus_1");
+        query.setData("focus:reels:1");
+        query.setMessage(message);
+
+        boolean handled = handler.handleCallbackQuery(query);
+
+        assertThat(handled).isTrue();
+
+        // DailyReport saved with reflectionActions and aiSummary
+        verify(dailyReportRepository).save(argThat(r ->
+                r.getReflectionActions().contains("🎬 Снять и выложить Reels") &&
+                r.getAiSummary().contains("🎬 Снять и выложить Reels")
+        ));
+
+        // Toast answer sent
+        assertThat(answeredQueryId).isEqualTo("cb_focus_1");
+        assertThat(answeredQueryText).contains("🎬 Снять и выложить Reels 🎯");
+
+        // Message edited
+        assertThat(editedChatId).isEqualTo(-10071010101L);
+        assertThat(editedMessageId).isEqualTo(888);
+        assertThat(editedText).contains("🎬 Снять и выложить Reels");
+        assertThat(editedText).contains("Милана Горохова");
+    }
 }

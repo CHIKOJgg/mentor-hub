@@ -196,4 +196,77 @@ class TelegramReportHandlerTest {
         assertThat(student.getTotalMailings()).isEqualTo(135);
         assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("295500.00"));
     }
+
+    @Test
+    @DisplayName("General chat conversation is scanned silently WITHOUT sending acknowledgment spam")
+    void handleStudentMessage_chitChatScannedSilently() {
+        Student student = Student.builder()
+                .id(1L)
+                .fullName("Милана Горохова")
+                .tgChatId(71010101L)
+                .build();
+
+        DailyReport existingReport = DailyReport.builder()
+                .id(10L)
+                .student(student)
+                .reportDate(LocalDate.now())
+                .status("APPROVED")
+                .contentDrafts(new ArrayList<>())
+                .reelSubmissions(new ArrayList<>())
+                .salesEntries(new ArrayList<>())
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.of(existingReport));
+
+        sentReplyText = null;
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder()
+                .messageId(503)
+                .chat(chat)
+                .text("Привет, девочки! Как настроение?")
+                .build();
+
+        DailyReport result = handler.handleStudentMessage(student, message);
+
+        // Crucial: no caring reply sent on general chat messages
+        assertThat(sentReplyText).isNull();
+
+        // Status is NOT changed to PENDING (remains APPROVED)
+        assertThat(result.getStatus()).isEqualTo("APPROVED");
+
+        // Raw message text contains the conversation
+        assertThat(result.getRawMessageText()).contains("Привет, девочки! Как настроение?");
+    }
+
+    @Test
+    @DisplayName("Morning focus text message records goal and sends caring confirmation")
+    void handleMorningFocusMessage_savesFocusAndConfirms() {
+        Student student = Student.builder()
+                .id(1L)
+                .fullName("Милана Горохова")
+                .tgChatId(71010101L)
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.empty());
+
+        sentReplyText = null;
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder()
+                .messageId(504)
+                .chat(chat)
+                .text("Сегодня я буду делать рилсы")
+                .build();
+
+        DailyReport result = handler.handleMorningFocusMessage(student, message, "Сегодня я буду делать рилсы");
+
+        assertThat(result.getReflectionActions()).contains("🎯 Фокус дня: Сегодня я буду делать рилсы");
+        assertThat(result.getAiSummary()).contains("Фокус на сегодня: Сегодня я буду делать рилсы");
+
+        // Sent custom focus confirmation instead of generic draft acknowledgment
+        assertThat(sentReplyText).contains("🎯 Цель на сегодня зафиксирована: «Сегодня я буду делать рилсы»!");
+    }
 }

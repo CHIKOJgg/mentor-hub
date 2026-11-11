@@ -130,9 +130,8 @@ public class TelegramReportHandler {
             report = dailyReportRepository.save(report);
         }
 
-        report.setSubmittedAt(Instant.now());
-        report.setIsOnTime(isOnTime);
-        report.setStatus("PENDING");
+        int initialDraftsCount = report.getContentDrafts() != null ? report.getContentDrafts().size() : 0;
+        int initialReelsCount = report.getReelSubmissions() != null ? report.getReelSubmissions().size() : 0;
 
         // In mini-groups, bind the active group chatId to the student automatically
         if (message.getChat() != null && (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat())) {
@@ -238,24 +237,118 @@ public class TelegramReportHandler {
                 ? existingRaw + "\n---\n" + rawContent
                 : rawContent);
 
+        int newDraftsAdded = (report.getContentDrafts() != null ? report.getContentDrafts().size() : 0) - initialDraftsCount;
+        int newReelsAdded = (report.getReelSubmissions() != null ? report.getReelSubmissions().size() : 0) - initialReelsCount;
+        boolean hasSales = salesAmount != null && salesAmount.compareTo(BigDecimal.ZERO) > 0;
+        boolean hasMailings = mailings != null && mailings > 0;
+        boolean hasClients = newClients != null && newClients > 0;
+        boolean hasQuestion = StringUtils.hasText(extractedQuestion);
+
+        boolean isReport = isReportSubmission(message, rawContent, newDraftsAdded, newReelsAdded, hasSales, hasMailings, hasClients, hasQuestion);
+
+        if (isReport) {
+            report.setSubmittedAt(Instant.now());
+            report.setIsOnTime(isOnTime);
+            report.setStatus("PENDING");
+
+            // 10. Send caring acknowledgment reply in mini-group only when actual report submitted
+            Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
+            String acknowledgement = "Принято на проверку Ксении и Кате! ✍️ Черновик сохранён.";
+            String businessConnectionId = message.getBusinessConnectionId();
+            if (StringUtils.hasText(businessConnectionId)) {
+                telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement, businessConnectionId);
+            } else {
+                telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement);
+            }
+        } else {
+            log.info("Message from student '{}' scanned silently (not a homework/report submission): '{}'",
+                    student.getFullName(), rawContent.length() > 50 ? rawContent.substring(0, 50) + "..." : rawContent);
+        }
+
         // Save aggregates
         DailyReport savedReport = dailyReportRepository.save(report);
         studentRepository.save(student);
 
-        // 10. Send caring acknowledgment reply in mini-group
-        Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
-        String acknowledgement = "Принято на проверку Ксении и Кате! ✍️ Черновик сохранён.";
-        String businessConnectionId = message.getBusinessConnectionId();
-        if (StringUtils.hasText(businessConnectionId)) {
-            telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement, businessConnectionId);
-        } else {
-            telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement);
-        }
-
-        log.info("Report upserted successfully for student '{}' (#{}): date={}, mailings={}, sales={}, status={}",
-                student.getFullName(), student.getId(), today, savedReport.getMailingsCount(), savedReport.getSalesTotal(), savedReport.getStatus());
+        log.info("Report updated for student '{}' (#{}): date={}, mailings={}, sales={}, status={}, isReport={}",
+                student.getFullName(), student.getId(), today, savedReport.getMailingsCount(), savedReport.getSalesTotal(), savedReport.getStatus(), isReport);
 
         return savedReport;
+    }
+
+    @Transactional
+    public DailyReport handleMorningFocusMessage(Student student, Message message, String rawContent) {
+        LocalDate today = LocalDate.now(MINSK_ZONE);
+        DailyReport report = dailyReportRepository.findByStudentIdAndReportDate(student.getId(), today)
+                .orElseGet(() -> DailyReport.builder()
+                        .student(student)
+                        .reportDate(today)
+                        .submittedAt(Instant.now())
+                        .isOnTime(true)
+                        .status("PENDING")
+                        .mailingsCount(0)
+                        .salesTotal(BigDecimal.ZERO)
+                        .newClientsCount(0)
+                        .contentDrafts(new ArrayList<>())
+                        .reelSubmissions(new ArrayList<>())
+                        .salesEntries(new ArrayList<>())
+                        .build());
+
+        String cleanFocus = rawContent != null ? rawContent.trim() : "";
+        report.setReflectionActions("🎯 Фокус дня: " + cleanFocus);
+        if (!StringUtils.hasText(report.getAiSummary())) {
+            report.setAiSummary("Фокус на сегодня: " + cleanFocus);
+        }
+        String existingRaw = report.getRawMessageText();
+        report.setRawMessageText(StringUtils.hasText(existingRaw)
+                ? existingRaw + "\n[Фокус дня]: " + cleanFocus
+                : "[Фокус дня]: " + cleanFocus);
+
+        DailyReport savedReport = dailyReportRepository.save(report);
+
+        Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
+        String ack = "🎯 Цель на сегодня зафиксирована: «" + cleanFocus + "»!\nЖдём результаты в отчёте до 21:00 🌸";
+        String businessConnectionId = message.getBusinessConnectionId();
+        if (StringUtils.hasText(businessConnectionId)) {
+            telegramSenderService.sendCaringReply(chatId, message.getMessageId(), ack, businessConnectionId);
+        } else {
+            telegramSenderService.sendCaringReply(chatId, message.getMessageId(), ack);
+        }
+
+        log.info("Morning focus set via text for student '{}' (#{}): {}",
+                student.getFullName(), student.getId(), cleanFocus);
+
+        return savedReport;
+    }
+
+    public boolean isReportSubmission(
+            Message message,
+            String rawContent,
+            int newDraftsAdded,
+            int newReelsAdded,
+            boolean hasSales,
+            boolean hasMailings,
+            boolean hasClients,
+            boolean hasQuestion) {
+        if (message != null && (message.hasVideo() || message.hasVideoNote() || message.hasDocument() || message.hasPhoto() || message.hasVoice() || message.hasAudio())) {
+            return true;
+        }
+        if (newDraftsAdded > 0 || newReelsAdded > 0 || hasSales || hasMailings || hasClients || hasQuestion) {
+            return true;
+        }
+        if (StringUtils.hasText(rawContent)) {
+            String lower = rawContent.toLowerCase(java.util.Locale.ROOT);
+            if (lower.contains("#рилс") || lower.contains("#карусель") || lower.contains("#сторителл")
+                    || lower.contains("#контент") || lower.contains("#рассылки") || lower.contains("#продажи")
+                    || lower.contains("#вопрос") || lower.contains("#клиенты") || lower.contains("#отчет")
+                    || lower.contains("#отчёт") || lower.contains("#дз") || lower.contains("#задание")) {
+                return true;
+            }
+            if (lower.startsWith("отчет") || lower.startsWith("отчёт") || lower.startsWith("дз")
+                    || lower.startsWith("задание") || lower.startsWith("домашка") || lower.startsWith("выполнила")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void processAttachmentsAndDrafts(DailyReport report, Student student, Message message, String rawContent, boolean deduplicationEnabled) {

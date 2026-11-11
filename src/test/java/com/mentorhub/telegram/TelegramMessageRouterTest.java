@@ -38,6 +38,7 @@ class TelegramMessageRouterTest {
 
     private Student recordedStudent;
     private Message recordedMessage;
+    private String recordedFocusText;
     private CallbackQuery recordedCallbackQuery;
 
     private TelegramReportHandler stubReportHandler;
@@ -64,6 +65,14 @@ class TelegramMessageRouterTest {
             public DailyReport handleStudentMessage(Student s, Message m) {
                 recordedStudent = s;
                 recordedMessage = m;
+                return DailyReport.builder().build();
+            }
+
+            @Override
+            public DailyReport handleMorningFocusMessage(Student s, Message m, String raw) {
+                recordedStudent = s;
+                recordedMessage = m;
+                recordedFocusText = raw;
                 return DailyReport.builder().build();
             }
         };
@@ -187,5 +196,43 @@ class TelegramMessageRouterTest {
 
         assertThat(recordedCallbackQuery).isEqualTo(query);
         verify(auditMessageLogRepository).save(any(AuditMessageLog.class));
+    }
+
+    @Test
+    @DisplayName("Service message (groupchatCreated) is ignored without routing to report handler")
+    void routeIncomingMessage_serviceMessageIgnoredSilently() {
+        User creator = User.builder().id(71010101L).firstName("Мирослав").isBot(false).build();
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder().messageId(15).from(creator).chat(chat).groupchatCreated(true).build();
+
+        Student student = Student.builder().id(1L).fullName("Милана Горохова").tgChatId(71010101L).build();
+        when(studentRepository.findByTgChatId(71010101L)).thenReturn(Optional.of(student));
+
+        router.routeIncomingMessage(message, 103L, "MINI_GROUP");
+
+        assertThat(recordedStudent).isNull();
+        ArgumentCaptor<AuditMessageLog> captor = ArgumentCaptor.forClass(AuditMessageLog.class);
+        verify(auditMessageLogRepository).save(captor.capture());
+        assertThat(captor.getValue().getProcessingStatus()).isEqualTo("SERVICE_EVENT_IGNORED");
+    }
+
+    @Test
+    @DisplayName("Morning focus text message routes to handleMorningFocusMessage and logs FOCUS_SET")
+    void routeIncomingMessage_morningFocusText() {
+        User studentUser = User.builder().id(71010101L).firstName("Милана").isBot(false).userName("milana_gorohova").build();
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder().messageId(16).from(studentUser).chat(chat).text("Сегодня я буду делать рилсы").build();
+
+        Student student = Student.builder().id(1L).fullName("Милана Горохова").tgChatId(71010101L).build();
+        when(studentRepository.findByTgChatId(71010101L)).thenReturn(Optional.of(student));
+
+        router.routeIncomingMessage(message, 104L, "MINI_GROUP");
+
+        assertThat(recordedStudent).isNotNull();
+        assertThat(recordedFocusText).isEqualTo("Сегодня я буду делать рилсы");
+
+        ArgumentCaptor<AuditMessageLog> captor = ArgumentCaptor.forClass(AuditMessageLog.class);
+        verify(auditMessageLogRepository).save(captor.capture());
+        assertThat(captor.getValue().getProcessingStatus()).isEqualTo("FOCUS_SET");
     }
 }
