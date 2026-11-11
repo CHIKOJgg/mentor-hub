@@ -235,4 +235,36 @@ class TelegramMessageRouterTest {
         verify(auditMessageLogRepository).save(captor.capture());
         assertThat(captor.getValue().getProcessingStatus()).isEqualTo("FOCUS_SET");
     }
+
+    @Test
+    @DisplayName("Mentor command /задание sets daily task for student in group chat")
+    void routeIncomingMessage_mentorSetsTask() {
+        User ksenia = User.builder().id(11223344L).firstName("Ксения").isBot(false).userName("ksenia_mentor").build();
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder().messageId(17).from(ksenia).chat(chat).text("/задание Снять 2 рилса и сделать 20 рассылок").build();
+
+        Student student = Student.builder().id(1L).fullName("Милана Горохова").tgChatId(-10071010101L).build();
+        when(studentRepository.findByTgChatId(-10071010101L)).thenReturn(Optional.of(student));
+
+        router.routeIncomingMessage(message, 105L, "MINI_GROUP");
+
+        assertThat(recordedStudent).isEqualTo(student);
+        assertThat(recordedFocusText).contains("Задача от наставника Ксения: Снять 2 рилса и сделать 20 рассылок");
+    }
+
+    @Test
+    @DisplayName("Student command /task sets daily focus")
+    void routeIncomingMessage_studentTaskCommand() {
+        User studentUser = User.builder().id(71010101L).firstName("Милана").isBot(false).userName("milana_gorohova").build();
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder().messageId(18).from(studentUser).chat(chat).text("/task Выложить сторителлинг с прогревом").build();
+
+        Student student = Student.builder().id(1L).fullName("Милана Горохова").tgChatId(71010101L).build();
+        when(studentRepository.findByTgChatId(71010101L)).thenReturn(Optional.of(student));
+
+        router.routeIncomingMessage(message, 106L, "MINI_GROUP");
+
+        assertThat(recordedStudent).isNotNull();
+        assertThat(recordedFocusText).isEqualTo("/task Выложить сторителлинг с прогревом");
+    }
 }

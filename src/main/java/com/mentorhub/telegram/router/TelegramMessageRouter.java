@@ -4,10 +4,12 @@ import com.mentorhub.entity.AdminToken;
 import com.mentorhub.entity.AuditMessageLog;
 import com.mentorhub.entity.MentorSetting;
 import com.mentorhub.entity.Student;
+import com.mentorhub.entity.TaskRule;
 import com.mentorhub.repository.AdminTokenRepository;
 import com.mentorhub.repository.AuditMessageLogRepository;
 import com.mentorhub.repository.MentorSettingRepository;
 import com.mentorhub.repository.StudentRepository;
+import com.mentorhub.repository.TaskRuleRepository;
 import com.mentorhub.scheduler.CallbackQueryHandler;
 import com.mentorhub.telegram.handler.TelegramReportHandler;
 import com.mentorhub.telegram.service.TelegramSenderService;
@@ -23,7 +25,9 @@ import org.telegram.telegrambots.meta.api.objects.business.BusinessConnection;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @Slf4j
@@ -37,6 +41,9 @@ public class TelegramMessageRouter {
     private final TelegramReportHandler telegramReportHandler;
     private final CallbackQueryHandler callbackQueryHandler;
     private final TelegramSenderService telegramSenderService;
+
+    @Autowired(required = false)
+    private TaskRuleRepository taskRuleRepository;
 
     public TelegramMessageRouter(
             StudentRepository studentRepository,
@@ -194,35 +201,36 @@ public class TelegramMessageRouter {
             return;
         }
 
-        // Welcome / Help handling
-        if (rawText != null && (rawText.startsWith("/start") || rawText.startsWith("/help"))) {
-            if (telegramSenderService != null && chatId != null) {
-                String welcomeMsg = "Здравствуйте! Я бот-ассистент платформы «Mentor Hub» для наставничества Ксении и куратора Кати.\n\n" +
-                        "Я работаю в мини-группах («Ксения + Катя + Ученица + Бот») и принимаю ежедневные отчёты с хэштегами:\n" +
-                        "• #рилс — черновик видео Reels на проверку\n" +
-                        "• #карусель — черновик карусели (текст / PDF)\n" +
-                        "• #сторителл — сценарий историй\n" +
-                        "• #рассылки 25 — количество отправок в Direct\n" +
-                        "• #продажи 45000 — сумма закрытой сделки\n" +
-                        "• #вопрос [текст или войс] — рефлексия и вопрос ментору\n" +
-                        "• #клиенты — новые клиенты за неделю\n\n" +
-                        "Все сданные материалы автоматически отправляются на вычитку в панель наставника.\n" +
-                        "Ваш Telegram ID: " + fromId + "\n" +
-                        "Ваш Username: @" + (from.getUserName() != null ? from.getUserName() : "не указан");
-                telegramSenderService.sendCaringReply(chatId, message.getMessageId(), welcomeMsg);
+        // Welcome / Help / Rules handling
+        if (rawText != null) {
+            String lower = rawText.trim().toLowerCase(Locale.ROOT);
+            if (lower.startsWith("/start") || lower.startsWith("/help")) {
+                handleWelcomeCommand(chatId, fromId, from, message);
+                return;
             }
-            return;
+            if (lower.startsWith("/rules") || lower.startsWith("/tasks") || lower.startsWith("/задания")
+                    || lower.startsWith("/хэштеги") || lower.startsWith("/хештеги") || lower.startsWith("/регламент")) {
+                handleRulesCommand(chatId, message);
+                return;
+            }
         }
 
-        // Filter out echo from Mentor Ksenia
-        if (isMentorEcho(fromId)) {
-            log.debug("Mentor echo filtered: ignoring message from Ksenia (tg_id={})", fromId);
-            return;
-        }
+        boolean isMentor = isMentorEcho(fromId);
+        boolean isCurator = isCuratorEcho(fromId);
 
-        // Filter out echo from Curator Katya
-        if (isCuratorEcho(fromId)) {
-            log.debug("Curator echo filtered: ignoring message from Katya (tg_id={})", fromId);
+        // Allow Mentor or Curator to set a task or bind a student via command
+        if ((isMentor || isCurator) && rawText != null) {
+            String lower = rawText.trim().toLowerCase(Locale.ROOT);
+            if (lower.startsWith("/задание") || lower.startsWith("/task") || lower.startsWith("/цель") || lower.startsWith("/фокус")) {
+                handleMentorSetTask(chatId, message, rawText, isMentor ? "Ксения" : "Катя");
+                return;
+            }
+            if (lower.startsWith("/bind") || lower.startsWith("/link")) {
+                handleBindCommand(chatId, message, rawText, isMentor ? "Ксения" : "Катя");
+                return;
+            }
+            log.debug("Mentor/Curator echo filtered: ignoring casual message from {} (tg_id={})",
+                    isMentor ? "Ksenia" : "Katya", fromId);
             return;
         }
 
@@ -354,7 +362,10 @@ public class TelegramMessageRouter {
                 || lower.startsWith("сегодня в планах")
                 || lower.startsWith("сегодня сделаю")
                 || lower.startsWith("главный результат:")
-                || lower.startsWith("главная цель:");
+                || lower.startsWith("главная цель:")
+                || lower.startsWith("/task")
+                || lower.startsWith("/цель")
+                || lower.startsWith("/фокус");
     }
 
     private boolean isMentorEcho(Long fromId) {
@@ -462,5 +473,150 @@ public class TelegramMessageRouter {
         }
 
         return Optional.empty();
+    }
+
+    private void handleWelcomeCommand(Long chatId, Long fromId, User from, Message message) {
+        if (telegramSenderService == null || chatId == null) return;
+        StringBuilder welcome = new StringBuilder();
+        welcome.append("Здравствуйте! Я бот-ассистент платформы «Mentor Hub» для наставничества Ксении и куратора Кати 🌸\n\n");
+        welcome.append("Я работаю в мини-группах («Ксения + Катя + Ученица + Бот») и принимаю ежедневные отчёты с хэштегами:\n");
+        appendRulesSummary(welcome);
+        welcome.append("\nКоманды бота:\n");
+        welcome.append("• /tasks или /задания — посмотреть регламент и выбрать фокус\n");
+        welcome.append("• /task [цель] — зафиксировать свой фокус на сегодня\n\n");
+        welcome.append("Ваш Telegram ID: ").append(fromId).append("\n");
+        welcome.append("Ваш Username: @").append(from != null && from.getUserName() != null ? from.getUserName() : "не указан");
+        telegramSenderService.sendCaringReply(chatId, message.getMessageId(), welcome.toString());
+    }
+
+    private void handleRulesCommand(Long chatId, Message message) {
+        if (telegramSenderService == null || chatId == null) return;
+        StringBuilder sb = new StringBuilder();
+        sb.append("📋 Регламент отчётов и задания для учениц:\n\n");
+        appendRulesSummary(sb);
+        sb.append("\n⏰ Дедлайн сдачи отчёта: ежедневно до 21:00\n");
+        sb.append("Все отчёты мгновенно попадают на проверку наставнику Ксении и куратору Кате 🌸\n\n");
+        sb.append("💡 Чтобы зафиксировать фокус на сегодня, выберите кнопку ниже или отправьте:\n");
+        sb.append("«Сегодня я буду [ваша цель]» или /task [цель]");
+
+        Optional<Student> studentOpt = studentRepository.findByTgChatId(chatId);
+        Long studentId = studentOpt.map(Student::getId).orElse(0L);
+        telegramSenderService.sendMorningFocusPoll(chatId, studentId, sb.toString());
+    }
+
+    private void appendRulesSummary(StringBuilder sb) {
+        if (taskRuleRepository != null) {
+            List<TaskRule> rules = taskRuleRepository.findAll().stream()
+                    .filter(r -> r.getIsActive() == null || Boolean.TRUE.equals(r.getIsActive()))
+                    .sorted(Comparator.comparing(TaskRule::getId))
+                    .toList();
+            if (!rules.isEmpty()) {
+                for (TaskRule rule : rules) {
+                    String badge = Boolean.TRUE.equals(rule.getIsRequired()) ? " (Обязательно)" : " (По факту)";
+                    sb.append("• ").append(rule.getHashtag()).append(" — ").append(rule.getTitle()).append(badge).append("\n");
+                    if (StringUtils.hasText(rule.getDescription())) {
+                        sb.append("  ").append(rule.getDescription()).append("\n");
+                    }
+                    if (StringUtils.hasText(rule.getExample())) {
+                        sb.append("  Пример: ").append(rule.getExample()).append("\n");
+                    }
+                }
+                return;
+            }
+        }
+        sb.append("• #рилс — черновик видео Reels на проверку\n");
+        sb.append("• #карусель — черновик карусели (текст / PDF)\n");
+        sb.append("• #сторителл — сценарий историй\n");
+        sb.append("• #рассылки 25 — количество отправок в Direct\n");
+        sb.append("• #продажи 45000 — сумма закрытой сделки\n");
+        sb.append("• #вопрос [текст или войс] — рефлексия и вопрос ментору\n");
+        sb.append("• #клиенты — новые клиенты за неделю\n");
+    }
+
+    private void handleMentorSetTask(Long chatId, Message message, String rawText, String mentorName) {
+        if (chatId == null || !StringUtils.hasText(rawText)) return;
+
+        String cleanTask = rawText.replaceFirst("^/(задание|task|цель|фокус)(@[a-zA-Z0-9_]+)?", "").trim();
+        if (cleanTask.startsWith(":") || cleanTask.startsWith("-")) {
+            cleanTask = cleanTask.substring(1).trim();
+        }
+
+        Optional<Student> studentOpt = Optional.empty();
+        if (cleanTask.contains(":")) {
+            String potentialName = cleanTask.substring(0, cleanTask.indexOf(':')).trim();
+            for (Student s : studentRepository.findAll()) {
+                if (s.getFullName().toLowerCase(Locale.ROOT).contains(potentialName.toLowerCase(Locale.ROOT))) {
+                    studentOpt = Optional.of(s);
+                    cleanTask = cleanTask.substring(cleanTask.indexOf(':') + 1).trim();
+                    break;
+                }
+            }
+        }
+
+        if (studentOpt.isEmpty()) {
+            studentOpt = studentRepository.findByTgChatId(chatId);
+        }
+
+        if (studentOpt.isEmpty()) {
+            if (telegramSenderService != null) {
+                telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
+                        "⚠️ Эта группа ещё не привязана к ученице.\n\n" +
+                        "Укажите имя ученицы: /bind [Имя] или отправьте: /задание [Имя]: [текст задачи]");
+            }
+            return;
+        }
+
+        if (!StringUtils.hasText(cleanTask)) {
+            if (telegramSenderService != null) {
+                telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
+                        "Пожалуйста, укажите текст задачи после команды:\n/задание [текст задачи для ученицы]");
+            }
+            return;
+        }
+
+        Student student = studentOpt.get();
+        telegramReportHandler.handleMorningFocusMessage(student, message, "Задача от наставника " + mentorName + ": " + cleanTask);
+
+        log.info("Mentor {} set task for student '{}' (#{}): {}",
+                mentorName, student.getFullName(), student.getId(), cleanTask);
+
+        if (telegramSenderService != null) {
+            String reply = "🎯 Наставник " + mentorName + " поставила задачу на сегодня для " + student.getFullName() + ":\n" +
+                    "«" + cleanTask + "»\n\n" +
+                    "⏰ Ждём выполнение в отчёте до 21:00 🌸";
+            telegramSenderService.sendCaringReply(chatId, message.getMessageId(), reply);
+        }
+    }
+
+    private void handleBindCommand(Long chatId, Message message, String rawText, String actorName) {
+        if (chatId == null || !StringUtils.hasText(rawText)) return;
+        String targetName = rawText.replaceFirst("^/(bind|link)(@[a-zA-Z0-9_]+)?", "").trim().toLowerCase(Locale.ROOT);
+        if (!StringUtils.hasText(targetName)) {
+            if (telegramSenderService != null) {
+                telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
+                        "Укажите имя ученицы для привязки:\n/bind [Имя ученицы] (например: /bind Милана)");
+            }
+            return;
+        }
+
+        List<Student> students = studentRepository.findAll();
+        Optional<Student> matched = students.stream()
+                .filter(s -> s.getFullName().toLowerCase(Locale.ROOT).contains(targetName))
+                .findFirst();
+
+        if (matched.isPresent()) {
+            Student st = matched.get();
+            st.setTgChatId(chatId);
+            studentRepository.save(st);
+            log.info("Actor {} bound student '{}' to chat {} via /bind command", actorName, st.getFullName(), chatId);
+            if (telegramSenderService != null) {
+                telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
+                        "✅ Группа успешно привязана к ученице " + st.getFullName() + "!\n" +
+                        "Теперь бот будет принимать ежедневные отчёты и напоминать о дедлайнах здесь 🌸");
+            }
+        } else if (telegramSenderService != null) {
+            telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
+                    "Ученица «" + targetName + "» не найдена в списке потока. Проверьте имя в панели наставника.");
+        }
     }
 }

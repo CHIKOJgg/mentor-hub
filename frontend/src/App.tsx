@@ -3172,7 +3172,7 @@ export default function App() {
                               }`}>
                                 {sc.category || 'Кураторские'}
                               </span>
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                              <div className="flex sm:opacity-0 sm:group-hover:opacity-100 transition-opacity items-center gap-1">
                                 <button
                                   onClick={() => setEditingScript({ index: idx, title: sc.title, description: sc.description, text: sc.text })}
                                   className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
@@ -3271,7 +3271,7 @@ export default function App() {
                                 }`}>
                                   {sheet.category === 'reels' ? 'Reels' : sheet.category === 'direct' ? 'Продажи' : sheet.category === 'profile' ? 'Упаковка' : 'Регламент'}
                                 </span>
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                                <div className="flex sm:opacity-0 sm:group-hover:opacity-100 transition-opacity items-center gap-1">
                                   <button
                                     onClick={() => setEditingCheatsheet(sheet)}
                                     className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
@@ -3335,7 +3335,7 @@ export default function App() {
 
                             <div className="flex items-center gap-2">
                               {/* Hover quick action buttons */}
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 mr-1">
+                              <div className="flex sm:opacity-0 sm:group-hover:opacity-100 transition-opacity items-center gap-1.5 mr-1">
                                 <button
                                   onClick={() => setEditingRule(rule)}
                                   title="Редактировать регламент хэштега"
@@ -3945,7 +3945,13 @@ export default function App() {
                       prev ? { ...prev, day: { ...prev.day, missedDetails: val } } : null
                     );
                   }}
-                  placeholder="Например: Reels #14, карусель, 25 рассылок, +2 клиента"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      saveDayEdit(editingDay.studentId, editingDay.dayIndex, editingDay.day);
+                      setEditingDay(null);
+                    }
+                  }}
+                  placeholder="Например: Reels #14, карусель, 25 рассылок, +2 клиента (Enter чтобы сохранить)"
                   className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
                 />
               </div>
@@ -3999,6 +4005,7 @@ export default function App() {
                 <input
                   value={newStudent.fullName}
                   onChange={event => setNewStudent(prev => ({ ...prev, fullName: event.target.value }))}
+                  onKeyDown={e => { if (e.key === 'Enter') void addStudent(); }}
                   placeholder="Например: Милана Горохова"
                   className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500"
                 />
@@ -4439,6 +4446,21 @@ export default function App() {
                     if (isAddingScript) setNewScript(prev => ({ ...prev, title: val }));
                     else if (editingScript) setEditingScript({ ...editingScript, title: val });
                   }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      if (isAddingScript) {
+                        void addScript(newScript);
+                        setIsAddingScript(false);
+                      } else if (editingScript) {
+                        void saveScript(editingScript.index, {
+                          title: editingScript.title,
+                          description: editingScript.description,
+                          text: editingScript.text,
+                        });
+                        setEditingScript(null);
+                      }
+                    }
+                  }}
                   placeholder="Например: Скрипт закрытия после созвона"
                   className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
                 />
@@ -4573,6 +4595,17 @@ export default function App() {
                       if (isAddingRule) setNewRule(prev => ({ ...prev, title: val }));
                       else if (editingRule) setEditingRule({ ...editingRule, title: val });
                     }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        if (isAddingRule) {
+                          void addRule(newRule);
+                          setIsAddingRule(false);
+                        } else if (editingRule) {
+                          void saveRule(editingRule);
+                          setEditingRule(null);
+                        }
+                      }
+                    }}
                     placeholder="Например: Отзыв от клиента"
                     className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
                   />
@@ -4694,8 +4727,14 @@ export default function App() {
                 type="text"
                 value={editingScheduleTime.value}
                 onChange={e => setEditingScheduleTime({ ...editingScheduleTime, value: e.target.value })}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    updateScheduleTime(editingScheduleTime.key, editingScheduleTime.value, editingScheduleTime.label);
+                    setEditingScheduleTime(null);
+                  }
+                }}
                 placeholder="09:00"
-                className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-center font-bold"
+                className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-center font-bold focus:outline-none focus:border-indigo-500"
               />
             </div>
 
