@@ -619,7 +619,7 @@ public class AdversarialEmpiricalChallengeTest {
 
             // Caring reply was sent
             assertThat(repliedChatId.get()).isEqualTo(-100888999111L);
-            assertThat(replyMessage.get()).contains("Принято на проверку Ксении и Кате!");
+            assertThat(replyMessage.get()).contains("Принято на проверку Ксении и Кате (").contains(")! ✍️ Черновик сохранён.");
         }
     }
 }

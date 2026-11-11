@@ -82,6 +82,9 @@ public class DailyReport {
     @Builder.Default
     private String emotionalStatus = "NORMAL"; // 'NORMAL', 'BURNOUT_ALERT', 'STRESSED'
 
+    @Column(name = "last_tg_message_id")
+    private Integer lastTgMessageId;
+
     @Column(name = "raw_message_text", columnDefinition = "TEXT")
     private String rawMessageText;
 

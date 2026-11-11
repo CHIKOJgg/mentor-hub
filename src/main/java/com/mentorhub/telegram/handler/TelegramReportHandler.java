@@ -305,10 +305,12 @@ public class TelegramReportHandler {
             report.setSubmittedAt(Instant.now());
             report.setIsOnTime(isOnTime);
             report.setStatus("PENDING");
+            report.setLastTgMessageId(message.getMessageId());
 
             // 10. Send caring acknowledgment reply in mini-group only when actual report submitted
             Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
-            String acknowledgement = "Принято на проверку Ксении и Кате! ✍️ Черновик сохранён.";
+            String timeStr = TIME_FORMATTER.format(report.getSubmittedAt());
+            String acknowledgement = "Принято на проверку Ксении и Кате (" + timeStr + ")! ✍️ Черновик сохранён.";
             String businessConnectionId = message.getBusinessConnectionId();
             if (StringUtils.hasText(businessConnectionId)) {
                 telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement, businessConnectionId);

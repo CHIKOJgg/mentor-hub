@@ -1713,6 +1713,10 @@ export default function App() {
                               <div className="text-base sm:text-lg font-bold text-slate-900">{r.studentName}</div>
                               <div className="flex items-center gap-2.5 mt-0.5">
                                 <span className="text-xs sm:text-sm text-slate-500">@{r.tgUsername}</span>
+                                <span className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md font-mono flex items-center gap-1">
+                                  <Clock className="w-3 h-3 text-slate-400" />
+                                  {r.submittedAt}
+                                </span>
                                 <span className={`text-xs font-medium px-2 py-0.5 rounded-md border ${
                                   r.isOnTime
                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-100'

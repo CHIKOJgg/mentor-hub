@@ -144,7 +144,10 @@ class TelegramReportHandlerTest {
         // Caring acknowledgment reply sent
         assertThat(sentChatId).isEqualTo(-10071010101L);
         assertThat(sentReplyToId).isEqualTo(501);
-        assertThat(sentReplyText).contains("Принято на проверку Ксении и Кате! ✍️ Черновик сохранён.");
+        assertThat(sentReplyText)
+                .contains("Принято на проверку Ксении и Кате (")
+                .contains(")! ✍️ Черновик сохранён.");
+        assertThat(result.getLastTgMessageId()).isEqualTo(501);
     }
 
     @Test

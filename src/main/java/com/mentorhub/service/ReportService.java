@@ -82,7 +82,15 @@ public class ReportService {
             String businessConnectionId = setting != null && Boolean.TRUE.equals(setting.getIsBusinessConnected())
                     ? setting.getBusinessConnectionId()
                     : null;
-            messageDelivered = telegramSenderService.sendStudentMessage(chatId, businessConnectionId, replyText.trim());
+            String fullReply = buildMentorReplyMessage("🌸 Ответ наставника Ксении на отчёт", report.getSubmittedAt(), replyText.trim());
+            if (report.getLastTgMessageId() != null) {
+                messageDelivered = telegramSenderService.sendCaringReply(chatId, report.getLastTgMessageId(), fullReply, businessConnectionId);
+                if (!messageDelivered) {
+                    messageDelivered = telegramSenderService.sendStudentMessage(chatId, businessConnectionId, fullReply);
+                }
+            } else {
+                messageDelivered = telegramSenderService.sendStudentMessage(chatId, businessConnectionId, fullReply);
+            }
             if (Boolean.TRUE.equals(messageDelivered)) report.setReplySentAt(Instant.now());
             else log.warn("Report #{} approved but Telegram reply was not delivered (chat={})", reportId, chatId);
         }
@@ -115,7 +123,15 @@ public class ReportService {
             String businessConnectionId = setting != null && Boolean.TRUE.equals(setting.getIsBusinessConnected())
                     ? setting.getBusinessConnectionId()
                     : null;
-            feedbackSent = telegramSenderService.sendStudentMessage(chatId, businessConnectionId, request.reason().trim());
+            String fullReply = buildMentorReplyMessage("⚠️ На доработку от Ксении по отчёту", report.getSubmittedAt(), request.reason().trim());
+            if (report.getLastTgMessageId() != null) {
+                feedbackSent = telegramSenderService.sendCaringReply(chatId, report.getLastTgMessageId(), fullReply, businessConnectionId);
+                if (!feedbackSent) {
+                    feedbackSent = telegramSenderService.sendStudentMessage(chatId, businessConnectionId, fullReply);
+                }
+            } else {
+                feedbackSent = telegramSenderService.sendStudentMessage(chatId, businessConnectionId, fullReply);
+            }
             if (Boolean.TRUE.equals(feedbackSent)) report.setReplySentAt(Instant.now());
         }
         dailyReportRepository.save(report);
@@ -216,5 +232,13 @@ public class ReportService {
                 Boolean.TRUE.equals(reel.getIsDuplicate()),
                 reel.getDuplicateDate()
         );
+    }
+
+    private String buildMentorReplyMessage(String prefix, Instant submittedAt, String content) {
+        if (content.startsWith(prefix)) {
+            return content;
+        }
+        String timePart = submittedAt != null ? " (сдан в " + TIME_FORMATTER.format(submittedAt) + ")" : "";
+        return prefix + timePart + ":\n\n" + content;
     }
 }
