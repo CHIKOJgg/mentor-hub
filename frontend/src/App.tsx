@@ -1628,7 +1628,6 @@ export default function App() {
         <aside className="app-sidebar hidden md:flex flex-col w-64 min-h-screen bg-white border-r border-slate-200/60 px-4 py-8 fixed left-0 top-0 z-20">
           <div className="px-3 mb-6">
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Панель наставника</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Рабочий трекер куратора</p>
           </div>
 
           <nav className="flex-1 space-y-1">
@@ -1824,7 +1823,7 @@ export default function App() {
                     <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/60 p-8">
                     <CheckCheck className="w-8 h-8 text-slate-400 mx-auto mb-3" strokeWidth={1.5} />
                     <p className="text-lg font-bold text-slate-800">Все черновики проверены</p>
-                    <p className="text-sm text-slate-500 mt-1">Всё проверено. Ученицы получили обратную связь в чатах.</p>
+                    <p className="text-sm text-slate-500 mt-1">Всё проверено — ученицы получили обратную связь в чатах.</p>
                     <button
                       onClick={() => setReports(initialReports)}
                       className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
@@ -1898,15 +1897,10 @@ export default function App() {
                                       </span>
                                     </div>
 
-                                    {draft.isDuplicate ? (
+                                    {draft.isDuplicate && (
                                       <span className="flex items-center gap-1.5 text-rose-600 text-xs font-semibold shrink-0 bg-rose-50 border border-rose-100 px-2.5 py-1 rounded-md">
                                         <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2} />
                                         <span>дубликат ({draft.duplicateDate})</span>
-                                      </span>
-                                    ) : (
-                                      <span className="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold shrink-0 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md">
-                                        <Check className="w-3.5 h-3.5" strokeWidth={2} />
-                                        <span>черновик</span>
                                       </span>
                                     )}
                                   </div>
@@ -2035,7 +2029,6 @@ export default function App() {
                     <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/60 p-8">
                       <History className="w-8 h-8 text-slate-400 mx-auto mb-3" strokeWidth={1.5} />
                       <p className="text-lg font-bold text-slate-800">Архив проверенных отчётов пуст</p>
-                      <p className="text-sm text-slate-500 mt-1">Одобренные отчёты с комментариями наставника будут сохраняться здесь.</p>
                     </div>
                   ) : (
                     <div className="space-y-5">
@@ -2116,7 +2109,6 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
                   <div>
                     <h2 className="text-2xl font-bold tracking-tight text-slate-900">Ученицы</h2>
-                    <p className="text-sm sm:text-base text-slate-500 mt-1">Дисциплина и прогресс по созвонам</p>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <div className="relative">
@@ -2197,7 +2189,6 @@ export default function App() {
                     <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 pb-4">
                       <div>
                         <h3 id="at-risk-heading" className="text-base font-bold text-slate-900">Нуждаются во внимании</h3>
-                        <p className="mt-1 text-xs text-slate-500">Список рассчитан по пропускам и текущей дисциплине</p>
                       </div>
                       <div className="text-right text-xs text-slate-500">
                         <div>{atRiskStudents.length} учениц в списке</div>
@@ -2464,7 +2455,6 @@ export default function App() {
                     <div className="bg-white rounded-2xl border border-slate-200/60 p-5 flex items-center justify-between">
                       <div>
                         <h3 className="text-lg font-bold text-slate-900">Созвоны</h3>
-                        <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Настраиваемые этапы сопровождения для каждой ученицы</p>
                       </div>
                       <div className="text-right">
                         <span className="text-2xl font-bold text-slate-900">
@@ -2570,7 +2560,6 @@ export default function App() {
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-7">
                   <div>
                     <h2 className="text-2xl font-bold tracking-tight text-slate-900">Аналитика</h2>
-                    <p className="text-sm text-slate-500 mt-0.5">Показатели потока и персональные данные учениц из Telegram</p>
                   </div>
 
                   {/* Period Switcher */}
@@ -2714,21 +2703,10 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Telegram Ingestion Status Notice */}
-                    <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4.5 flex items-start gap-3.5">
-                      <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0 mt-0.5">
-                        <FileText className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
-                      </div>
-                      <div className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                        <strong className="font-semibold text-slate-900">Автоматическая агрегация из Telegram:</strong> Все метрики поступают из персональных чатов учениц по хэштегам <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#рилс</code>, <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#карусель</code>, <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#сторителл</code>, <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#рассылки</code>, <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#продажи</code> и субботним опросам <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-800">#клиенты</code>. Голосовые сообщения расшифровываются автоматически.
-                      </div>
-                    </div>
-
                     {/* Cohort Performance Breakdown Table */}
                     <div className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
                       <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                         <div className="text-sm font-bold text-slate-900 uppercase tracking-wider">Сводная динамика учениц потока</div>
-                        <div className="text-xs text-slate-500">Нажмите на строку для детального разбора</div>
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
@@ -2819,7 +2797,7 @@ export default function App() {
                     {/* Student selector pills */}
                     <div>
                       <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
-                        Выберите ученицу для персонального анализа:
+                        Ученица
                       </div>
                       <div className="flex flex-wrap gap-2.5">
                         {/* studentDisciplines.map(s => ( */}
@@ -2975,7 +2953,6 @@ export default function App() {
                             <div className="text-lg font-bold text-slate-900">
                               {selectedStudentPeriodStats.disciplineRate}%
                             </div>
-                            <div className="text-xs text-slate-400">соблюдение дедлайна</div>
                           </div>
                         </div>
                       </div>
@@ -3034,7 +3011,6 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                   <div>
                     <h2 className="text-2xl font-bold tracking-tight text-slate-900">Продвижение и база знаний</h2>
-                    <p className="text-sm sm:text-base text-slate-500 mt-1">Скрипты продаж, шпаргалки для учениц и хэштеги с регламентом сдачи</p>
                   </div>
 
                   <div className="flex items-center gap-2.5 self-start sm:self-auto">
@@ -3148,7 +3124,6 @@ export default function App() {
                           </button>
                         ))}
                       </div>
-                      <span className="text-xs text-slate-400">1 клик копирует готовый текст в буфер для отправки в Telegram</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3197,8 +3172,7 @@ export default function App() {
                             {sc.text}
                           </div>
 
-                          <div className="pt-3 flex items-center justify-between gap-2 border-t border-slate-100">
-                            <span className="text-xs text-slate-400">Формат Telegram</span>
+                          <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
                             <button
                               onClick={() => {
                                 if (navigator.clipboard) {
@@ -3247,7 +3221,6 @@ export default function App() {
                           </button>
                         ))}
                       </div>
-                      <span className="text-xs text-slate-400">Готовые регламенты и материалы для отправки ученицам в чат</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3296,8 +3269,7 @@ export default function App() {
                               {sheet.content}
                             </div>
 
-                            <div className="pt-3 flex items-center justify-between gap-2 border-t border-slate-100">
-                              <span className="text-xs text-slate-400">Формат Telegram</span>
+                            <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
                               <button
                                 onClick={() => copyCheatsheetToClipboard(sheet.content, sheet.title)}
                                 className="px-3.5 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
@@ -3407,7 +3379,6 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
                   <div>
                     <h2 className="text-2xl font-bold tracking-tight text-slate-900">Настройки</h2>
-                    <p className="text-sm sm:text-base text-slate-500 mt-1">Дедлайны сдачи, Telegram-бот, доступы и бэкапы данных</p>
                   </div>
 
                   <div className="flex items-center gap-2.5 self-start sm:self-auto">
@@ -3777,7 +3748,6 @@ export default function App() {
                     <ShieldCheck className="w-5 h-5 text-indigo-600" />
                     <div>
                       <h3 className="text-base font-bold text-slate-900">Обработка сообщений и контроль данных</h3>
-                      <p className="text-xs text-slate-500">Расшифровка голосовых сообщений, сводки и проверка повторов</p>
                     </div>
                   </div>
 
@@ -3786,7 +3756,7 @@ export default function App() {
                     <div className="py-3.5 flex items-center justify-between">
                       <div>
                         <div className="text-sm font-semibold text-slate-900">Расшифровка голосовых сообщений</div>
-                        <div className="text-xs text-slate-500">Преобразование аудио учениц в текст для наставника</div>
+                        <div className="text-xs text-slate-500">Автоматический перевод аудиоотчётов в текст</div>
                       </div>
                       <button
                         onClick={() => toggleSystemSetting('aiWhisperEnabled', 'Расшифровка голосовых')}
@@ -3860,7 +3830,7 @@ export default function App() {
                 <div className="bg-white rounded-2xl border border-slate-200/60 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div>
                     <h3 className="text-base font-bold text-slate-900">Экспорт данных потока</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Скачать локальный снимок учениц, отчётов, Zoom-созвонов и регламентов в формате JSON</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Полная резервная копия учениц, отчётов и созвонов</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -4024,7 +3994,6 @@ export default function App() {
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Новая ученица</h3>
-                <p className="mt-1 text-xs text-slate-500">Профиль сразу сохранится в браузере, а при подключенном сервере — в базе.</p>
               </div>
               <button type="button" onClick={() => setIsAddingStudent(false)} aria-label="Закрыть" className="rounded-lg p-1 text-slate-500 hover:bg-slate-100">
                 <X className="h-5 w-5" />
@@ -4054,18 +4023,6 @@ export default function App() {
                   ))}
                 </select>
               </label>
-
-              <div className="sm:col-span-2 rounded-xl bg-indigo-50/80 border border-indigo-100 p-3.5 text-xs text-indigo-950 flex items-start gap-3">
-                <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-600 shrink-0 mt-0.5">
-                  <Send className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="font-semibold text-indigo-900">Автоматическая привязка к Telegram</div>
-                  <div className="text-slate-600 mt-0.5 leading-relaxed">
-                    Никаких Chat ID искать не нужно! Просто добавьте бота-ассистента в вашу мини-группу с ученицей, и группа привяжется автоматически.
-                  </div>
-                </div>
-              </div>
 
               <label className="text-xs font-semibold text-slate-600">
                 Доход на старте (Точка А), ₽
@@ -4283,7 +4240,7 @@ export default function App() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h4 id="zoom-session-settings-title" className="text-sm font-semibold text-slate-900">Этапы созвонов</h4>
-                    <p className="text-xs text-slate-500 mt-0.5">Количество этапов не ограничено</p>
+                    <span className="sr-only">Количество этапов не ограничено</span>
                   </div>
                   <button
                     type="button"
@@ -4453,7 +4410,6 @@ export default function App() {
                 <h3 className="text-base font-bold text-slate-900">
                   {isAddingScript ? 'Добавить новый скрипт в Direct' : 'Редактировать скрипт'}
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">База готовых скриптов ученицы</p>
               </div>
               <button
                 onClick={() => {
@@ -4587,7 +4543,6 @@ export default function App() {
                 <h3 className="text-base font-bold text-slate-900">
                   {isAddingRule ? 'Новый хэштег / задание в боте' : `Редактирование: ${editingRule?.hashtag}`}
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Настройка регламента и парсинга Telegram</p>
               </div>
               <button
                 onClick={() => {
@@ -5239,7 +5194,6 @@ export default function App() {
                 <h3 className="text-base font-bold text-slate-900">
                   {isAddingCheatsheet ? 'Новая шпаргалка для учениц' : 'Редактировать шпаргалку'}
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Материал для быстрой отправки в рабочие чаты Telegram</p>
               </div>
               <button
                 onClick={() => {
@@ -5300,7 +5254,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Текст шпаргалки (в формате Telegram):</label>
+                <label className="font-semibold text-slate-700 block mb-1">Текст шпаргалки:</label>
                 <textarea
                   rows={8}
                   value={editingCheatsheet ? editingCheatsheet.content : newCheatsheet.content}
