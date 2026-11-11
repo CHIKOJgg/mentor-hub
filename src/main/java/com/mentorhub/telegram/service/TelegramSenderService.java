@@ -8,6 +8,7 @@ import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.GetMe;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
+import org.telegram.telegrambots.meta.api.objects.ReplyParameters;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
@@ -50,7 +51,14 @@ public class TelegramSenderService {
             SendMessage.SendMessageBuilder<?, ?> builder = SendMessage.builder()
                     .chatId(chatId.toString())
                     .replyToMessageId(replyToMsgId)
+                    .allowSendingWithoutReply(true)
                     .text(text);
+            if (replyToMsgId != null) {
+                builder.replyParameters(ReplyParameters.builder()
+                        .messageId(replyToMsgId)
+                        .allowSendingWithoutReply(true)
+                        .build());
+            }
             if (businessConnectionId != null && !businessConnectionId.isBlank()) {
                 builder.businessConnectionId(businessConnectionId);
             }
