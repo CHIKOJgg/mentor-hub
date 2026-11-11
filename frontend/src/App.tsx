@@ -4,6 +4,16 @@ import { BEAUTY_NICHES, type DailyReport, type StudentDiscipline, type TabType, 
 import type { ApiAdminSession, ApiCuratorScript, ApiDailyReport, ApiStudent, ApiSystemSettings, ApiTaskRule, ApiZoomSession } from './api/contracts';
 import { api, getAdminToken, saveAdminToken } from './api/client';
 import { readPersisted, writePersisted } from './persistence';
+import { ConfirmDialog } from './components/common/ConfirmDialog';
+import { DayStatusModal } from './components/modals/DayStatusModal';
+import { AddStudentModal } from './components/modals/AddStudentModal';
+import { EditStudentModal } from './components/modals/EditStudentModal';
+import { ScriptModal } from './components/modals/ScriptModal';
+import { RuleModal } from './components/modals/RuleModal';
+import { ScheduleTimeModal } from './components/modals/ScheduleTimeModal';
+import { StudentDossierModal } from './components/modals/StudentDossierModal';
+import { ZoomModal } from './components/modals/ZoomModal';
+import { CheatsheetModal } from './components/modals/CheatsheetModal';
 import {
   ExternalLink,
   Copy,
@@ -34,8 +44,6 @@ import {
   Pencil,
   Plus,
   Trash2,
-  X,
-  Save,
   Settings,
   Calendar,
   Download,
@@ -43,7 +51,6 @@ import {
   CheckCircle2,
   History,
   Sparkles,
-  Info,
 } from 'lucide-react';
 
 const createLocalId = (prefix: string): string => {
@@ -3866,1483 +3873,133 @@ export default function App() {
         </main>
       </div>
 
-{/* ─── MODAL 1: DAY STATUS & DETAILS EDITOR ─── */}
-      {editingDay && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-          onClick={() => setEditingDay(null)}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200 space-y-4 shadow-xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Редактировать статус дня</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {editingDay.studentName} · {editingDay.day.day}, {editingDay.day.date}
-                </p>
-              </div>
-              <button
-                onClick={() => setEditingDay(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* ─── MODAL 1: DAY STATUS & DETAILS EDITOR ─── */}
+      <DayStatusModal
+        editingDay={editingDay}
+        onClose={() => setEditingDay(null)}
+        onSave={saveDayEdit}
+        onUpdateDay={updatedDay => {
+          setEditingDay(prev => prev ? { ...prev, day: updatedDay } : null);
+        }}
+      />
 
-            <div className="space-y-3">
-              <label className="text-xs font-semibold text-slate-600 block">Статус сдачи:</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {[
-                  { status: 'COMPLETED_ON_TIME', label: 'В срок (до 21:00)', color: 'border-emerald-300 bg-emerald-50 text-emerald-800' },
-                  { status: 'COMPLETED_LATE', label: 'Опоздание', color: 'border-amber-300 bg-amber-50 text-amber-800' },
-                  { status: 'MISSED', label: 'Пропуск', color: 'border-rose-300 bg-rose-50 text-rose-800' },
-                  { status: 'PAUSED', label: 'Пауза (болезнь)', color: 'border-slate-300 bg-slate-100 text-slate-800' },
-                  { status: 'WEEKEND', label: 'Выходной', color: 'border-slate-200 bg-slate-50 text-slate-600' },
-                ].map(opt => (
-                  <button
-                    key={opt.status}
-                    type="button"
-                    onClick={() => {
-                      setEditingDay(prev =>
-                        prev ? { ...prev, day: { ...prev.day, status: opt.status as DayInfo['status'] } } : null
-                      );
-                    }}
-                    className={`text-xs font-semibold p-2.5 rounded-xl border text-left transition cursor-pointer flex items-center gap-2 ${
-                      editingDay.day.status === opt.status
-                        ? opt.color + ' ring-2 ring-indigo-500/20'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        opt.status === 'COMPLETED_ON_TIME'
-                          ? 'bg-emerald-500'
-                          : opt.status === 'COMPLETED_LATE'
-                          ? 'bg-amber-400'
-                          : opt.status === 'MISSED'
-                          ? 'bg-red-400'
-                          : opt.status === 'PAUSED'
-                          ? 'bg-neutral-300'
-                          : 'bg-neutral-200'
-                      }`}
-                    />
-                    <span>{opt.label}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="pt-2">
-                <label className="text-xs font-semibold text-slate-600 block mb-1.5">
-                  Детали отчёта / причина (для тултипа):
-                </label>
-                <input
-                  type="text"
-                  value={editingDay.day.missedDetails || ''}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setEditingDay(prev =>
-                      prev ? { ...prev, day: { ...prev.day, missedDetails: val } } : null
-                    );
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      saveDayEdit(editingDay.studentId, editingDay.dayIndex, editingDay.day);
-                      setEditingDay(null);
-                    }
-                  }}
-                  placeholder="Например: Reels #14, карусель, 25 рассылок, +2 клиента (Enter чтобы сохранить)"
-                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setEditingDay(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  saveDayEdit(editingDay.studentId, editingDay.dayIndex, editingDay.day);
-                  setEditingDay(null);
-                }}
-                className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>Сохранить статус</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAddingStudent && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-          onClick={() => setIsAddingStudent(false)}
-        >
-          <div
-            className="w-full max-w-xl space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Новая ученица</h3>
-              </div>
-              <button type="button" onClick={() => setIsAddingStudent(false)} aria-label="Закрыть" className="rounded-lg p-1 text-slate-500 hover:bg-slate-100">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="text-xs font-semibold text-slate-600 sm:col-span-2">
-                Имя и фамилия ученицы
-                <input
-                  value={newStudent.fullName}
-                  onChange={event => setNewStudent(prev => ({ ...prev, fullName: event.target.value }))}
-                  onKeyDown={e => { if (e.key === 'Enter') void addStudent(); }}
-                  placeholder="Например: Милана Горохова"
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500"
-                />
-              </label>
-
-              <label className="text-xs font-semibold text-slate-600 sm:col-span-2">
-                Ниша (Бьюти & Стиль)
-                <select
-                  value={newStudent.niche}
-                  onChange={event => setNewStudent(prev => ({ ...prev, niche: event.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500 bg-white"
-                >
-                  {BEAUTY_NICHES.map(niche => (
-                    <option key={niche} value={niche}>{niche}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="text-xs font-semibold text-slate-600">
-                Доход на старте (Точка А), ₽
-                <input
-                  type="number"
-                  min={0}
-                  value={newStudent.initialIncome || ''}
-                  onChange={event => setNewStudent(prev => ({ ...prev, initialIncome: Number(event.target.value) || 0 }))}
-                  placeholder="30000"
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500"
-                />
-              </label>
-
-              <label className="text-xs font-semibold text-slate-600">
-                Средний чек на старте, ₽
-                <input
-                  type="number"
-                  min={0}
-                  value={newStudent.initialAvgTicket || ''}
-                  onChange={event => setNewStudent(prev => ({ ...prev, initialAvgTicket: Number(event.target.value) || 0 }))}
-                  placeholder="3000"
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500"
-                />
-              </label>
-
-              <label className="text-xs font-semibold text-slate-600 sm:col-span-2">
-                Тариф обучения
-                <select
-                  value={newStudent.tariff}
-                  onChange={event => setNewStudent(prev => ({ ...prev, tariff: event.target.value === 'VIP' ? 'VIP' : 'Стандарт' }))}
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500 bg-white"
-                >
-                  <option value="Стандарт">Стандарт</option>
-                  <option value="VIP">VIP</option>
-                </select>
-              </label>
-            </div>
-            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-              <button type="button" onClick={() => setIsAddingStudent(false)} className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600">Отмена</button>
-              <button type="button" onClick={() => void addStudent()} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
-                <Save className="h-4 w-4" />
-                <span>Создать профиль</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ─── MODAL 2: ADD STUDENT MODAL ─── */}
+      <AddStudentModal
+        isOpen={isAddingStudent}
+        newStudent={newStudent}
+        onClose={() => setIsAddingStudent(false)}
+        onUpdate={updater => setNewStudent(updater)}
+        onSubmit={addStudent}
+      />
 
       {/* ─── MODAL 2: STUDENT PROFILE & FINANCIALS EDITOR ─── */}
-      {editingStudent && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-          onClick={() => setEditingStudent(null)}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto shadow-xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Профиль и созвоны</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{editingStudent.fullName}</p>
-              </div>
-              <button
-                onClick={() => setEditingStudent(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Имя и фамилия:</label>
-                  <input
-                    type="text"
-                    value={editingStudent.fullName}
-                    onChange={e => setEditingStudent({ ...editingStudent, fullName: e.target.value })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Ниша (Бьюти & Стиль):</label>
-                  <select
-                    value={editingStudent.niche}
-                    onChange={e => setEditingStudent({ ...editingStudent, niche: e.target.value })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 bg-white"
-                  >
-                    {BEAUTY_NICHES.map(niche => (
-                      <option key={niche} value={niche}>{niche}</option>
-                    ))}
-                    {!BEAUTY_NICHES.includes(editingStudent.niche as (typeof BEAUTY_NICHES)[number]) && (
-                      <option value={editingStudent.niche}>{editingStudent.niche}</option>
-                    )}
-                  </select>
-                </div>
-              </div>
-
-              {/* Telegram Connection Card */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-700">Рабочая Telegram-группа</span>
-                  {editingStudent.telegramChatId ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                      🟢 Подключена
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                      ⏳ Ожидает группу
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  {editingStudent.telegramChatId
-                    ? `Телеграм-бот подключен к группе (ID: ${editingStudent.telegramChatId}). Все ответы ментора из дашборда отправляются в эту группу.`
-                    : `Чтобы привязать группу, добавьте бота в группу с ученицей (или отправьте в группе команду /bind ${editingStudent.fullName.split(' ')[0]}).`}
-                </p>
-                {editingStudent.telegramChatId && (
-                  <button
-                    type="button"
-                    onClick={() => setEditingStudent({ ...editingStudent, telegramChatId: undefined })}
-                    className="text-xs text-rose-600 hover:text-rose-700 font-medium cursor-pointer"
-                  >
-                    Отвязать группу
-                  </button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Тариф:</label>
-                  <select
-                    value={editingStudent.tariff ?? 'Стандарт'}
-                    onChange={event => setEditingStudent({ ...editingStudent, tariff: event.target.value === 'VIP' ? 'VIP' : 'Стандарт' })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                  >
-                    <option value="Стандарт">Стандарт</option>
-                    <option value="VIP">VIP</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Дата старта:</label>
-                  <input
-                    type="date"
-                    value={editingStudent.startDate ?? ''}
-                    onChange={event => setEditingStudent({ ...editingStudent, startDate: event.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Причина паузы:</label>
-                  <input
-                    type="text"
-                    value={editingStudent.pauseReason ?? ''}
-                    onChange={event => setEditingStudent({ ...editingStudent, pauseReason: event.target.value || undefined })}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                  />
-                </div>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" checked={editingStudent.isOnPause} onChange={event => setEditingStudent({ ...editingStudent, isOnPause: event.target.checked })} />
-                  На паузе
-                </label>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" checked={editingStudent.isActive ?? true} onChange={event => setEditingStudent({ ...editingStudent, isActive: event.target.checked })} />
-                  Активный профиль
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Точка А (старт, ₽):</label>
-                  <input
-                    type="number"
-                    value={editingStudent.initialIncome}
-                    onChange={e => setEditingStudent({ ...editingStudent, initialIncome: Number(e.target.value) || 0 })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Точка Б (факт, ₽):</label>
-                  <input
-                    type="number"
-                    value={editingStudent.currentIncome}
-                    onChange={e => setEditingStudent({ ...editingStudent, currentIncome: Number(e.target.value) || 0 })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 font-bold text-emerald-600"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Средний чек на старте (₽):</label>
-                  <input
-                    type="number"
-                    value={editingStudent.initialAvgTicket}
-                    onChange={e => setEditingStudent({ ...editingStudent, initialAvgTicket: Number(e.target.value) || 0 })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Текущий средний чек (₽):</label>
-                  <input
-                    type="number"
-                    value={editingStudent.currentAvgTicket}
-                    onChange={e => setEditingStudent({ ...editingStudent, currentAvgTicket: Number(e.target.value) || 0 })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 font-bold"
-                  />
-                </div>
-              </div>
-
-              <section className="space-y-3 border-t border-slate-100 pt-4" aria-labelledby="zoom-session-settings-title">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h4 id="zoom-session-settings-title" className="text-sm font-semibold text-slate-900">Этапы созвонов</h4>
-                    <span className="sr-only">Количество этапов не ограничено</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={addEditingZoomSession}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold text-slate-800 hover:bg-slate-100"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Добавить этап</span>
-                  </button>
-                </div>
-
-                {(editingStudent.zoomSessions ?? []).length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-xs text-slate-500">
-                    Этапов пока нет. Добавьте первый этап сопровождения.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {(editingStudent.zoomSessions ?? []).map((session, index) => (
-                      <div key={`${editingStudent.id}-editing-session-${index}`} className="space-y-3 rounded-xl border border-slate-200 p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-xs font-semibold uppercase tracking-wide">Этап {index + 1}</span>
-                          <button
-                            type="button"
-                            onClick={() => removeEditingZoomSession(index)}
-                            aria-label={`Удалить этап ${index + 1}`}
-                            title="Удалить этап"
-                            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="sm:col-span-2">
-                            <label className="mb-1 block text-xs font-semibold text-slate-600">Название этапа</label>
-                            <input
-                              type="text"
-                              value={session.title}
-                              onChange={e => updateEditingZoomSession(index, { title: e.target.value })}
-                              placeholder="Например: Разбор стратегии"
-                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-semibold text-slate-600">Дата и время</label>
-                            <input
-                              type="text"
-                              value={session.date}
-                              onChange={e => updateEditingZoomSession(index, { date: e.target.value })}
-                              placeholder="Например: 12.11 в 19:00"
-                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-semibold text-slate-600">Статус</label>
-                            <select
-                              value={session.isCompleted ? 'completed' : 'planned'}
-                              onChange={e => updateEditingZoomSession(index, { isCompleted: e.target.value === 'completed' })}
-                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                            >
-                              <option value="planned">Запланирован</option>
-                              <option value="completed">Проведен</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-semibold text-slate-600">Ссылка на созвон</label>
-                            <input
-                              type="url"
-                              value={session.zoomLink ?? ''}
-                              onChange={e => updateEditingZoomSession(index, { zoomLink: e.target.value || undefined })}
-                              placeholder="https://…"
-                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-semibold text-slate-600">Ссылка на запись</label>
-                            <input
-                              type="url"
-                              value={session.recordingUrl ?? ''}
-                              onChange={e => updateEditingZoomSession(index, { recordingUrl: e.target.value || undefined })}
-                              placeholder="https://…"
-                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                            />
-                          </div>
-                          <div className="sm:col-span-2">
-                            <label className="mb-1 block text-xs font-semibold text-slate-600">Итог и заметки</label>
-                            <textarea
-                              rows={2}
-                              value={session.keyTakeaway ?? ''}
-                              onChange={e => updateEditingZoomSession(index, { keyTakeaway: e.target.value || undefined })}
-                              placeholder="Ключевые договоренности и итоги этапа"
-                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Финансовая цель потока (₽):</label>
-                <input
-                  type="number"
-                  value={editingStudent.portalData?.targetIncome || 100000}
-                  onChange={e => {
-                    const val = Number(e.target.value) || 100000;
-                    setEditingStudent({
-                      ...editingStudent,
-                      portalData: editingStudent.portalData
-                        ? { ...editingStudent.portalData, targetIncome: val }
-                        : {
-                            targetIncome: val,
-                            currentStreakDays: 2,
-                            dailyChecklist: { contentSubmitted: false, mailingsDone: 8, mailingsTarget: 15, reflectionDone: false },
-                            todayDeadline: '21:00',
-                            scripts: [],
-                            zoomSessions: [],
-                          },
-                    });
-                  }}
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setEditingStudent(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void saveStudentProfile(editingStudent);
-                  setEditingStudent(null);
-                }}
-                className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>Сохранить профиль</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <EditStudentModal
+        student={editingStudent}
+        setEditingStudent={setEditingStudent}
+        onClose={() => setEditingStudent(null)}
+        onSave={saveStudentProfile}
+        addEditingZoomSession={addEditingZoomSession}
+        removeEditingZoomSession={removeEditingZoomSession}
+        updateEditingZoomSession={updateEditingZoomSession}
+      />
 
       {/* ─── MODAL 3: SCRIPT EDITOR / CREATOR ─── */}
-      {(editingScript || isAddingScript) && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-          onClick={() => {
-            setEditingScript(null);
-            setIsAddingScript(false);
-          }}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 shadow-xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  {isAddingScript ? 'Добавить новый скрипт в Direct' : 'Редактировать скрипт'}
-                </h3>
-              </div>
-              <button
-                onClick={() => {
-                  setEditingScript(null);
-                  setIsAddingScript(false);
-                }}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Название скрипта:</label>
-                <input
-                  type="text"
-                  value={isAddingScript ? newScript.title : editingScript?.title || ''}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (isAddingScript) setNewScript(prev => ({ ...prev, title: val }));
-                    else if (editingScript) setEditingScript({ ...editingScript, title: val });
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      if (isAddingScript) {
-                        void addScript(newScript);
-                        setIsAddingScript(false);
-                      } else if (editingScript) {
-                        void saveScript(editingScript.index, {
-                          title: editingScript.title,
-                          description: editingScript.description,
-                          text: editingScript.text,
-                        });
-                        setEditingScript(null);
-                      }
-                    }
-                  }}
-                  placeholder="Например: Скрипт закрытия после созвона"
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Описание / Назначение:</label>
-                <input
-                  type="text"
-                  value={isAddingScript ? newScript.description : editingScript?.description || ''}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (isAddingScript) setNewScript(prev => ({ ...prev, description: val }));
-                    else if (editingScript) setEditingScript({ ...editingScript, description: val });
-                  }}
-                  placeholder="Например: Формула дожима теплых лидов"
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Текст скрипта для копирования:</label>
-                <textarea
-                  rows={4}
-                  value={isAddingScript ? newScript.text : editingScript?.text || ''}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (isAddingScript) setNewScript(prev => ({ ...prev, text: val }));
-                    else if (editingScript) setEditingScript({ ...editingScript, text: val });
-                  }}
-                  placeholder="Вставьте текст скрипта..."
-                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 font-mono leading-relaxed"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingScript(null);
-                  setIsAddingScript(false);
-                }}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (isAddingScript) {
-                    if (!newScript.title.trim()) {
-                      showToast('Введите название скрипта');
-                      return;
-                    }
-                    void addScript(newScript);
-                    setNewScript({ title: '', description: '', text: '' });
-                    setIsAddingScript(false);
-                  } else if (editingScript) {
-                    void saveScript(editingScript.index, {
-                      title: editingScript.title,
-                      description: editingScript.description,
-                      text: editingScript.text,
-                    });
-                    setEditingScript(null);
-                  }
-                }}
-                className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>{isAddingScript ? 'Добавить скрипт' : 'Сохранить изменения'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ScriptModal
+        isOpen={Boolean(editingScript || isAddingScript)}
+        isAddingScript={isAddingScript}
+        editingScript={editingScript}
+        newScript={newScript}
+        setNewScript={setNewScript}
+        setEditingScript={setEditingScript}
+        onClose={() => {
+          setEditingScript(null);
+          setIsAddingScript(false);
+        }}
+        onAdd={addScript}
+        onSave={saveScript}
+        showToast={showToast}
+      />
 
       {/* ─── MODAL 4: HASHTAG RULE EDITOR / CREATOR ─── */}
-      {(editingRule || isAddingRule) && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-          onClick={() => {
-            setEditingRule(null);
-            setIsAddingRule(false);
-          }}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 shadow-xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  {isAddingRule ? 'Новый хэштег / задание в боте' : `Редактирование: ${editingRule?.hashtag}`}
-                </h3>
-              </div>
-              <button
-                onClick={() => {
-                  setEditingRule(null);
-                  setIsAddingRule(false);
-                }}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Хэштег (с символом #):</label>
-                  <input
-                    type="text"
-                    value={isAddingRule ? newRule.hashtag : editingRule?.hashtag || ''}
-                    onChange={e => {
-                      const val = e.target.value.startsWith('#') ? e.target.value : `#${e.target.value}`;
-                      if (isAddingRule) setNewRule(prev => ({ ...prev, hashtag: val }));
-                      else if (editingRule) setEditingRule({ ...editingRule, hashtag: val });
-                    }}
-                    placeholder="#хэштег"
-                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 font-mono font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Название задания:</label>
-                  <input
-                    type="text"
-                    value={isAddingRule ? newRule.title : editingRule?.title || ''}
-                    onChange={e => {
-                      const val = e.target.value;
-                      if (isAddingRule) setNewRule(prev => ({ ...prev, title: val }));
-                      else if (editingRule) setEditingRule({ ...editingRule, title: val });
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        if (isAddingRule) {
-                          void addRule(newRule);
-                          setIsAddingRule(false);
-                        } else if (editingRule) {
-                          void saveRule(editingRule);
-                          setEditingRule(null);
-                        }
-                      }
-                    }}
-                    placeholder="Например: Отзыв от клиента"
-                    className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Описание регламента сдачи:</label>
-                <textarea
-                  rows={2}
-                  value={isAddingRule ? newRule.description : editingRule?.description || ''}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (isAddingRule) setNewRule(prev => ({ ...prev, description: val }));
-                    else if (editingRule) setEditingRule({ ...editingRule, description: val });
-                  }}
-                  placeholder="Опишите, что бот принимает по этому тегу..."
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 leading-relaxed"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Пример для чата:</label>
-                <input
-                  type="text"
-                  value={isAddingRule ? newRule.example : editingRule?.example || ''}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (isAddingRule) setNewRule(prev => ({ ...prev, example: val }));
-                    else if (editingRule) setEditingRule({ ...editingRule, example: val });
-                  }}
-                  placeholder="Например: #отзыв скриншот переписки с клиентом"
-                  className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 font-mono text-slate-700"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-xs font-semibold text-slate-700">Обязательное задание потока:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isAddingRule) setNewRule(prev => ({ ...prev, required: !prev.required }));
-                    else if (editingRule) setEditingRule({ ...editingRule, required: !editingRule.required });
-                  }}
-                  className={`text-xs font-semibold px-3 py-1 rounded-lg border transition cursor-pointer ${
-                    (isAddingRule ? newRule.required : editingRule?.required)
-                      ? 'bg-rose-50 text-rose-700 border-rose-200'
-                      : 'bg-slate-100 text-slate-600 border-slate-200'
-                  }`}
-                >
-                  {(isAddingRule ? newRule.required : editingRule?.required) ? 'обязательно' : 'по факту'}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingRule(null);
-                  setIsAddingRule(false);
-                }}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (isAddingRule) {
-                    if (!newRule.hashtag.trim() || newRule.hashtag === '#') {
-                      showToast('Введите хэштег');
-                      return;
-                    }
-                    void addRule(newRule);
-                    setNewRule({ hashtag: '#', title: '', description: '', required: false, example: '' });
-                    setIsAddingRule(false);
-                  } else if (editingRule) {
-                    void saveRule(editingRule);
-                    setEditingRule(null);
-                  }
-                }}
-                className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>{isAddingRule ? 'Добавить правило' : 'Сохранить правило'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RuleModal
+        isOpen={Boolean(editingRule || isAddingRule)}
+        isAddingRule={isAddingRule}
+        editingRule={editingRule}
+        newRule={newRule}
+        setNewRule={setNewRule}
+        setEditingRule={setEditingRule}
+        onClose={() => {
+          setEditingRule(null);
+          setIsAddingRule(false);
+        }}
+        onAdd={addRule}
+        onSave={saveRule}
+        showToast={showToast}
+      />
 
       {/* ─── MODAL 5: SCHEDULE TIME EDITOR ─── */}
-      {editingScheduleTime && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-          onClick={() => setEditingScheduleTime(null)}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-sm w-full p-6 border border-slate-200 space-y-4 shadow-xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Изменить время расписания</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{editingScheduleTime.label}</p>
-              </div>
-              <button
-                onClick={() => setEditingScheduleTime(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <ScheduleTimeModal
+        editingScheduleTime={editingScheduleTime}
+        setEditingScheduleTime={setEditingScheduleTime}
+        onClose={() => setEditingScheduleTime(null)}
+        onSave={(key, value, label) => updateScheduleTime(key, value, label)}
+      />
 
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Время (ЧЧ:ММ):</label>
-              <input
-                type="text"
-                value={editingScheduleTime.value}
-                onChange={e => setEditingScheduleTime({ ...editingScheduleTime, value: e.target.value })}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    updateScheduleTime(editingScheduleTime.key, editingScheduleTime.value, editingScheduleTime.label);
-                    setEditingScheduleTime(null);
-                  }
-                }}
-                placeholder="09:00"
-                className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-center font-bold focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setEditingScheduleTime(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  updateScheduleTime(editingScheduleTime.key, editingScheduleTime.value, editingScheduleTime.label);
-                  setEditingScheduleTime(null);
-                }}
-                className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>Сохранить</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-            {/* ─── MODAL 6: STUDENT DOSSIER (PROFILE, HISTORY, ZOOMS) ─── */}
-      {inspectingStudent && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-150"
-          onClick={() => setInspectingStudent(null)}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-2xl w-full p-6 border border-slate-200 space-y-5 my-8 shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-slate-900 text-white flex items-center justify-center text-sm font-bold">
-                  {inspectingStudent.avatarText}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold text-slate-900">{inspectingStudent.fullName}</h3>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
-                      {inspectingStudent.tariff}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {inspectingStudent.niche} · Онлайн
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setInspectingStudent(null)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Dossier Tabs */}
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100/70 rounded-xl">
-              <button
-                onClick={() => setInspectingTab('profile')}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                  inspectingTab === 'profile' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Профиль и цели
-              </button>
-              <button
-                onClick={() => setInspectingTab('reports')}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                  inspectingTab === 'reports' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                История отчётов ({allReports.filter(r => r.studentId === inspectingStudent.id).length})
-              </button>
-              <button
-                onClick={() => setInspectingTab('zooms')}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                  inspectingTab === 'zooms' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Zoom-созвоны ({inspectingStudent.zoomSessions?.length || 0})
-              </button>
-            </div>
-
-            {/* TAB: PROFILE & FINANCIALS */}
-            {inspectingTab === 'profile' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
-                    <span className="text-[11px] text-slate-400 block font-medium">Точка А (старт)</span>
-                    <span className="text-base font-bold text-slate-900 font-mono mt-0.5 block">
-                      {inspectingStudent.initialIncome.toLocaleString('ru-RU')} ₽
-                    </span>
-                  </div>
-                  <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-100">
-                    <span className="text-[11px] text-emerald-600 block font-medium">Текущий факт</span>
-                    <span className="text-base font-bold text-emerald-800 font-mono mt-0.5 block">
-                      {inspectingStudent.currentIncome.toLocaleString('ru-RU')} ₽
-                    </span>
-                  </div>
-                  <div className="p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-100">
-                    <span className="text-[11px] text-indigo-600 block font-medium">Цель на поток (Б)</span>
-                    <span className="text-base font-bold text-indigo-800 font-mono mt-0.5 block">
-                      {(inspectingStudent.portalData?.targetIncome || inspectingStudent.initialIncome * 2).toLocaleString('ru-RU')} ₽
-                    </span>
-                  </div>
-                </div>
-
-                {/* Progress bar to Point B */}
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-slate-700">Прогресс к цели Точки Б:</span>
-                    <span className="font-mono font-bold text-indigo-600">
-                      {Math.min(100, Math.round((inspectingStudent.currentIncome / (inspectingStudent.portalData?.targetIncome || inspectingStudent.initialIncome * 2 || 1)) * 100))}%
-                    </span>
-                  </div>
-                  <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-600 rounded-full transition-all duration-500"
-                      style={{
-                        width: `${Math.min(100, Math.round((inspectingStudent.currentIncome / (inspectingStudent.portalData?.targetIncome || inspectingStudent.initialIncome * 2 || 1)) * 100))}%`
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="p-3 rounded-xl border border-slate-100 space-y-1">
-                    <span className="text-slate-400">Средний чек:</span>
-                    <div className="text-sm font-bold text-slate-900 font-mono">
-                      {inspectingStudent.currentAvgTicket.toLocaleString('ru-RU')} ₽ (было {inspectingStudent.initialAvgTicket.toLocaleString('ru-RU')} ₽)
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-xl border border-slate-100 space-y-1">
-                    <span className="text-slate-400">Новых клиентов / Рассылок:</span>
-                    <div className="text-sm font-bold text-slate-900 font-mono">
-                      +{inspectingStudent.totalNewClients} клиентов · {inspectingStudent.totalMailings} рассылок
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-semibold text-slate-900 block">Telegram мини-группа:</span>
-                    <span className="text-slate-500">{inspectingStudent.telegramChatId ? `Chat ID: ${inspectingStudent.telegramChatId}` : 'Авто-привязка через бота'}</span>
-                  </div>
-                  <button
-                    onClick={() => sendStudentMessage(inspectingStudent, `Привет, ${inspectingStudent.fullName}! Как продвигается выполнение заданий?`)}
-                    className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Send className="w-3 h-3" />
-                    <span>Написать</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* TAB: SUBMITTED REPORTS HISTORY */}
-            {inspectingTab === 'reports' && (
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {allReports.filter(r => r.studentId === inspectingStudent.id).length === 0 ? (
-                  <div className="text-center py-12 text-xs text-slate-400">
-                    Ученица пока не сдала ни одного отчёта
-                  </div>
-                ) : (
-                  allReports
-                    .filter(r => r.studentId === inspectingStudent.id)
-                    .map(r => (
-                      <div key={r.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-2.5">
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-900">{r.reportDate}</span>
-                            <span className={`px-2 py-0.5 rounded-md font-semibold text-[10px] ${
-                              r.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                            }`}>
-                              {r.status === 'APPROVED' ? 'Одобрен' : 'На проверке'}
-                            </span>
-                          </div>
-                          <span className="text-slate-400 font-mono">{r.submittedAt}</span>
-                        </div>
-
-                        <div className="flex items-center gap-3 text-xs font-semibold text-slate-700">
-                          <span>Продажи: <strong className="text-emerald-700">{r.salesAmount.toLocaleString('ru-RU')} ₽</strong></span>
-                          <span>·</span>
-                          <span>Клиенты: +{r.newClientsCount}</span>
-                          <span>·</span>
-                          <span>Рассылки: {r.mailingsCount} шт</span>
-                        </div>
-
-                        {r.reflectionSummary && (
-                          <div className="text-xs text-slate-600 bg-white p-2.5 rounded-lg border border-slate-100 space-y-1">
-                            <div><strong>Действия:</strong> {r.reflectionSummary.actions}</div>
-                            {r.reflectionSummary.questionToMentor && (
-                              <div className="text-indigo-900 font-medium"><strong>Вопрос наставнику:</strong> {r.reflectionSummary.questionToMentor}</div>
-                            )}
-                          </div>
-                        )}
-
-                        {r.mentorReply && (
-                          <div className="text-xs bg-emerald-50 text-emerald-950 p-2.5 rounded-lg border border-emerald-100">
-                            <strong>Ответ наставника:</strong> {r.mentorReply}
-                          </div>
-                        )}
-                      </div>
-                    ))
-                )}
-              </div>
-            )}
-
-            {/* TAB: ZOOM SESSIONS */}
-            {inspectingTab === 'zooms' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">Список назначенных и проведённых сессий</span>
-                  <button
-                    onClick={() => {
-                      setManagingZoomStudent(inspectingStudent);
-                      setInspectingStudent(null);
-                    }}
-                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer flex items-center gap-1"
-                  >
-                    <Video className="w-3.5 h-3.5" />
-                    <span>Управление созвонами</span>
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {(inspectingStudent.zoomSessions || []).map(sess => (
-                    <div
-                      key={sess.callNumber}
-                      className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <button
-                          onClick={() => toggleZoomSessionCompleted(inspectingStudent.id, sess.callNumber)}
-                          className={`w-5 h-5 rounded-md border flex items-center justify-center transition cursor-pointer ${
-                            sess.isCompleted ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 bg-white'
-                          }`}
-                        >
-                          {sess.isCompleted && <Check className="w-3.5 h-3.5" />}
-                        </button>
-                        <div>
-                          <span className={`text-xs font-bold block ${sess.isCompleted ? 'line-through text-slate-400' : 'text-slate-900'}`}>
-                            {sess.title}
-                          </span>
-                          <span className="text-[11px] text-slate-400">
-                            {sess.date ? `Назначен: ${sess.date}` : 'Дата не назначена'}
-                            {sess.keyTakeaway ? ` · ${sess.keyTakeaway}` : ''}
-                          </span>
-                        </div>
-                      </div>
-
-                      {(sess.zoomLink || sess.recordingUrl) && (
-                        <a
-                          href={sess.zoomLink || sess.recordingUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer flex items-center gap-1 shrink-0"
-                        >
-                          <span>Zoom</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
-              <button
-                onClick={() => setInspectingStudent(null)}
-                className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer"
-              >
-                Закрыть досье
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ─── MODAL 6: STUDENT DOSSIER (PROFILE, HISTORY, ZOOMS) ─── */}
+      <StudentDossierModal
+        student={inspectingStudent}
+        inspectingTab={inspectingTab}
+        setInspectingTab={setInspectingTab}
+        allReports={allReports}
+        onClose={() => setInspectingStudent(null)}
+        onSendMessage={sendStudentMessage}
+        onManageZooms={student => {
+          setManagingZoomStudent(student);
+          setInspectingStudent(null);
+        }}
+        onToggleZoomCompleted={toggleZoomSessionCompleted}
+      />
 
       {/* ─── MODAL 7: ZOOM MANAGEMENT MODAL ─── */}
-      {managingZoomStudent && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-150"
-          onClick={() => setManagingZoomStudent(null)}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-xl w-full p-6 border border-slate-200 space-y-5 my-8 shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Zoom-созвоны ученицы</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {managingZoomStudent.fullName} · {managingZoomStudent.tariff}
-                </p>
-              </div>
-              <button
-                onClick={() => setManagingZoomStudent(null)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* List of current Zoom sessions */}
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-                <span>Этапы наставничества:</span>
-                <span>Статус / Запись</span>
-              </div>
-
-              {(managingZoomStudent.zoomSessions || []).map(sess => (
-                <div
-                  key={sess.callNumber}
-                  className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <button
-                      onClick={() => toggleZoomSessionCompleted(managingZoomStudent.id, sess.callNumber)}
-                      className={`w-5 h-5 rounded-md border flex items-center justify-center transition cursor-pointer ${
-                        sess.isCompleted ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 bg-white'
-                      }`}
-                    >
-                      {sess.isCompleted && <Check className="w-3.5 h-3.5" />}
-                    </button>
-                    <div>
-                      <span className={`text-xs font-bold block ${sess.isCompleted ? 'line-through text-slate-400' : 'text-slate-900'}`}>
-                        {sess.title}
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        {sess.date || 'Дата не назначена'}
-                        {sess.keyTakeaway ? ` · ${sess.keyTakeaway}` : ''}
-                      </span>
-                    </div>
-                  </div>
-
-                  {(sess.zoomLink || sess.recordingUrl) && (
-                    <a
-                      href={sess.zoomLink || sess.recordingUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer flex items-center gap-1 shrink-0"
-                    >
-                      <span>Ссылка</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Schedule New Call Form Toggle */}
-            {!isAddingZoom ? (
-              <button
-                onClick={() => setIsAddingZoom(true)}
-                className="w-full py-2.5 rounded-xl border-2 border-dashed border-slate-200 text-slate-600 hover:border-slate-400 hover:text-slate-900 text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Запланировать новый созвон</span>
-              </button>
-            ) : (
-              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900">Новый созвон</span>
-                  <button
-                    onClick={() => setIsAddingZoom(false)}
-                    className="text-xs text-slate-400 hover:text-slate-600"
-                  >
-                    Скрыть
-                  </button>
-                </div>
-
-                <div className="space-y-2 text-xs">
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">Название этапа:</label>
-                    <input
-                      type="text"
-                      value={zoomForm.title}
-                      onChange={e => setZoomForm({ ...zoomForm, title: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white"
-                      placeholder="Например: Аудит воронки и оффера"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">Дата и время:</label>
-                      <input
-                        type="text"
-                        value={zoomForm.scheduledAt}
-                        onChange={e => setZoomForm({ ...zoomForm, scheduledAt: e.target.value })}
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white"
-                        placeholder="12.11 в 15:00"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">Zoom / Запись ссылка:</label>
-                      <input
-                        type="text"
-                        value={zoomForm.zoomUrl}
-                        onChange={e => setZoomForm({ ...zoomForm, zoomUrl: e.target.value })}
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white"
-                        placeholder="https://zoom.us/..."
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">Заметки наставника:</label>
-                    <input
-                      type="text"
-                      value={zoomForm.meetingNotes}
-                      onChange={e => setZoomForm({ ...zoomForm, meetingNotes: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white"
-                      placeholder="Фокус созвона, домашнее задание..."
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    onClick={() => setIsAddingZoom(false)}
-                    className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800"
-                  >
-                    Отмена
-                  </button>
-                  <button
-                    onClick={() => void addZoomSessionToStudent(managingZoomStudent.id)}
-                    className="px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 transition cursor-pointer"
-                  >
-                    Сохранить созвон
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
-              <button
-                onClick={() => setManagingZoomStudent(null)}
-                className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer"
-              >
-                Готово
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ZoomModal
+        student={managingZoomStudent}
+        isAddingZoom={isAddingZoom}
+        setIsAddingZoom={setIsAddingZoom}
+        zoomForm={zoomForm}
+        setZoomForm={setZoomForm}
+        onToggleCompleted={toggleZoomSessionCompleted}
+        onAddZoomSession={addZoomSessionToStudent}
+        onClose={() => setManagingZoomStudent(null)}
+      />
 
       {/* ─── MODAL 8: CHEATSHEET EDITOR / CREATOR ─── */}
-      {(isAddingCheatsheet || editingCheatsheet) && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-150"
-          onClick={() => {
-            setIsAddingCheatsheet(false);
-            setEditingCheatsheet(null);
-          }}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-xl w-full p-6 border border-slate-200 space-y-4 my-8 shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  {isAddingCheatsheet ? 'Новая шпаргалка для учениц' : 'Редактировать шпаргалку'}
-                </h3>
-              </div>
-              <button
-                onClick={() => {
-                  setIsAddingCheatsheet(false);
-                  setEditingCheatsheet(null);
-                }}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <CheatsheetModal
+        isOpen={Boolean(isAddingCheatsheet || editingCheatsheet)}
+        isAddingCheatsheet={isAddingCheatsheet}
+        editingCheatsheet={editingCheatsheet}
+        newCheatsheet={newCheatsheet}
+        setEditingCheatsheet={setEditingCheatsheet}
+        setNewCheatsheet={setNewCheatsheet}
+        onClose={() => {
+          setIsAddingCheatsheet(false);
+          setEditingCheatsheet(null);
+        }}
+        onSave={saveCheatsheet}
+        onAdd={addCheatsheet}
+      />
 
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Категория:</label>
-                <select
-                  value={editingCheatsheet ? editingCheatsheet.category : newCheatsheet.category}
-                  onChange={e => {
-                    const cat = e.target.value as CheatsheetItem['category'];
-                    if (editingCheatsheet) setEditingCheatsheet({ ...editingCheatsheet, category: cat });
-                    else setNewCheatsheet({ ...newCheatsheet, category: cat });
-                  }}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
-                >
-                  <option value="reels">Reels и контент</option>
-                  <option value="sales">Продажи в Direct</option>
-                  <option value="packaging">Упаковка профиля</option>
-                  <option value="rules">Регламент и отчёты</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Заголовок шпаргалки:</label>
-                <input
-                  type="text"
-                  value={editingCheatsheet ? editingCheatsheet.title : newCheatsheet.title}
-                  onChange={e => {
-                    if (editingCheatsheet) setEditingCheatsheet({ ...editingCheatsheet, title: e.target.value });
-                    else setNewCheatsheet({ ...newCheatsheet, title: e.target.value });
-                  }}
-                  placeholder="Например: Чек-лист проверки рилс перед публикацией"
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Краткое описание (для кого и когда):</label>
-                <input
-                  type="text"
-                  value={editingCheatsheet ? editingCheatsheet.description : newCheatsheet.description}
-                  onChange={e => {
-                    if (editingCheatsheet) setEditingCheatsheet({ ...editingCheatsheet, description: e.target.value });
-                    else setNewCheatsheet({ ...newCheatsheet, description: e.target.value });
-                  }}
-                  placeholder="Отправлять ученицам, когда проседает глубина досмотра"
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Текст шпаргалки:</label>
-                <textarea
-                  rows={8}
-                  value={editingCheatsheet ? editingCheatsheet.content : newCheatsheet.content}
-                  onChange={e => {
-                    if (editingCheatsheet) setEditingCheatsheet({ ...editingCheatsheet, content: e.target.value });
-                    else setNewCheatsheet({ ...newCheatsheet, content: e.target.value });
-                  }}
-                  placeholder="Вставьте готовый текст, структуру сообщений или чек-лист..."
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-mono text-xs leading-relaxed"
-                />
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-              <button
-                onClick={() => {
-                  setIsAddingCheatsheet(false);
-                  setEditingCheatsheet(null);
-                }}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={() => {
-                  if (editingCheatsheet) {
-                    saveCheatsheet(editingCheatsheet);
-                    setEditingCheatsheet(null);
-                  } else {
-                    addCheatsheet();
-                  }
-                }}
-                className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>{isAddingCheatsheet ? 'Добавить шпаргалку' : 'Сохранить изменения'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {/* ─── CONFIRMATION DIALOG MODAL ─── */}
-      {confirmModal && confirmModal.isOpen && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-          onClick={() => setConfirmModal(null)}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200/80 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-start gap-3.5">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                confirmModal.isDanger ? 'bg-rose-100 text-rose-600' : 'bg-indigo-100 text-indigo-600'
-              }`}>
-                {confirmModal.isDanger ? <AlertTriangle className="w-5 h-5" /> : <Info className="w-5 h-5" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-bold text-slate-900">{confirmModal.title}</h3>
-                <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">{confirmModal.message}</p>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setConfirmModal(null)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
-              >
-                {confirmModal.cancelLabel || 'Отмена'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const onConfirm = confirmModal.onConfirm;
-                  setConfirmModal(null);
-                  void onConfirm();
-                }}
-                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-white transition cursor-pointer ${
-                  confirmModal.isDanger
-                    ? 'bg-rose-600 hover:bg-rose-700 shadow-xs'
-                    : 'bg-slate-900 hover:bg-slate-800 shadow-xs'
-                }`}
-              >
-                {confirmModal.confirmLabel || 'Подтвердить'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {confirmModal && (
+        <ConfirmDialog
+          isOpen={confirmModal.isOpen}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmLabel={confirmModal.confirmLabel}
+          cancelLabel={confirmModal.cancelLabel}
+          isDanger={confirmModal.isDanger}
+          onConfirm={confirmModal.onConfirm}
+          onClose={() => setConfirmModal(null)}
+        />
       )}
 
 {/* Toast */}

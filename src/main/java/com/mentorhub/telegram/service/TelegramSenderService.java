@@ -67,7 +67,22 @@ public class TelegramSenderService {
             log.info("Sent caring reply to chat {} (reply to #{})", chatId, replyToMsgId);
             return true;
         } catch (TelegramApiException ex) {
-            log.warn("Failed to send caring reply to chat {}: {}", chatId, ex.getMessage());
+            log.warn("Failed to send caring reply to chat {}: {}. Attempting fallback without reply parameter...", chatId, ex.getMessage());
+            if (replyToMsgId != null) {
+                try {
+                    SendMessage.SendMessageBuilder<?, ?> fallbackBuilder = SendMessage.builder()
+                            .chatId(chatId.toString())
+                            .text(text);
+                    if (businessConnectionId != null && !businessConnectionId.isBlank()) {
+                        fallbackBuilder.businessConnectionId(businessConnectionId);
+                    }
+                    telegramClient.execute(fallbackBuilder.build());
+                    log.info("Sent fallback message without reply to chat {}", chatId);
+                    return true;
+                } catch (TelegramApiException fallbackEx) {
+                    log.warn("Fallback send without reply also failed: {}", fallbackEx.getMessage());
+                }
+            }
             return false;
         }
     }

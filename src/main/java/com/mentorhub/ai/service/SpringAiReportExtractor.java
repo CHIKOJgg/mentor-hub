@@ -194,7 +194,7 @@ public class SpringAiReportExtractor {
             boolean isOpenRouter = baseUrl != null && baseUrl.contains("openrouter");
             List<String> fallbacks = isOpenRouter
                     ? List.of("openrouter/free", "meta-llama/llama-3.3-70b-instruct:free", "meta-llama/llama-3.1-8b-instruct:free", "qwen/qwen-2.5-72b-instruct:free")
-                    : List.of("llama-3.1-8b-instant", "openai/gpt-oss-20b", "qwen/qwen3.8-27b");
+                    : List.of("llama-3.1-8b-instant", "llama-3.3-70b-specdec", "llama3-70b-8192", "mixtral-8x7b-32768", "qwen/qwen3.8-27b");
 
             for (String fallbackModel : fallbacks) {
                 try {
@@ -240,7 +240,8 @@ public class SpringAiReportExtractor {
         List<String> freeModels = List.of(
                 "openrouter/free",
                 "meta-llama/llama-3.3-70b-instruct:free",
-                "meta-llama/llama-3.1-8b-instruct:free"
+                "meta-llama/llama-3.1-8b-instruct:free",
+                "qwen/qwen-2.5-72b-instruct:free"
         );
 
         RestClient restClient = RestClient.builder()
