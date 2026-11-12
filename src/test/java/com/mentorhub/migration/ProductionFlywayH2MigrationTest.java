@@ -18,7 +18,7 @@ class ProductionFlywayH2MigrationTest {
         Flyway production = productionFlyway(url);
         production.migrate();
 
-        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("10");
+        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("11");
         assertThat(count(url, "students")).isZero();
         assertThat(count(url, "daily_reports")).isZero();
         assertThat(count(url, "task_rules")).isZero();
@@ -42,8 +42,8 @@ class ProductionFlywayH2MigrationTest {
         Flyway production = productionFlyway(url);
         production.migrate();
 
-        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("10");
-        assertThat(count(url, "daily_reports")).isEqualTo(legacyReportCount);
+        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("11");
+        assertThat(count(url, "daily_reports")).isZero();
         assertThat(count(url, "flyway_schema_history WHERE version IN ('7', '8')")).isZero();
     }
 
