@@ -51,6 +51,7 @@ class TelegramMessageRouterTest {
         mentorSettingRepository = mock(MentorSettingRepository.class);
         adminTokenRepository = mock(AdminTokenRepository.class);
         auditMessageLogRepository = mock(AuditMessageLogRepository.class);
+        when(studentRepository.save(any(Student.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         when(mentorSettingRepository.findFirstByOrderByIdAsc())
                 .thenReturn(Optional.of(MentorSetting.builder().mentorTgId(11223344L).build()));
@@ -214,6 +215,138 @@ class TelegramMessageRouterTest {
         ArgumentCaptor<AuditMessageLog> captor = ArgumentCaptor.forClass(AuditMessageLog.class);
         verify(auditMessageLogRepository).save(captor.capture());
         assertThat(captor.getValue().getProcessingStatus()).isEqualTo("SERVICE_EVENT_IGNORED");
+    }
+
+    @Test
+    @DisplayName("New group member is linked by their username, not by the person who invited them")
+    void routeIncomingMessage_autoBindsNewMemberByUsername() {
+        User inviter = User.builder().id(889900L).firstName("Мирослав").userName("miroslav").isBot(false).build();
+        User studentUser = User.builder().id(71010101L).firstName("Милана").lastName("Горохова")
+                .userName("milana_gorohova").isBot(false).build();
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder().messageId(30).from(inviter).chat(chat).newChatMembers(List.of(studentUser)).build();
+        Student student = Student.builder().id(1L).fullName("Милана Горохова").tgUsername("milana_gorohova").build();
+
+        when(studentRepository.findByTgChatId(-10071010101L)).thenReturn(Optional.empty());
+        when(studentRepository.findByTgUsername("milana_gorohova")).thenReturn(Optional.of(student));
+
+        router.routeIncomingMessage(message, 301L, "MINI_GROUP");
+
+        assertThat(student.getTgChatId()).isEqualTo(-10071010101L);
+        verify(studentRepository).save(student);
+        verify(studentRepository, never()).findByTgChatId(889900L);
+        ArgumentCaptor<AuditMessageLog> audit = ArgumentCaptor.forClass(AuditMessageLog.class);
+        verify(auditMessageLogRepository, times(2)).save(audit.capture());
+        assertThat(audit.getAllValues()).anySatisfy(entry -> {
+            assertThat(entry.getSourceType()).isEqualTo("TELEGRAM_AUTO_BIND");
+            assertThat(entry.getTgUserId()).isEqualTo(71010101L);
+            assertThat(entry.getProcessingStatus()).isEqualTo("AUTO_BOUND");
+        });
+    }
+
+    @Test
+    @DisplayName("Unknown newly added group member is created as a student without mentor or curator actions")
+    void routeIncomingMessage_autoCreatesStudentFromNewMember() {
+        User inviter = User.builder().id(889900L).firstName("Мирослав").isBot(false).build();
+        User newStudent = User.builder().id(81112233L).firstName("Ольга").lastName("Тестова")
+                .userName("olga_test").isBot(false).build();
+        Chat chat = Chat.builder().id(-10081112233L).type("supergroup").build();
+        User ksenia = User.builder().id(11223344L).firstName("Ксения").isBot(false).build();
+        User katya = User.builder().id(22334455L).firstName("Катя").isBot(false).build();
+        Message message = Message.builder().messageId(31).from(inviter).chat(chat)
+                .newChatMembers(List.of(ksenia, katya, newStudent)).build();
+
+        when(studentRepository.findByTgChatId(-10081112233L)).thenReturn(Optional.empty());
+        when(studentRepository.findByTgUsername("olga_test")).thenReturn(Optional.empty());
+        when(studentRepository.findAll()).thenReturn(List.of());
+
+        router.routeIncomingMessage(message, 302L, "MINI_GROUP");
+
+        ArgumentCaptor<Student> saved = ArgumentCaptor.forClass(Student.class);
+        verify(studentRepository).save(saved.capture());
+        assertThat(saved.getValue().getFullName()).isEqualTo("Ольга Тестова");
+        assertThat(saved.getValue().getTgUsername()).isEqualTo("olga_test");
+        assertThat(saved.getValue().getTgChatId()).isEqualTo(-10081112233L);
+        assertThat(saved.getValue().getNiche()).isEqualTo("Не указана");
+    }
+
+    @Test
+    @DisplayName("Repeated join event does not create or rebind a second student")
+    void routeIncomingMessage_autoBindIsIdempotent() {
+        User inviter = User.builder().id(889900L).firstName("Мирослав").isBot(false).build();
+        User newStudent = User.builder().id(81112233L).firstName("Ольга").isBot(false).build();
+        Chat chat = Chat.builder().id(-10081112233L).type("supergroup").build();
+        Message message = Message.builder().messageId(32).from(inviter).chat(chat).newChatMembers(List.of(newStudent)).build();
+        Student alreadyBound = Student.builder().id(44L).fullName("Ольга").tgChatId(-10081112233L).build();
+        when(studentRepository.findByTgChatId(-10081112233L)).thenReturn(Optional.of(alreadyBound));
+        when(studentRepository.findAll()).thenReturn(List.of(alreadyBound));
+
+        router.routeIncomingMessage(message, 303L, "MINI_GROUP");
+
+        verify(studentRepository, never()).save(any(Student.class));
+        assertThat(alreadyBound.getTgChatId()).isEqualTo(-10081112233L);
+    }
+
+    @Test
+    @DisplayName("Any newly added non-staff group member is accepted as the student and replaces a stale group owner")
+    void routeIncomingMessage_newUnknownMemberReplacesStaleGroupOwner() {
+        User inviter = User.builder().id(889900L).firstName("Мирослав").isBot(false).build();
+        User newStudent = User.builder().id(81112233L).firstName("Ольга").lastName("Тестова")
+                .userName("olga_test").isBot(false).build();
+        Chat chat = Chat.builder().id(-10081112233L).type("supergroup").build();
+        Message message = Message.builder().messageId(35).from(inviter).chat(chat).newChatMembers(List.of(newStudent)).build();
+        Student oldBinding = Student.builder().id(9L).fullName("Мирослав").tgChatId(-10081112233L).build();
+        when(studentRepository.findByTgChatId(-10081112233L)).thenReturn(Optional.of(oldBinding));
+        when(studentRepository.findByTgUsername("olga_test")).thenReturn(Optional.empty());
+        when(studentRepository.findAll()).thenReturn(List.of(oldBinding));
+
+        router.routeIncomingMessage(message, 306L, "MINI_GROUP");
+
+        assertThat(oldBinding.getTgChatId()).isNull();
+        ArgumentCaptor<Student> created = ArgumentCaptor.forClass(Student.class);
+        verify(studentRepository).saveAndFlush(oldBinding);
+        verify(studentRepository).save(created.capture());
+        assertThat(created.getValue().getFullName()).isEqualTo("Ольга Тестова");
+        assertThat(created.getValue().getTgChatId()).isEqualTo(-10081112233L);
+    }
+
+    @Test
+    @DisplayName("New member with a known profile repairs a stale group binding")
+    void routeIncomingMessage_autoBindRepairsStaleGroupOwner() {
+        User inviter = User.builder().id(889900L).firstName("Мирослав").isBot(false).build();
+        User newStudent = User.builder().id(81112233L).firstName("Ольга").lastName("Тестова")
+                .userName("olga_test").isBot(false).build();
+        Chat chat = Chat.builder().id(-10081112233L).type("supergroup").build();
+        Message message = Message.builder().messageId(33).from(inviter).chat(chat).newChatMembers(List.of(newStudent)).build();
+        Student oldBinding = Student.builder().id(9L).fullName("Мирослав").tgChatId(-10081112233L).build();
+        Student realStudent = Student.builder().id(10L).fullName("Ольга Тестова").tgUsername("olga_test").build();
+        when(studentRepository.findByTgChatId(-10081112233L)).thenReturn(Optional.of(oldBinding));
+        when(studentRepository.findByTgUsername("olga_test")).thenReturn(Optional.of(realStudent));
+
+        router.routeIncomingMessage(message, 304L, "MINI_GROUP");
+
+        assertThat(oldBinding.getTgChatId()).isNull();
+        assertThat(realStudent.getTgChatId()).isEqualTo(-10081112233L);
+        verify(studentRepository).saveAndFlush(oldBinding);
+        verify(studentRepository).save(realStudent);
+    }
+
+    @Test
+    @DisplayName("Report sender identity wins over a stale shared group link")
+    void routeIncomingMessage_knownSenderWinsOverStaleGroupLink() {
+        User sender = User.builder().id(81112233L).firstName("Ольга").userName("olga_test").isBot(false).build();
+        Chat chat = Chat.builder().id(-10081112233L).type("supergroup").build();
+        Message message = Message.builder().messageId(34).from(sender).chat(chat).text("#продажи 60000").build();
+        Student student = Student.builder().id(10L).fullName("Ольга Тестова").tgUsername("olga_test").build();
+        when(studentRepository.findByTgChatId(81112233L)).thenReturn(Optional.empty());
+        when(studentRepository.findByTgUsername("olga_test")).thenReturn(Optional.of(student));
+        when(studentRepository.findByTgChatId(-10081112233L)).thenReturn(Optional.empty());
+
+        router.routeIncomingMessage(message, 305L, "MINI_GROUP");
+
+        assertThat(recordedStudent).isSameAs(student);
+        assertThat(student.getTgChatId()).isEqualTo(-10081112233L);
+        verify(studentRepository).save(student);
     }
 
     @Test

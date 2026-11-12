@@ -24,6 +24,7 @@ import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.business.BusinessConnection;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -169,6 +170,23 @@ public class TelegramMessageRouter {
     }
 
     public void routeIncomingMessage(Message message, Long updateId, String sourceType) {
+        // Telegram puts the inviter in Message.from and the actual joiners in
+        // new_chat_members. Never use the inviter as the student identity.
+        if (isServiceMessage(message)) {
+            Long chatId = message.getChat() != null ? message.getChat().getId() : null;
+            handleNewChatMembers(message, updateId, sourceType, chatId);
+            auditMessageLogRepository.save(AuditMessageLog.builder()
+                    .updateId(updateId == null ? 0L : updateId)
+                    .tgChatId(chatId)
+                    .tgUserId(message.getFrom() == null ? null : message.getFrom().getId())
+                    .sourceType(sourceType)
+                    .rawPayload("[Telegram service event]")
+                    .processingStatus("SERVICE_EVENT_IGNORED")
+                    .createdAt(Instant.now())
+                    .build());
+            return;
+        }
+
         User from = message.getFrom();
         if (from == null) {
             log.debug("Message without author ignored: msgId={}", message.getMessageId());
@@ -184,22 +202,6 @@ public class TelegramMessageRouter {
         Long fromId = from.getId();
         Long chatId = message.getChat() != null ? message.getChat().getId() : null;
         String rawText = message.getText() != null ? message.getText() : message.getCaption();
-
-        // Filter out Telegram service events (group created, member joined/left, title changed)
-        if (isServiceMessage(message)) {
-            log.info("Telegram service message ignored (chat={}, msgId={})", chatId, message.getMessageId());
-            identifyStudent(chatId, fromId, from.getUserName(), message);
-            auditMessageLogRepository.save(AuditMessageLog.builder()
-                    .updateId(updateId)
-                    .tgChatId(chatId)
-                    .tgUserId(fromId)
-                    .sourceType(sourceType)
-                    .rawPayload("[Service Message: group creation or member update]")
-                    .processingStatus("SERVICE_EVENT_IGNORED")
-                    .createdAt(Instant.now())
-                    .build());
-            return;
-        }
 
         // Welcome / Help / Rules handling
         if (rawText != null) {
@@ -358,6 +360,114 @@ public class TelegramMessageRouter {
                 || Boolean.TRUE.equals(message.getDeleteChatPhoto());
     }
 
+    private void handleNewChatMembers(Message message, Long updateId, String sourceType, Long groupChatId) {
+        if (message == null || groupChatId == null || message.getChat() == null
+                || !(message.getChat().isGroupChat() || message.getChat().isSuperGroupChat())
+                || message.getNewChatMembers() == null || message.getNewChatMembers().isEmpty()) {
+            return;
+        }
+
+        // One student per group. If a previous buggy bind linked the inviter,
+        // an exact match for the newly added student repairs it automatically.
+        Optional<Student> alreadyBound = studentRepository.findByTgChatId(groupChatId);
+
+        for (User member : message.getNewChatMembers()) {
+            if (member == null || Boolean.TRUE.equals(member.getIsBot()) || member.getId() == null
+                    || isMentorEcho(member.getId()) || isCuratorEcho(member.getId())) {
+                continue;
+            }
+
+            Optional<Student> matched = Optional.empty();
+            if (StringUtils.hasText(member.getUserName())) {
+                String cleanUsername = member.getUserName().replace("@", "").trim();
+                matched = studentRepository.findByTgUsername(cleanUsername);
+                if (matched.isEmpty()) {
+                    matched = studentRepository.findAll().stream()
+                            .filter(student -> StringUtils.hasText(student.getTgUsername())
+                                    && student.getTgUsername().equalsIgnoreCase(cleanUsername))
+                            .findFirst();
+                }
+            }
+            if (matched.isEmpty()) {
+                String incomingName = telegramFullName(member);
+                String normalizedName = normalizePersonName(incomingName);
+                matched = studentRepository.findAll().stream()
+                        .filter(student -> normalizePersonName(student.getFullName()).equals(normalizedName))
+                        .findFirst();
+            }
+
+            if (alreadyBound.isPresent() && matched.isPresent()
+                    && java.util.Objects.equals(alreadyBound.get().getId(), matched.get().getId())) {
+                log.info("Join event is already linked to student #{}", alreadyBound.get().getId());
+                return;
+            }
+
+            Student student = matched.orElseGet(() -> newStudentFromTelegram(member));
+            Long existingChatId = student.getTgChatId();
+            if (existingChatId != null && existingChatId < 0 && !existingChatId.equals(groupChatId)) {
+                log.warn("Student #{} is already linked to another group {}; refusing to reassign", student.getId(), existingChatId);
+                auditMessageLogRepository.save(AuditMessageLog.builder()
+                        .updateId(updateId == null ? 0L : updateId)
+                        .tgChatId(groupChatId)
+                        .tgUserId(member.getId())
+                        .sourceType("TELEGRAM_AUTO_BIND")
+                        .rawPayload("[Student already linked to another group]")
+                        .processingStatus("AUTO_BIND_CONFLICT")
+                        .createdAt(Instant.now())
+                        .build());
+                return;
+            }
+
+            if (alreadyBound.isPresent()) {
+                Student previous = alreadyBound.get();
+                previous.setTgChatId(null);
+                studentRepository.saveAndFlush(previous);
+            }
+            student.setTgChatId(groupChatId);
+            if (!StringUtils.hasText(student.getTgUsername()) && StringUtils.hasText(member.getUserName())) {
+                student.setTgUsername(member.getUserName().replace("@", "").trim());
+            }
+            Student saved = studentRepository.save(student);
+            log.info("Automatically linked Telegram group {} to student #{} ({})", groupChatId, saved.getId(), saved.getFullName());
+            auditMessageLogRepository.save(AuditMessageLog.builder()
+                    .updateId(updateId == null ? 0L : updateId)
+                    .tgChatId(groupChatId)
+                    .tgUserId(member.getId())
+                    .sourceType("TELEGRAM_AUTO_BIND")
+                    .rawPayload("[New group member automatically linked]")
+                    .processingStatus("AUTO_BOUND")
+                    .createdAt(Instant.now())
+                    .build());
+            return;
+        }
+    }
+
+    private Student newStudentFromTelegram(User member) {
+        String fullName = telegramFullName(member);
+        String[] nameParts = fullName.trim().split("\\s+");
+        String avatar = nameParts.length == 1
+                ? nameParts[0].substring(0, 1).toUpperCase(Locale.ROOT)
+                : (nameParts[0].substring(0, 1) + nameParts[nameParts.length - 1].substring(0, 1)).toUpperCase(Locale.ROOT);
+        return Student.builder()
+                .fullName(fullName)
+                .avatarText(avatar)
+                .tgUsername(StringUtils.hasText(member.getUserName()) ? member.getUserName().replace("@", "").trim() : null)
+                .niche("Не указана")
+                .initialIncome(BigDecimal.ZERO)
+                .currentIncome(BigDecimal.ZERO)
+                .build();
+    }
+
+    private String telegramFullName(User member) {
+        String firstName = StringUtils.hasText(member.getFirstName()) ? member.getFirstName().trim() : "Ученица";
+        String lastName = StringUtils.hasText(member.getLastName()) ? member.getLastName().trim() : "";
+        return (firstName + " " + lastName).trim();
+    }
+
+    private String normalizePersonName(String name) {
+        return name == null ? "" : name.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
     public static boolean isMorningFocusMessage(Message message, String rawContent) {
         if (!StringUtils.hasText(rawContent)) return false;
         String lower = rawContent.trim().toLowerCase(java.util.Locale.ROOT);
@@ -412,42 +522,41 @@ public class TelegramMessageRouter {
     }
 
     private Optional<Student> identifyStudent(Long chatId, Long fromId, String username, Message message) {
-        // 1. Try matching by group chatId
-        if (chatId != null) {
-            Optional<Student> byChat = studentRepository.findByTgChatId(chatId);
-            if (byChat.isPresent()) {
-                return byChat;
-            }
-        }
+        boolean isGroupChat = message != null && message.getChat() != null
+                && (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat());
 
-        // 2. Try matching by personal userId
+        // Prefer the actual author. Group chat IDs are shared by all members,
+        // so looking up the group before the sender can attribute reports to
+        // the wrong student when an old/manual binding is stale.
         if (fromId != null) {
             Optional<Student> byUser = studentRepository.findByTgChatId(fromId);
             if (byUser.isPresent()) {
                 Student st = byUser.get();
-                if (chatId != null && message != null && message.getChat() != null &&
-                        (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat())) {
-                    st.setTgChatId(chatId);
-                    studentRepository.save(st);
-                    log.info("Auto-bound student '{}' to group chat {}", st.getFullName(), chatId);
+                if (isGroupChat) {
+                    bindGroupToIdentifiedStudent(st, chatId);
                 }
                 return byUser;
             }
         }
 
-        // 3. Try matching by username
+        // Match registered Telegram username before falling back to the shared group ID.
         if (StringUtils.hasText(username)) {
             String cleanName = username.replace("@", "").trim();
             Optional<Student> byName = studentRepository.findByTgUsername(cleanName);
             if (byName.isPresent()) {
                 Student st = byName.get();
-                if (chatId != null && message != null && message.getChat() != null &&
-                        (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat())) {
-                    st.setTgChatId(chatId);
-                    studentRepository.save(st);
-                    log.info("Auto-bound student '{}' to group chat {}", st.getFullName(), chatId);
+                if (isGroupChat) {
+                    bindGroupToIdentifiedStudent(st, chatId);
                 }
                 return byName;
+            }
+        }
+
+        // Fall back to an already established group link only if sender identity was unknown.
+        if (chatId != null) {
+            Optional<Student> byChat = studentRepository.findByTgChatId(chatId);
+            if (byChat.isPresent()) {
+                return byChat;
             }
         }
 
@@ -491,6 +600,26 @@ public class TelegramMessageRouter {
         }
 
         return Optional.empty();
+    }
+
+    private void bindGroupToIdentifiedStudent(Student student, Long groupChatId) {
+        if (student == null || groupChatId == null) return;
+        Long currentChatId = student.getTgChatId();
+        if (currentChatId != null && currentChatId < 0 && !currentChatId.equals(groupChatId)) {
+            log.warn("Student #{} is already linked to another group {}; refusing to reassign", student.getId(), currentChatId);
+            return;
+        }
+        if (groupChatId.equals(currentChatId)) return;
+
+        studentRepository.findByTgChatId(groupChatId)
+                .filter(previous -> !java.util.Objects.equals(previous.getId(), student.getId()))
+                .ifPresent(previous -> {
+                    previous.setTgChatId(null);
+                    studentRepository.saveAndFlush(previous);
+                });
+        student.setTgChatId(groupChatId);
+        studentRepository.save(student);
+        log.info("Auto-bound student '{}' to group chat {}", student.getFullName(), groupChatId);
     }
 
     private void handleWelcomeCommand(Long chatId, Long fromId, User from, Message message) {
