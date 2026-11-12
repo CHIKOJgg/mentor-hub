@@ -144,12 +144,19 @@ public class AdminTokenProvisioner implements ApplicationRunner {
     }
 
     private void provisionMentorTelegramIdentity(Long mentorTgId) {
-        MentorSetting setting = mentorSettingRepository.findByMentorName("Ксения")
-                .orElseGet(() -> MentorSetting.builder()
-                        .mentorTgId(mentorTgId)
-                        .mentorName("Ксения")
-                        .build());
-        setting.setMentorTgId(mentorTgId);
-        mentorSettingRepository.save(setting);
+        List<MentorSetting> candidates = mentorSettingRepository.findAll().stream()
+                .filter(s -> "Ксения".equalsIgnoreCase(s.getMentorName()))
+                .toList();
+        if (candidates.isEmpty()) {
+            mentorSettingRepository.save(MentorSetting.builder()
+                    .mentorTgId(mentorTgId)
+                    .mentorName("Ксения")
+                    .build());
+        } else {
+            for (MentorSetting setting : candidates) {
+                setting.setMentorTgId(mentorTgId);
+                mentorSettingRepository.save(setting);
+            }
+        }
     }
 }
