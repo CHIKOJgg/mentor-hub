@@ -1806,7 +1806,9 @@ export default function App() {
                   <span className="mobile-bottom-nav__badge">{t.count}</span>
                 )}
               </span>
-              <span className="mobile-bottom-nav__label">{t.label === 'На проверку' ? 'Проверка' : t.label}</span>
+              <span className="mobile-bottom-nav__label">
+                {t.label === 'На проверку' ? 'Проверка' : t.label === 'Продвижение' ? 'Материалы' : t.label}
+              </span>
             </button>
           ))}
         </nav>
