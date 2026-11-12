@@ -1758,7 +1758,7 @@ export default function App() {
                   {apiSession.adminName}
                   <span className="ml-2 text-xs font-normal text-slate-500">{apiSession.role === 'MENTOR' ? 'Наставник' : 'Куратор'}</span>
                 </div>
-                <button type="button" onClick={logout} className="text-xs font-medium text-slate-500 hover:text-slate-900">Выйти</button>
+                <button type="button" onClick={logout} className="min-w-[44px] text-xs font-medium text-slate-500 hover:text-slate-900">Выйти</button>
               </div>
             ) : (
               <div className="text-xs text-slate-500">
@@ -1782,11 +1782,11 @@ export default function App() {
                 onClick={() => void handleApiSync()}
                 disabled={isApiSyncing}
                 aria-label="Синхронизировать данные"
-                className="text-slate-500 hover:text-slate-900 transition cursor-pointer p-1.5"
+                className="min-w-[44px] text-slate-500 hover:text-slate-900 transition cursor-pointer p-1.5"
               >
                 <RefreshCw className="w-4 h-4" strokeWidth={1.8} />
               </button>
-              {apiSession && <button type="button" onClick={logout} className="text-xs font-medium text-slate-500 hover:text-slate-900">Выйти</button>}
+              {apiSession && <button type="button" onClick={logout} className="min-w-[44px] text-xs font-medium text-slate-500 hover:text-slate-900">Выйти</button>}
             </div>
           </div>
         </div>
