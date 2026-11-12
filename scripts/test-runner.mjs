@@ -95,6 +95,7 @@ const { initialReports, studentDisciplines, taskRules } = await import(
 
 const appTsxPath = path.join(frontendDir, 'src', 'App.tsx');
 let appTsxContent = fs.readFileSync(appTsxPath, 'utf8');
+const apiClientContent = fs.readFileSync(path.join(frontendDir, 'src', 'api', 'client.ts'), 'utf8');
 
 const componentsDir = path.join(frontendDir, 'src', 'components');
 if (fs.existsSync(componentsDir)) {
@@ -232,10 +233,23 @@ describe('Tier 1 - Area 1: Brand Neutrality & Global Header', () => {
     assert.strictEqual(appTsxContent.includes('Mentor Hub'), false, 'App UI must not show product branding');
   });
 
-  test('TC-1.1.3: Sidebar keeps the administrator profile without bot status clutter', () => {
-    assert.ok(appTsxContent.includes('Ксения'), 'Sidebar must display mentor profile');
+  test('TC-1.1.3: Sidebar displays the authenticated administrator without simulated profiles', () => {
+    assert.ok(appTsxContent.includes('apiSession.adminName'), 'Sidebar must display the authenticated profile');
+    assert.strictEqual(appTsxContent.includes('setActiveAdmin'), false, 'Profile must not be manually simulated');
     assert.strictEqual(appTsxContent.includes('@nastav_beauty_bot'), false, 'Bot handle must not be shown');
     assert.strictEqual(appTsxContent.includes('онлайн'), false, 'Online status must not be shown');
+  });
+
+  test('TC-1.1.6: Admin credential is not bundled or persisted in browser storage', () => {
+    assert.ok(appTsxContent.includes('Вход в панель'), 'Unauthenticated users must see the access screen');
+    assert.ok(apiClientContent.includes("'/auth/login'"), 'Access key must be exchanged through the login endpoint');
+    assert.ok(apiClientContent.includes("'/auth/logout'"), 'Authenticated users must have a logout endpoint');
+    assert.ok(apiClientContent.includes("'X-XSRF-TOKEN'"), 'Unsafe API methods must send a CSRF header');
+    assert.strictEqual(apiClientContent.includes('X-Admin-Token'), false, 'Browser must not hold a reusable bearer header');
+    assert.strictEqual(apiClientContent.includes('VITE_ADMIN_TOKEN'), false, 'Admin credential must not be injected into client assets');
+    assert.strictEqual(apiClientContent.includes('localStorage'), false, 'Admin credential must not be persisted in localStorage');
+    assert.strictEqual(apiClientContent.includes('sessionStorage'), false, 'Admin credential must not be persisted in sessionStorage');
+    assert.strictEqual(apiClientContent.includes('window.location.search'), false, 'Admin credential must not be accepted from the URL');
   });
 
   test('TC-1.1.4: Dynamic daily submission counter formula and color coding', () => {
@@ -243,7 +257,6 @@ describe('Tier 1 - Area 1: Brand Neutrality & Global Header', () => {
       appTsxContent.includes('reports.length'),
       'Must render dynamic pending count based on reports queue'
     );
-    assert.strictEqual(initialReports.length, 3, 'Initially 3 reports pending review');
   });
 
   test('TC-1.1.5: Telegram sync button renders with toast notification handler', () => {
@@ -303,7 +316,7 @@ describe('Tier 1 - Area 2: Tab Navigation & Routing', () => {
 });
 
 describe('Tier 1 - Area 3: Inbox Zero Tab («🔥 На проверку»)', () => {
-  test('TC-1.3.1: Renders 3 initial report cards with complete schema', () => {
+  test('TC-1.3.1: Report fixtures cover the complete schema for mapping regressions', () => {
     assert.strictEqual(initialReports.length, 3, 'initialReports must have 3 items');
     for (const report of initialReports) {
       assert.ok(report.id, 'Report must have an id');
@@ -392,7 +405,7 @@ describe('Tier 1 - Area 3: Inbox Zero Tab («🔥 На проверку»)', () 
 });
 
 describe('Tier 1 - Area 4: Discipline Calendar Tab («👩‍🎓 Ученицы & Календарь»)', () => {
-  test('TC-1.4.1: Renders 5 students and 7 weekday columns (02.11 - 08.11)', () => {
+  test('TC-1.4.1: Student fixtures cover seven weekday entries for the calendar schema', () => {
     assert.strictEqual(studentDisciplines.length, 5, 'Must contain 5 students');
     const expectedDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
     for (const student of studentDisciplines) {
@@ -403,8 +416,10 @@ describe('Tier 1 - Area 4: Discipline Calendar Tab («👩‍🎓 Ученицы
     }
   });
 
-  test('TC-1.4.2: Saturday (07.11) is visually highlighted as current day', () => {
+  test('TC-1.4.2: Saturday date label is derived from the loaded calendar', () => {
     assert.ok(appTsxContent.includes("'Сб'"), 'Table header must include Saturday column');
+    assert.ok(appTsxContent.includes("day.day === 'Сб'"), 'Saturday date must come from loaded student data');
+    assert.ok(appTsxContent.includes('saturdayDateLabel'), 'Calendar renders the dynamic Saturday date');
     assert.ok(
       appTsxContent.includes("['Пн','Вт','Ср','Чт','Пт','Сб','Вс']"),
       'Table header includes all 7 weekdays'
@@ -467,14 +482,24 @@ describe('Tier 1 - Area 4: Discipline Calendar Tab («👩‍🎓 Ученицы
     assert.strictEqual(appTsxContent.includes('@nastav_beauty_bot'), false, 'Sidebar must not show the bot handle');
     assert.strictEqual(appTsxContent.includes('Active Telegram Bot Indicator'), false, 'Sidebar must not show bot online status');
   });
+
+  test('TC-1.4.10: Calls view is one navigable seven-day calendar for the whole cohort', () => {
+    assert.ok(appTsxContent.includes('Календарь созвонов Ксении'), 'Calls view is labeled as the mentor calendar');
+    assert.ok(appTsxContent.includes('zoom-week-grid'), 'Calls are grouped into a single weekly grid');
+    assert.ok(appTsxContent.includes('zoomCalendarEvents'), 'Calendar events aggregate sessions from the student roster');
+    assert.ok(appTsxContent.includes('setZoomCalendarWeekOffset'), 'Calendar supports previous/next week navigation');
+  });
 });
 
 describe('Tier 1 - Area 5: Analytics & Story Generator Tab («📊 Аналитика & Кейсы»)', () => {
-  test('TC-1.5.1: Top KPI cards render aggregate metrics with correct values', () => {
-    assert.ok(appTsxContent.includes('895 000 ₽'), 'Total earned must be 895 000 ₽');
-    assert.ok(appTsxContent.includes('66'), 'Verified Reels must be 66');
-    assert.ok(appTsxContent.includes('40 600 ₽'), 'Average ticket must be 40 600 ₽');
-    assert.ok(appTsxContent.includes('702'), 'Outreach total must be 702');
+  test('TC-1.5.1: Cohort KPI cards render live values without demo totals', () => {
+    assert.ok(appTsxContent.includes('analyticsRevenue.toLocaleString'), 'Revenue must use live data');
+    assert.ok(appTsxContent.includes('{totalReelsCount}'), 'Reels total must use live data');
+    assert.ok(appTsxContent.includes('averageTicket.toLocaleString'), 'Average ticket must use live data');
+    assert.ok(appTsxContent.includes('{totalMailingsCount}'), 'Outreach total must use live data');
+    for (const fixtureTotal of ['895 000 ₽', '66 черновиков за поток', '40 600 ₽', '702 за поток']) {
+      assert.strictEqual(appTsxContent.includes(fixtureTotal), false, `Fixture KPI ${fixtureTotal} must not render`);
+    }
   });
 
   test('TC-1.5.2: Student growth multiplier calculation formula matches Point A -> Point B', () => {
@@ -494,24 +519,23 @@ describe('Tier 1 - Area 5: Analytics & Story Generator Tab («📊 Аналит�
     }
   });
 
-  test('TC-1.5.3: Student selector pills render all 5 students with dynamic multiplier badges', () => {
-    assert.ok(
-      appTsxContent.includes('studentDisciplines.map(s => ('),
-      'Must map over studentDisciplines for case selector'
-    );
+  test('TC-1.5.3: Student analytics uses server data and renders a clean empty state', () => {
+    assert.ok(appTsxContent.includes('{students.map(s => ('), 'Selector must use the loaded student list');
+    assert.strictEqual(appTsxContent.includes('studentDisciplines'), false, 'Analytics must not fall back to fixture students');
+    assert.ok(appTsxContent.includes('Нет данных по ученицам'), 'Empty roster must have a production empty state');
   });
 
-  test('TC-1.5.4: Generated story copy matches marketing template with student variables', () => {
-    assert.ok(appTsxContent.includes('handleCopyCase'), 'Copy case handler must be defined');
-    assert.ok(appTsxContent.includes('selectedStudent.fullName'), 'Uses selected student name');
+  test('TC-1.5.4: Analytics exposes a working active/pause status control', () => {
+    const analyticsSource = appTsxContent.split('TAB: ANALYTICS')[1]?.split('TAB: PROMOTION')[0] ?? '';
+    assert.ok(analyticsSource.includes('toggleStudentPause(selectedStudent.id)'), 'Status control must update the selected student');
+    assert.ok(analyticsSource.includes('Статус: На паузе') && analyticsSource.includes('Статус: Активный трек'), 'Both status labels must be visible');
   });
 
-  test('TC-1.5.5: Copy button invokes clipboard write and triggers success toast notification', () => {
-    assert.ok(appTsxContent.includes('navigator.clipboard.writeText'), 'Must write text to navigator.clipboard');
-    assert.ok(
-      appTsxContent.includes('Текст скопирован'),
-      'Must show clipboard toast notification'
-    );
+  test('TC-1.5.5: Copy-case action is removed while the visual case preview remains', () => {
+    const analyticsSource = appTsxContent.split('TAB: ANALYTICS')[1]?.split('TAB: PROMOTION')[0] ?? '';
+    assert.ok(!analyticsSource.includes('handleCopyCase'), 'Analytics must not expose the copy-case action');
+    assert.ok(!analyticsSource.includes('Скопировать текст кейса'), 'Copy button must be removed');
+    assert.ok(analyticsSource.includes('Предпросмотр кейса для Instagram Stories'), 'Visual case preview remains available');
   });
 
   test('TC-1.5.6: 10 key metrics represented in analytics dashboard', () => {
@@ -596,19 +620,9 @@ describe('Tier 1 - Area 7: Tariff Matrix Comparison (Internal Spec & Pitch docs)
 });
 
 describe('Tier 1 - Area 8: Architecture Specification Verification', () => {
-  test('TC-1.8.1: Architecture documents Spring Boot 4.x / Spring AI 2.x with Spring Boot 3.4.x / Spring AI 1.x fallback', () => {
-    assert.ok(
-      archDocContent.includes('Spring Boot 4.x') || archDocContent.includes('Spring Boot 4'),
-      'Must specify Spring Boot 4.x'
-    );
-    assert.ok(
-      archDocContent.includes('Spring Boot 3.4.x') || archDocContent.includes('Spring Boot 3.4'),
-      'Must document fallback to Spring Boot 3.4.x'
-    );
-    assert.ok(
-      archDocContent.includes('Spring AI 2.x') || archDocContent.includes('Spring AI 1.x'),
-      'Must document Spring AI stack'
-    );
+  test('TC-1.8.1: Architecture documents the stable deployed Spring versions', () => {
+    assert.ok(archDocContent.includes('3.5.16'), 'Must document deployed Spring Boot 3.5.16');
+    assert.ok(archDocContent.includes('1.1.8'), 'Must document stable Spring AI 1.1.8');
   });
 
   test('TC-1.8.2: TelegramBots 10.3.0 and business_message consumer implementation documented', () => {
@@ -666,19 +680,19 @@ describe('Tier 1 - Area 8: Architecture Specification Verification', () => {
 // =============================================================================
 
 describe('Tier 2: Boundary & Corner Cases', () => {
-  test('TC-2.1: Empty inbox zero state renders celebration screen and reset button', () => {
+  test('TC-2.1: Empty inbox has a concise production empty state without demo controls', () => {
     assert.ok(
-      appTsxContent.includes('Всё проверено') || appTsxContent.includes('Все отчёты проверены'),
-      'Celebration screen message rendered'
+      appTsxContent.includes('Нет отчётов для проверки') && appTsxContent.includes('Новые отчёты появятся здесь'),
+      'Production empty state message is rendered'
     );
-    assert.ok(appTsxContent.includes('initialReports'), 'Reset button restores initial reports');
+    assert.strictEqual(appTsxContent.includes('Загрузить демо-отчёты'), false, 'Demo loading action must not be exposed');
   });
 
-  test('TC-2.2: Reset state recovery restores full pending reports queue', () => {
-    let mockQueue = [];
-    assert.strictEqual(mockQueue.length, 0, 'Queue is initially empty');
-    mockQueue = [...initialReports];
-    assert.strictEqual(mockQueue.length, 3, 'Queue restored to exactly 3 items');
+  test('TC-2.2: Production state starts without fixture records', () => {
+    assert.ok(appTsxContent.includes("readPersisted('reports', [])"), 'Inbox has no seeded report fallback');
+    assert.ok(appTsxContent.includes("readPersisted<StudentDiscipline[]>('students', [])"), 'Roster has no seeded student fallback');
+    assert.strictEqual(appTsxContent.includes('initialReports'), false, 'Demo reports are not loaded by the interface');
+    assert.strictEqual(appTsxContent.includes('studentDisciplines'), false, 'Demo students are not loaded by the interface');
   });
 
   test('TC-2.3: Zero sales amount renders formatted "0 ₽" without NaN or blank block', () => {
@@ -965,9 +979,10 @@ const testReadyContent = `# TEST READY REPORT — ${new Date().toISOString()}
 #### Area 1: Brand Neutrality & Global Header
 - [x] **TC-1.1.1:** Brand purity check — exactly 0 occurrences of "миранда" or "miranda" across frontend and docs.
 - [x] **TC-1.1.2:** Global header displays neutral title "Mentor Hub" and subtitle.
-- [x] **TC-1.1.3:** Active bot indicator renders with pulsing animation classes (\`bg-emerald-500 animate-pulse\`).
-- [x] **TC-1.1.4:** Dynamic daily submission counter formula (\`\${5 - reports.length} из 5 учениц\`) and color coding.
+- [x] **TC-1.1.3:** Sidebar displays the authenticated administrator without simulated profile controls.
+- [x] **TC-1.1.4:** Pending counter uses the live report list and a conditional badge.
 - [x] **TC-1.1.5:** Telegram sync button renders with toast notification handler.
+- [x] **TC-1.1.6:** Admin credential is not bundled or persisted in browser storage.
 
 #### Area 2: Tab Navigation & Routing
 - [x] **TC-1.2.1:** Exactly 5 functional navigation tabs configured in App.tsx (\`inbox\`, \`students\`, \`analytics\`, \`tasks\`, \`pricing\`).
@@ -977,7 +992,7 @@ const testReadyContent = `# TEST READY REPORT — ${new Date().toISOString()}
 - [x] **TC-1.2.5:** Navigation bar supports responsive horizontal scrolling without page wrap (\`overflow-x-auto\`, \`whitespace-nowrap\`).
 
 #### Area 3: Inbox Zero Tab («🔥 На проверку»)
-- [x] **TC-1.3.1:** Renders 3 initial report cards with complete schema (Milana, Anya, Karina).
+- [x] **TC-1.3.1:** Report fixtures cover the complete schema for mapping regressions.
 - [x] **TC-1.3.2:** Reels links are clickable external URLs with valid status indicators (\`target="_blank"\`, \`rel="noreferrer"\`).
 - [x] **TC-1.3.3:** Duplicate Reel detection flags warning banner with original submission date (\`04 ноября\`).
 - [x] **TC-1.3.4:** Sales and outreach counts render with currency formatting (\`45 000 ₽\`, \`80 000 ₽\`, \`0 ₽\`).
@@ -986,18 +1001,18 @@ const testReadyContent = `# TEST READY REPORT — ${new Date().toISOString()}
 - [x] **TC-1.3.7:** Card approval handler evicts card, manages replies state, and shows toast feedback.
 
 #### Area 4: Discipline Calendar Tab («👩‍🎓 Ученицы & Календарь»)
-- [x] **TC-1.4.1:** Renders 5 students and 7 weekday columns (02.11 - 08.11).
-- [x] **TC-1.4.2:** Saturday (07.11) is visually highlighted as current day (\`Сб (07)\`).
+- [x] **TC-1.4.1:** Student fixtures cover seven weekday entries for the calendar schema.
+- [x] **TC-1.4.2:** Saturday date label is derived from the loaded calendar.
 - [x] **TC-1.4.3:** Status color dots mapping matches visual specification (Green ✓, Amber ~, Red ✕, Slate pending).
 - [x] **TC-1.4.4:** Discipline percentage badges apply correct threshold styling (>=90% green, 75-89% amber, <75% red).
 - [x] **TC-1.4.5:** Search filter dynamically queries by student name and niche.
 
 #### Area 5: Analytics & Story Generator Tab («📊 Аналитика & Кейсы»)
-- [x] **TC-1.5.1:** Top KPI cards render aggregate metrics (\`895 000 ₽\`, \`66 видео\`, \`40 600 ₽\`, \`702 рассылки\`).
+- [x] **TC-1.5.1:** Cohort KPI cards render live values without demo totals.
 - [x] **TC-1.5.2:** Student growth multiplier calculation formula matches Point A -> Point B (\`6.0x\`, \`1.8x\`, \`6.2x\`, \`4.0x\`, \`5.5x\`).
-- [x] **TC-1.5.3:** Student selector pills render all 5 students with dynamic multiplier badges.
-- [x] **TC-1.5.4:** Generated story copy matches marketing template with student variables.
-- [x] **TC-1.5.5:** Copy button invokes clipboard write and triggers success toast notification.
+- [x] **TC-1.5.3:** Student analytics uses server data and renders a clean empty state.
+- [x] **TC-1.5.4:** Analytics exposes a working active/pause status control.
+- [x] **TC-1.5.5:** Copy-case action is removed while the visual case preview remains.
 
 #### Area 6: Tasks & Hashtag Rules Tab («📋 Задания & Хэштеги»)
 - [x] **TC-1.6.1:** Exactly 4 hashtag rules configured (\`#рилс\`, \`#продажи\`, \`#рассылки\`, \`#вопрос\`).
@@ -1014,7 +1029,7 @@ const testReadyContent = `# TEST READY REPORT — ${new Date().toISOString()}
 - [x] **TC-1.7.5:** Responsive side-by-side grid configuration for pricing matrix.
 
 #### Area 8: Architecture Specification Verification
-- [x] **TC-1.8.1:** Architecture documents Spring Boot 4.x / Spring AI 2.x with Spring Boot 3.4.x / Spring AI 1.x fallback.
+- [x] **TC-1.8.1:** Architecture documents the stable deployed Spring Boot and Spring AI versions.
 - [x] **TC-1.8.2:** TelegramBots 10.3.0 and \`business_message\` consumer implementation documented.
 - [x] **TC-1.8.3:** Anti-fraud regex and SHA-256 deduplication logic documented.
 - [x] **TC-1.8.4:** PostgreSQL 16 DDL contains required tables (\`students\`, \`daily_reports\`, \`reel_submissions\`, \`sales_entries\`).
@@ -1024,8 +1039,8 @@ const testReadyContent = `# TEST READY REPORT — ${new Date().toISOString()}
 ---
 
 ### Tier 2: Boundary & Corner Cases (11 Test Cases)
-- [x] **TC-2.1:** Empty inbox zero state renders celebration screen and reset button.
-- [x] **TC-2.2:** Reset state recovery restores full pending reports queue.
+- [x] **TC-2.1:** Empty inbox has a concise production empty state without demo controls.
+- [x] **TC-2.2:** Production state starts without fixture records.
 - [x] **TC-2.3:** Zero sales amount renders formatted "0 ₽" without NaN or blank block.
 - [x] **TC-2.4:** Missing optional fields (question, transcript) render conditionally without blank boxes.
 - [x] **TC-2.5:** Reels URL query parameter sanitization extracts clean shortcode.

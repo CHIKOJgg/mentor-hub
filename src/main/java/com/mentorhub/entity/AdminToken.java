@@ -24,6 +24,7 @@ public class AdminToken {
     @Column(name = "role", nullable = false, length = 50)
     private String role; // 'MENTOR', 'CURATOR'
 
+    /** SHA-256 hex digest of the bearer token; never store the raw credential. */
     @Column(name = "token", nullable = false, unique = true, length = 255)
     private String token;
 

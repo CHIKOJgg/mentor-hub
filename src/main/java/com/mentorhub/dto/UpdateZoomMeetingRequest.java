@@ -8,6 +8,8 @@ public record UpdateZoomMeetingRequest(
         String zoomUrl,
         String recordingUrl,
         Instant scheduledAt,
+        Instant linkSentAt,
+        String evidenceUrl,
         Boolean isCompleted,
         String meetingNotes
 ) {}

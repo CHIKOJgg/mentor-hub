@@ -1,5 +1,4 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
-const ADMIN_TOKEN_KEY = 'mentor-tracker.admin-token.v1';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -17,59 +16,17 @@ export class ApiError extends Error {
   }
 }
 
-export const getAdminToken = (): string => {
-  const configuredToken = import.meta.env.VITE_ADMIN_TOKEN?.trim();
-  if (configuredToken) return configuredToken;
-
-  if (typeof window !== 'undefined') {
-    try {
-      const urlToken = new URLSearchParams(window.location.search).get('token')?.trim();
-      if (urlToken) {
-        localStorage.setItem(ADMIN_TOKEN_KEY, urlToken);
-        sessionStorage.setItem(ADMIN_TOKEN_KEY, urlToken);
-        return urlToken;
-      }
-    } catch {
-      // Storage can be restricted in sandboxed iframes.
-    }
-  }
-
-  try {
-    const sessionToken = sessionStorage.getItem(ADMIN_TOKEN_KEY)?.trim();
-    if (sessionToken) return sessionToken;
-    const localToken = localStorage.getItem(ADMIN_TOKEN_KEY)?.trim();
-    if (localToken) {
-      sessionStorage.setItem(ADMIN_TOKEN_KEY, localToken);
-      return localToken;
-    }
-    return '';
-  } catch {
-    return '';
-  }
+const readCsrfCookie = (): string | null => {
+  if (typeof document === 'undefined') return null;
+  const cookie = document.cookie.split(';').map(part => part.trim()).find(part => part.startsWith('XSRF-TOKEN='));
+  if (!cookie) return null;
+  return decodeURIComponent(cookie.slice('XSRF-TOKEN='.length));
 };
-
-export const saveAdminToken = (token: string): void => {
-  try {
-    if (token.trim()) {
-      sessionStorage.setItem(ADMIN_TOKEN_KEY, token.trim());
-      localStorage.setItem(ADMIN_TOKEN_KEY, token.trim());
-    } else {
-      sessionStorage.removeItem(ADMIN_TOKEN_KEY);
-      localStorage.removeItem(ADMIN_TOKEN_KEY);
-    }
-  } catch {
-    // Storage can be unavailable in private or restricted browser contexts.
-  }
-};
-
-export const clearAdminToken = (): void => saveAdminToken('');
 
 export async function apiRequest<T>(
   path: string,
   init: RequestInit = {},
-  options: { authenticated?: boolean } = {},
 ): Promise<T> {
-  const authenticated = options.authenticated !== false;
   const headers = new Headers(init.headers);
   headers.set('Accept', 'application/json');
 
@@ -77,10 +34,11 @@ export async function apiRequest<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  if (authenticated) {
-    const token = getAdminToken();
-    if (!token) throw new ApiError('Требуется токен администратора', 401);
-    headers.set('X-Admin-Token', token);
+  const method = (init.method ?? 'GET').toUpperCase();
+  if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+    const csrfToken = readCsrfCookie();
+    if (!csrfToken) throw new ApiError('CSRF token is missing; reload and retry', 403);
+    headers.set('X-XSRF-TOKEN', csrfToken);
   }
 
   let response: Response;
@@ -114,7 +72,12 @@ const json = (method: string, payload?: unknown): RequestInit => ({
 });
 
 export const api = {
-  getSystemStatus: <T>() => apiRequest<T>('/system/status', {}, { authenticated: false }),
+  getCsrfToken: () => apiRequest<{ token: string }>('/auth/csrf'),
+  login: async <T>(accessKey: string): Promise<T> => {
+    await api.getCsrfToken();
+    return apiRequest<T>('/auth/login', json('POST', { accessKey }));
+  },
+  logout: () => apiRequest<void>('/auth/logout', json('POST')),
   getCurrentSession: <T>() => apiRequest<T>('/system/session'),
   getInbox: <T>() => apiRequest<T>('/inbox?status=PENDING'),
   getAllReports: <T>() => apiRequest<T>('/inbox?status=ALL'),

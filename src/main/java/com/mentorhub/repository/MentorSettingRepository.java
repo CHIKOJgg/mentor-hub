@@ -11,5 +11,7 @@ public interface MentorSettingRepository extends JpaRepository<MentorSetting, Lo
 
     Optional<MentorSetting> findByMentorTgId(Long mentorTgId);
 
+    Optional<MentorSetting> findByMentorName(String mentorName);
+
     Optional<MentorSetting> findFirstByOrderByIdAsc();
 }

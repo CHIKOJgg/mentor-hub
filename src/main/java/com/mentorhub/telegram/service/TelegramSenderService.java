@@ -26,7 +26,7 @@ public class TelegramSenderService {
 
     private final TelegramClient telegramClient;
 
-    @Value("${telegram.bot.enabled:true}")
+    @Value("${telegram.bot.enabled:false}")
     private boolean botEnabled;
 
     @Value("${telegram.bot.token:}")

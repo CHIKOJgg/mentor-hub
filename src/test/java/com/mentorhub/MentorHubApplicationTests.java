@@ -4,6 +4,7 @@ import com.mentorhub.entity.AdminToken;
 import com.mentorhub.entity.Student;
 import com.mentorhub.entity.TaskRule;
 import com.mentorhub.repository.AdminTokenRepository;
+import com.mentorhub.security.AdminTokenHasher;
 import com.mentorhub.repository.MentorSettingRepository;
 import com.mentorhub.repository.StudentRepository;
 import com.mentorhub.repository.TaskRuleRepository;
@@ -63,15 +64,15 @@ class MentorHubApplicationTests {
     }
 
     @Test
-    @DisplayName("Flyway seed data verifies admin tokens for Ksenia and Katya")
+    @DisplayName("Test admin credentials are stored as hashes")
     void verifySeedAdminTokens() {
-        Optional<AdminToken> kseniaToken = adminTokenRepository.findByToken("magic-ksenia-mentor-token-998877");
+        Optional<AdminToken> kseniaToken = adminTokenRepository.findByToken(AdminTokenHasher.hash("magic-ksenia-mentor-token-998877"));
         assertThat(kseniaToken).isPresent();
         assertThat(kseniaToken.get().getAdminName()).isEqualTo("Ксения");
         assertThat(kseniaToken.get().getRole()).isEqualTo("MENTOR");
         assertThat(kseniaToken.get().getIsActive()).isTrue();
 
-        Optional<AdminToken> katyaToken = adminTokenRepository.findByToken("magic-katya-curator-token-112233");
+        Optional<AdminToken> katyaToken = adminTokenRepository.findByToken(AdminTokenHasher.hash("magic-katya-curator-token-112233"));
         assertThat(katyaToken).isPresent();
         assertThat(katyaToken.get().getAdminName()).isEqualTo("Катя");
         assertThat(katyaToken.get().getRole()).isEqualTo("CURATOR");

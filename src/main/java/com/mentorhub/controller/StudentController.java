@@ -52,7 +52,7 @@ public class StudentController {
         return ResponseEntity.ok(updated);
     }
 
-    @PreAuthorize("hasRole('MENTOR')")
+    @PreAuthorize("hasAnyRole('MENTOR', 'CURATOR')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteStudent(@PathVariable String id) {
         Long studentId = parseId(id);

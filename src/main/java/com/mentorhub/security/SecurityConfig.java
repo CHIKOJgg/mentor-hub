@@ -11,7 +11,11 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.RequestHeaderRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -27,15 +31,37 @@ public class SecurityConfig {
 
     private final AdminTokenAuthenticationFilter adminTokenAuthenticationFilter;
 
-    @Value("${app.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173}")
+    @Value("${app.cors.allowed-origins:}")
     private String allowedOrigins;
+
+    @Bean
+    public SecurityContextRepository securityContextRepository() {
+        return new HttpSessionSecurityContextRepository();
+    }
+
+    @Bean
+    public CookieCsrfTokenRepository csrfTokenRepository() {
+        return CookieCsrfTokenRepository.withHttpOnlyFalse();
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(csrfTokenRepository())
+                        .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
+                        .ignoringRequestMatchers(
+                                new RequestHeaderRequestMatcher("X-Admin-Token"),
+                                new RequestHeaderRequestMatcher("Authorization")
+                        )
+                        .ignoringRequestMatchers("/api/telegram/**"))
+                .formLogin(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+                        .sessionFixation(fixation -> fixation.changeSessionId()))
+                .securityContext(context -> context.securityContextRepository(securityContextRepository()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/",
@@ -47,13 +73,14 @@ public class SecurityConfig {
                                 "/*.svg",
                                 "/*.png",
                                 "/*.ico",
-                                "/api/system/status",
+                                "/api/auth/csrf",
+                                "/api/auth/login",
                                 "/api/telegram/**",
                                 "/actuator/health",
                                 "/actuator/info",
                                 "/error"
                         ).permitAll()
-                        .requestMatchers("/api/**").authenticated()
+                        .requestMatchers("/api/**").hasAnyRole("MENTOR", "CURATOR")
                         .anyRequest().permitAll()
                 )
                 .exceptionHandling(ex -> ex
@@ -79,23 +106,13 @@ public class SecurityConfig {
                 .filter(origin -> !origin.isEmpty())
                 .toList();
 
-        if (origins.isEmpty() || origins.contains("*")) {
-            config.addAllowedOriginPattern("*");
-        } else {
-            for (String origin : origins) {
-                if (origin.contains("*")) {
-                    config.addAllowedOriginPattern(origin);
-                } else {
-                    config.addAllowedOrigin(origin);
-                }
-            }
-            config.addAllowedOriginPattern("https://*.railway.app");
-            config.addAllowedOriginPattern("https://*.up.railway.app");
+        if (origins.contains("*") || origins.stream().anyMatch(origin -> origin.contains("*"))) {
+            throw new IllegalStateException("CORS_ALLOWED_ORIGINS must list exact trusted origins; wildcards are not allowed");
         }
+        config.setAllowedOrigins(origins);
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setExposedHeaders(List.of("Authorization", "X-Admin-Token"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Admin-Token"));
         config.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

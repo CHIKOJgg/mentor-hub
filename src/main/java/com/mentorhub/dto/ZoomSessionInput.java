@@ -8,6 +8,8 @@ public record ZoomSessionInput(
         String zoomUrl,
         String recordingUrl,
         Instant scheduledAt,
+        Instant linkSentAt,
+        String evidenceUrl,
         Boolean isCompleted,
         String meetingNotes
 ) {}

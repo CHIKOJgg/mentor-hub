@@ -50,7 +50,7 @@ public class SystemController {
         return ResponseEntity.ok(systemService.getSettings());
     }
 
-    @PreAuthorize("hasRole('MENTOR')")
+    @PreAuthorize("hasAnyRole('MENTOR', 'CURATOR')")
     @PutMapping("/settings")
     public ResponseEntity<SystemSettingsDto> updateSettings(@Valid @RequestBody SystemSettingsDto request) {
         return ResponseEntity.ok(systemService.updateSettings(request));
@@ -76,7 +76,7 @@ public class SystemController {
         return ResponseEntity.ok(systemService.updateZoomMeeting(meetingId, request));
     }
 
-    @PreAuthorize("hasRole('MENTOR')")
+    @PreAuthorize("hasAnyRole('MENTOR', 'CURATOR')")
     @DeleteMapping("/zoom-tracker/{meetingId}")
     public ResponseEntity<Void> deleteZoomMeeting(@PathVariable Long meetingId) {
         systemService.deleteZoomMeeting(meetingId);

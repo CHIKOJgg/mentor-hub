@@ -364,25 +364,24 @@ CREATE INDEX idx_audit_logs_user_date ON audit_message_logs(tg_user_id, created_
 11. `GET /api/analytics/summary` — общая сводка потока (выручка, средняя дисциплина).
 12. `GET /api/tasks/rules` — список действующих правил заданий и хэштегов.
 13. `PUT /api/tasks/rules/{id}` — обновление правил или примеров хэштегов.
-14. `GET /api/system/status` — системный статус бота и соединения Telegram Business.
+14. `GET /api/system/status` — диагностический статус для аутентифицированного администратора.
 
 ---
 
-## 6. Технологический стек и Production Fallback
+## 6. Production технологический стек
 
-### Целевой стек (Target) vs Продакшн фолбэк (Fallback):
-- **JDK:** Java 21 LTS (с виртуальными потоками) или Java 25.
-- **Spring Boot:** Target `4.0.0-M1` ➡️ Fallback `3.4.2` (GA).
-- **Spring AI:** Target `2.0.0-M1` ➡️ Fallback `1.0.0-M5` (BOM).
+- **JDK:** Java 21 LTS с виртуальными потоками.
+- **Spring Boot:** `3.5.16`.
+- **Spring AI:** `1.1.8` (стабильная ветка для Spring Boot 3.5).
 - **TelegramBots:** `10.3.0`.
-- **PostgreSQL Driver:** `42.7.4`.
+- **PostgreSQL:** 16+; JDBC-драйвером управляет Spring Boot BOM.
 
 ### Maven зависимость и Virtual Threads:
 ```xml
 <properties>
     <java.version>21</java.version>
-    <spring-boot.version>3.4.2</spring-boot.version>
-    <spring-ai.version>1.0.0-M5</spring-ai.version>
+    <spring-boot.version>3.5.16</spring-boot.version>
+    <spring-ai.version>1.1.8</spring-ai.version>
     <telegrambots.version>10.3.0</telegrambots.version>
 </properties>
 ```
@@ -397,7 +396,7 @@ spring:
 
 ## 7. Этапы внедрения и Roadmap
 
-1. **Этап 1 (Дни 1–4, 14 ч):** Схема БД PostgreSQL 16 (7 таблиц), каркас Spring Boot 3.4.2 / 4.x, Long Polling / Business Bot подключение, приём хэштегов и валидация Reels.
+1. **Этап 1 (Дни 1–4, 14 ч):** Схема БД PostgreSQL 16 (7 таблиц), каркас Spring Boot 3.5.x, Long Polling / Business Bot подключение, приём хэштегов и валидация Reels.
 2. **Этап 2 (Дни 5–8, 16 ч):** REST API контроллеры (`/api/inbox`, `/api/students`), двусторонние ответы в Telegram, авто-напоминания в 20:00 по крону.
 3. **Этап 3 (Дни 9–12, 16 ч, для тарифа PRO):** Подключение Spring AI (Whisper STT + ChatClient), фильтрация флуда, детекция выгорания, генератор сторис.
 4. **Этап 4 (Дни 13–14, 6 ч):** Docker Compose деплой на VPS, сквозное E2E тестирование и передача наставнику Ксении.

@@ -56,12 +56,11 @@ class StudentControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/students with query param ?token= authenticates successfully")
-    void testGetStudentsWithQueryToken() throws Exception {
+    @DisplayName("GET /api/students rejects credentials in query parameters")
+    void testGetStudentsRejectsQueryToken() throws Exception {
         mockMvc.perform(get("/api/students")
                         .param("token", ADMIN_TOKEN))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(5)));
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

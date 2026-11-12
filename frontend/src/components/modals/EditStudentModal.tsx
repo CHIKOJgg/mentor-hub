@@ -10,6 +10,7 @@ interface EditStudentModalProps {
   addEditingZoomSession: () => void;
   removeEditingZoomSession: (index: number) => void;
   updateEditingZoomSession: (index: number, changes: Partial<ZoomSessionRecord>) => void;
+  onDelete?: (studentId: string, fullName: string) => void;
 }
 
 export const EditStudentModal = ({
@@ -20,6 +21,7 @@ export const EditStudentModal = ({
   addEditingZoomSession,
   removeEditingZoomSession,
   updateEditingZoomSession,
+  onDelete,
 }: EditStudentModalProps) => {
   if (!student) return null;
 
@@ -206,8 +208,9 @@ export const EditStudentModal = ({
                         type="button"
                         onClick={() => removeEditingZoomSession(index)}
                         aria-label={`Удалить этап ${index + 1}`}
-                        title="Удалить этап"
-                        className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 cursor-pointer"
+                        disabled={index < (student.contractZoomQuota ?? 8)}
+                        title={index < (student.contractZoomQuota ?? 8) ? 'Базовые 8 консультаций по договору нельзя удалить' : 'Удалить дополнительный этап'}
+                        className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-35"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -229,7 +232,7 @@ export const EditStudentModal = ({
                         <input
                           type="text"
                           value={session.date}
-                          onChange={e => updateEditingZoomSession(index, { date: e.target.value })}
+                          onChange={e => updateEditingZoomSession(index, { date: e.target.value, scheduledAt: undefined })}
                           placeholder="Например: 12.11 в 19:00"
                           className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
                         />
@@ -262,6 +265,26 @@ export const EditStudentModal = ({
                           value={session.recordingUrl ?? ''}
                           onChange={e => updateEditingZoomSession(index, { recordingUrl: e.target.value || undefined })}
                           placeholder="https://…"
+                          className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-slate-600">Когда ссылка отправлена в Telegram</label>
+                        <input
+                          type="text"
+                          value={session.linkSentAt ?? ''}
+                          onChange={e => updateEditingZoomSession(index, { linkSentAt: e.target.value || undefined })}
+                          placeholder="11.11.2026 в 14:50"
+                          className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-slate-600">Подтверждение / ссылка на сообщение</label>
+                        <input
+                          type="url"
+                          value={session.evidenceUrl ?? ''}
+                          onChange={e => updateEditingZoomSession(index, { evidenceUrl: e.target.value || undefined })}
+                          placeholder="https://t.me/..."
                           className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
                         />
                       </div>
@@ -308,25 +331,44 @@ export const EditStudentModal = ({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
-          >
-            Отмена
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              void onSave(student);
-              onClose();
-            }}
-            className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>Сохранить профиль</span>
-          </button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-3 border-t border-slate-100">
+          <div>
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  const id = student.id;
+                  const name = student.fullName;
+                  onClose();
+                  onDelete(id, name);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-xl transition cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Удалить ученицу из потока</span>
+              </button>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
+            >
+              Отмена
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void onSave(student);
+                onClose();
+              }}
+              className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>Сохранить профиль</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

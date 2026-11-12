@@ -24,7 +24,7 @@ public class TaskRulesController {
         return ResponseEntity.ok(rules);
     }
 
-    @PreAuthorize("hasRole('MENTOR')")
+    @PreAuthorize("hasAnyRole('MENTOR', 'CURATOR')")
     @PostMapping("/rules")
     public ResponseEntity<TaskRuleResponse> createRule(@RequestBody @jakarta.validation.Valid CreateTaskRuleRequest request) {
         return ResponseEntity.status(201).body(taskRuleService.createRule(request));
@@ -47,7 +47,7 @@ public class TaskRulesController {
         return ResponseEntity.ok(updated);
     }
 
-    @PreAuthorize("hasRole('MENTOR')")
+    @PreAuthorize("hasAnyRole('MENTOR', 'CURATOR')")
     @DeleteMapping("/rules/{id}")
     public ResponseEntity<Void> deleteRule(@PathVariable String id) {
         taskRuleService.deleteRule(parseId(id));

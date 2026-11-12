@@ -80,10 +80,15 @@ export interface ZoomSessionRecord {
   callNumber: number;
   title: string;
   date: string;
+  scheduledAt?: string;
   isCompleted: boolean;
   zoomLink?: string;
   recordingUrl?: string;
   keyTakeaway?: string;
+  linkSentAt?: string; // ISO-время отправки ссылки в рабочий чат Telegram
+  evidenceUrl?: string; // Ссылка на сообщение/скриншот, подтверждающий консультацию
+  sourceChatId?: number;
+  sourceMessageId?: number;
 }
 
 export interface StudentPortalData {
@@ -130,6 +135,7 @@ export interface StudentDiscipline {
   nextZoomDate?: string;
   completedZoomsCount: number;
   zoomSessions?: ZoomSessionRecord[];
+  contractZoomQuota?: number; // Базовый объем по договору (по умолчанию 8)
   periodStats?: {
     week: StudentPeriodMetrics;
     month: StudentPeriodMetrics;

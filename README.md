@@ -9,17 +9,12 @@
 * **`frontend/`** — Готовый интерактивный SPA веб-трекер наставника (React 19 + Vite + Tailwind CSS + Lucide Icons):
   - Оптимизирован под iPad и десктоп.
   - Нейтральный брендинг («Mentor Hub», без упоминания «Миранда»).
-  - Вкладки:
-    1. **🔥 На проверку (Inbox Zero)** — карточки отчетов за сегодня, валидация ссылок на Reels, обнаружение дубликатов, быстрый коммент, кнопка «В Telegram».
-    2. **👩‍🎓 Ученицы & Календарь** — таблица учениц, недельная сетка (Пн–Вс) с цветовыми статусами и % дисциплины.
-    3. **📊 Аналитика & Кейсы для Инсты** — расчет Точка А ➡️ Точка Б, кратный рост дохода, кнопка «Скопировать для сторис».
-    4. **📋 Задания & Хэштеги** — правила сдачи (#рилс, #продажи, #рассылки, #вопрос).
-    5. **💼 Тарифы разработки** — визуальная смета (320 BYN / 475 BYN).
-  - Сборка: протестирована командой `npm run build` (0 ошибок).
-  - Быстрый запуск: `start-demo.bat` или `cd frontend && npm run dev`.
+  - Разделы: проверка отчётов, ученицы и календарь, аналитика, продвижение и настройки.
+  - Доступ администратора — через ключ, введённый на экране входа. Ключ держится только в памяти вкладки; не задавайте `VITE_ADMIN_TOKEN` и не передавайте ключ через URL.
+  - Локальная разработка: `cd frontend && npm ci && npm run dev`.
 
-* **`docs/ARCHITECTURE_SPRING_BOOT.md`** — Детальная архитектурная спецификация бэкенда на Java:
-  - Стек: Spring Boot 4.x / Spring AI 2.x (с надёжной совместимостью со Spring Boot 3.4.x / Spring AI 1.x), PostgreSQL 16, TelegramBots 10.3.0.
+* **`docs/ARCHITECTURE_SPECIFICATION.md`** — Архитектурная спецификация бэкенда на Java:
+  - Production-совместимый стек и API: Spring Boot, Spring AI, PostgreSQL 16, TelegramBots.
   - Подключение к Telegram: работа с `business_message` (Telegram Business API) и поддержка групповых чатов.
   - Анти-фрод Reels: алгоритм валидации URL, SHA-256 хеширование против дубликатов, HTTP HEAD probe.
   - AI-пайплайн: транскрибация голосовых (`.oga` -> текст) и выжимка фактов из бытового флуда.
@@ -55,3 +50,15 @@ cd frontend
 npm run dev
 # Откройте в браузере: http://localhost:5173
 ```
+
+## Production deployment
+
+Production-образ собирается корневым `Dockerfile`; он использует профиль `production` и отдельную миграцию `V10`, которая создаёт схему без демо-записей и не запускает legacy-миграции V7/V8.
+
+1. Создайте секреты `ADMIN_MENTOR_TOKEN` и `ADMIN_CURATOR_TOKEN` разными случайными значениями длиной от 32 символов (`openssl rand -base64 48`). Не используйте значения из старых миграций.
+2. Настройте PostgreSQL (`SPRING_DATASOURCE_URL` либо `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`). Не используйте пароль `postgres` на сервере.
+3. Для Telegram задайте `TELEGRAM_BOT_ENABLED=true`, `TELEGRAM_BOT_TOKEN`, `ADMIN_MENTOR_TELEGRAM_USER_ID` и `ADMIN_CURATOR_TELEGRAM_USER_ID`. Без этих значений бот оставляйте выключенным.
+4. Для поставляемого same-origin frontend оставьте `CORS_ALLOWED_ORIGINS` пустым. Раздельный frontend требует отдельного проекта cookie/CORS; одного списка origins недостаточно.
+5. Перед подключением существующей БД сделайте backup и выполните read-only проверку `scripts/audit-legacy-demo-data.sql`. Скрипт не удаляет данные; ручную очистку подтверждайте с владельцем данных.
+
+Проверки перед релизом: `cd frontend && npm ci && npm test`, `mvn -B verify`, `docker build -t mentor-hub:review .`. GitHub Actions выполняет эти проверки при push и pull request.

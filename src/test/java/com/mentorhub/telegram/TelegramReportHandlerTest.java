@@ -6,11 +6,14 @@ import com.mentorhub.ai.service.SpringAiReportExtractor;
 import com.mentorhub.dto.ReflectionSummaryDto;
 import com.mentorhub.entity.DailyReport;
 import com.mentorhub.entity.Student;
+import com.mentorhub.entity.ZoomMeeting;
 import com.mentorhub.repository.ContentDraftRepository;
 import com.mentorhub.repository.DailyReportRepository;
+import com.mentorhub.repository.MentorSettingRepository;
 import com.mentorhub.repository.ReelSubmissionRepository;
 import com.mentorhub.repository.SalesEntryRepository;
 import com.mentorhub.repository.StudentRepository;
+import com.mentorhub.repository.ZoomMeetingRepository;
 import com.mentorhub.telegram.antifraud.ReelsAccessibilityProbe;
 import com.mentorhub.telegram.antifraud.ReelsAntiFraudEngine;
 import com.mentorhub.telegram.handler.TelegramReportHandler;
@@ -22,6 +25,7 @@ import org.telegram.telegrambots.meta.api.objects.chat.Chat;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +43,8 @@ class TelegramReportHandlerTest {
     private ReelSubmissionRepository reelSubmissionRepository;
     private ContentDraftRepository contentDraftRepository;
     private SalesEntryRepository salesEntryRepository;
+    private MentorSettingRepository mentorSettingRepository;
+    private ZoomMeetingRepository zoomMeetingRepository;
     private ReelsAntiFraudEngine reelsAntiFraudEngine;
     private SpringAiReportExtractor springAiReportExtractor;
     private DeterministicAiFallbackService deterministicAiFallbackService;
@@ -56,6 +62,8 @@ class TelegramReportHandlerTest {
         reelSubmissionRepository = mock(ReelSubmissionRepository.class);
         contentDraftRepository = mock(ContentDraftRepository.class);
         salesEntryRepository = mock(SalesEntryRepository.class);
+        mentorSettingRepository = mock(MentorSettingRepository.class);
+        zoomMeetingRepository = mock(ZoomMeetingRepository.class);
 
         when(dailyReportRepository.save(any(DailyReport.class))).thenAnswer(i -> i.getArgument(0));
         when(studentRepository.save(any(Student.class))).thenAnswer(i -> i.getArgument(0));
@@ -99,6 +107,8 @@ class TelegramReportHandlerTest {
         handler = new TelegramReportHandler(
                 dailyReportRepository,
                 studentRepository,
+                mentorSettingRepository,
+                zoomMeetingRepository,
                 reelSubmissionRepository,
                 contentDraftRepository,
                 salesEntryRepository,
@@ -145,9 +155,66 @@ class TelegramReportHandlerTest {
         assertThat(sentChatId).isEqualTo(-10071010101L);
         assertThat(sentReplyToId).isEqualTo(501);
         assertThat(sentReplyText)
-                .contains("Принято на проверку Ксении и Кате (")
+                .contains("Принято на проверку (")
                 .contains(")! ✍️ Черновик сохранён.");
+        assertThat(sentReplyText).doesNotContain("Ксении");
         assertThat(result.getLastTgMessageId()).isEqualTo(501);
+    }
+
+    @Test
+    @DisplayName("Captures a Meet invitation with delivery time and Telegram proof without counting it as completed")
+    void captureMeetInvitation_preservesEvidenceWithoutCompletingCall() {
+        Student student = Student.builder().id(1L).fullName("Милана Горохова").build();
+        ZoomMeeting nextSession = ZoomMeeting.builder()
+                .id(11L)
+                .student(student)
+                .callNumber(1)
+                .meetingTitle("Стратегия и распаковка Точки А")
+                .isCompleted(false)
+                .build();
+        when(zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(1L)).thenReturn(List.of(nextSession));
+        when(zoomMeetingRepository.save(any(ZoomMeeting.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Instant sentAt = Instant.parse("2026-11-11T14:50:00Z");
+        Chat chat = Chat.builder().id(-1001234567890L).type("supergroup").build();
+        Message message = Message.builder()
+                .messageId(42)
+                .date((int) sentAt.getEpochSecond())
+                .chat(chat)
+                .text("Подключаемся: https://meet.google.com/abc-defg-hij")
+                .build();
+
+        assertThat(handler.captureZoomLinkFromMessage(student, message)).isTrue();
+
+        assertThat(nextSession.getZoomUrl()).isEqualTo("https://meet.google.com/abc-defg-hij");
+        assertThat(nextSession.getLinkSentAt()).isEqualTo(sentAt);
+        assertThat(nextSession.getIsCompleted()).isFalse();
+        assertThat(nextSession.getSourceChatId()).isEqualTo(-1001234567890L);
+        assertThat(nextSession.getSourceMessageId()).isEqualTo(42);
+        assertThat(nextSession.getEvidenceUrl()).isEqualTo("https://t.me/c/1234567890/42");
+        verify(studentRepository, never()).save(any(Student.class));
+    }
+
+    @Test
+    @DisplayName("Supports Yandex Telemost invitation links")
+    void captureTelemostInvitation() {
+        Student student = Student.builder().id(2L).fullName("Аня Петрова").build();
+        when(zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(2L)).thenReturn(List.of());
+        when(zoomMeetingRepository.save(any(ZoomMeeting.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Chat chat = Chat.builder().id(-1002234567890L).type("supergroup").build();
+        Message message = Message.builder()
+                .messageId(43)
+                .date((int) Instant.parse("2026-11-11T15:00:00Z").getEpochSecond())
+                .chat(chat)
+                .text("https://telemost.yandex.ru/j/room-id")
+                .build();
+
+        assertThat(handler.captureZoomLinkFromMessage(student, message)).isTrue();
+        verify(zoomMeetingRepository).save(argThat(meeting ->
+                "https://telemost.yandex.ru/j/room-id".equals(meeting.getZoomUrl())
+                        && Integer.valueOf(1).equals(meeting.getCallNumber())
+                        && !Boolean.TRUE.equals(meeting.getIsCompleted())));
     }
 
     @Test

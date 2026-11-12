@@ -25,6 +25,7 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class StudentService {
+    private static final int CONTRACT_ZOOM_QUOTA = 8;
 
     private final StudentRepository studentRepository;
     private final DailyReportRepository dailyReportRepository;
@@ -195,7 +196,27 @@ public class StudentService {
 
         Set<Integer> requestedNumbers = new HashSet<>();
         List<ZoomMeeting> savedMeetings = new ArrayList<>();
-        List<ZoomSessionInput> sessions = request.sessions() == null ? List.of() : request.sessions();
+        List<ZoomSessionInput> sessions = new ArrayList<>(request.sessions() == null ? List.of() : request.sessions());
+        Set<Integer> configuredNumbers = new HashSet<>();
+        for (int index = 0; index < sessions.size(); index++) {
+            ZoomSessionInput input = sessions.get(index);
+            configuredNumbers.add(input.callNumber() == null ? index + 1 : input.callNumber());
+        }
+        for (int callNumber = 1; callNumber <= CONTRACT_ZOOM_QUOTA; callNumber++) {
+            if (!configuredNumbers.contains(callNumber)) {
+                sessions.add(new ZoomSessionInput(
+                        callNumber,
+                        "Консультация #" + callNumber,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        false,
+                        null
+                ));
+            }
+        }
         for (int index = 0; index < sessions.size(); index++) {
             ZoomSessionInput input = sessions.get(index);
             int callNumber = input.callNumber() == null ? index + 1 : input.callNumber();
@@ -210,6 +231,10 @@ public class StudentService {
             meeting.setZoomUrl(input.zoomUrl());
             meeting.setRecordingUrl(input.recordingUrl());
             meeting.setScheduledAt(input.scheduledAt());
+            meeting.setLinkSentAt(input.linkSentAt());
+            meeting.setEvidenceUrl(input.evidenceUrl());
+            meeting.setLinkSentAt(input.linkSentAt());
+            meeting.setEvidenceUrl(input.evidenceUrl());
             meeting.setMeetingNotes(input.meetingNotes());
             boolean completed = Boolean.TRUE.equals(input.isCompleted());
             meeting.setIsCompleted(completed);
@@ -279,6 +304,7 @@ public class StudentService {
                 student.getPauseReason(),
                 nextZoomDate,
                 student.getCompletedZoomsCount() != null ? student.getCompletedZoomsCount() : 0,
+                student.getContractZoomQuota() != null ? student.getContractZoomQuota() : CONTRACT_ZOOM_QUOTA,
                 weekDays,
                 student.getZoomMeetings() == null ? List.of() : student.getZoomMeetings().stream()
                         .sorted(Comparator.comparing(ZoomMeeting::getCallNumber, Comparator.nullsLast(Comparator.naturalOrder())))
@@ -291,6 +317,10 @@ public class StudentService {
                                 meeting.getZoomUrl(),
                                 meeting.getRecordingUrl(),
                                 meeting.getScheduledAt(),
+                                meeting.getLinkSentAt(),
+                                meeting.getEvidenceUrl(),
+                                meeting.getSourceChatId(),
+                                meeting.getSourceMessageId(),
                                 meeting.getCompletedAt(),
                                 meeting.getIsCompleted(),
                                 meeting.getMeetingNotes()
@@ -308,6 +338,10 @@ public class StudentService {
                 meeting.getZoomUrl(),
                 meeting.getRecordingUrl(),
                 meeting.getScheduledAt(),
+                meeting.getLinkSentAt(),
+                meeting.getEvidenceUrl(),
+                meeting.getSourceChatId(),
+                meeting.getSourceMessageId(),
                 meeting.getCompletedAt(),
                 meeting.getIsCompleted(),
                 meeting.getMeetingNotes()

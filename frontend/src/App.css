@@ -22,79 +22,28 @@
 
 .app-shell {
   min-height: 100vh;
-  background: #fff;
+  background: #f5f5f7;
   color: #111;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
 }
 
-.app-shell [class*="text-indigo-"],
-.app-shell [class*="text-emerald-"],
-.app-shell [class*="text-amber-"],
-.app-shell [class*="text-red-"],
-.app-shell [class*="text-rose-"],
-.app-shell [class*="text-purple-"] {
-  color: #222 !important;
-}
+/* Background & neutral container styling */
+.app-shell .bg-slate-50 { background-color: #fafafa; }
+.app-shell .bg-slate-100 { background-color: #f3f4f6; }
+.app-shell .bg-slate-200 { background-color: #e5e7eb; }
+.app-shell .text-slate-900,
+.app-shell .text-slate-800 { color: #171717; }
+.app-shell .text-slate-700,
+.app-shell .text-slate-600 { color: #4b5563; }
+.app-shell .text-slate-500,
+.app-shell .text-slate-400 { color: #6b7280; }
+.app-shell .border-slate-100 { border-color: #f3f4f6; }
+.app-shell .border-slate-200 { border-color: #e5e7eb; }
 
-.app-shell [class*="bg-indigo-"],
-.app-shell [class*="bg-emerald-"],
-.app-shell [class*="bg-amber-"],
-.app-shell [class*="bg-red-"],
-.app-shell [class*="bg-rose-"],
-.app-shell [class*="bg-purple-"] {
-  background-color: #f2f2f2 !important;
-}
-
-.app-shell [class*="border-indigo-"],
-.app-shell [class*="border-emerald-"],
-.app-shell [class*="border-amber-"],
-.app-shell [class*="border-red-"],
-.app-shell [class*="border-rose-"],
-.app-shell [class*="border-purple-"] {
-  border-color: #dedede !important;
-}
-
-.app-shell [class*="bg-slate-50"] { background-color: #fafafa !important; }
-.app-shell [class*="bg-slate-100"] { background-color: #f3f3f3 !important; }
-.app-shell [class*="bg-slate-200"] { background-color: #e7e7e7 !important; }
-.app-shell [class*="text-slate-900"],
-.app-shell [class*="text-slate-800"] { color: #171717 !important; }
-.app-shell [class*="text-slate-700"],
-.app-shell [class*="text-slate-600"] { color: #444 !important; }
-.app-shell [class*="text-slate-500"],
-.app-shell [class*="text-slate-400"] { color: #777 !important; }
-.app-shell [class*="border-slate-"] { border-color: #e5e5e5 !important; }
-
-.app-shell button[class*="bg-indigo-600"],
-.app-shell button[class*="bg-indigo-700"],
-.app-shell button[class~="bg-slate-900"],
-.app-shell button[class~="bg-neutral-900"] {
-  color: #fff !important;
-  background-color: #111 !important;
-  border-color: #111 !important;
-}
-
-.app-shell button[class*="bg-indigo-600"]:hover,
-.app-shell button[class*="bg-indigo-700"]:hover,
-.app-shell button[class~="bg-slate-900"]:hover,
-.app-shell button[class~="bg-neutral-900"]:hover {
-  background-color: #303030 !important;
-}
-
-.app-shell button[class*="bg-indigo-600"] [class*="text-indigo-"],
-.app-shell button[class*="bg-indigo-600"] [class*="text-emerald-"],
-.app-shell button[class~="bg-slate-900"] [class*="text-indigo-"],
-.app-shell button[class~="bg-neutral-900"] [class*="text-indigo-"] {
-  color: #eee !important;
-}
-
-.app-shell [class*="bg-slate-800"][class*="text-indigo-"] {
-  color: #eee !important;
-}
-
-.app-shell .bg-emerald-500 { background-color: #222 !important; }
-.app-shell .bg-amber-400 { background-color: #888 !important; }
-.app-shell .bg-red-400 { background-color: #555 !important; }
+/* Status dots preserved for Calendar */
+.app-shell .bg-emerald-500 { background-color: #10b981; }
+.app-shell .bg-amber-400 { background-color: #f59e0b; }
+.app-shell .bg-red-400 { background-color: #ef4444; }
 .app-shell .animate-ping { animation: none; opacity: 0.35; }
 
 .app-sidebar {
@@ -223,6 +172,304 @@
   outline-offset: 2px;
 }
 
+.inbox-report-card {
+  border-left: 4px solid transparent !important;
+}
+
+.inbox-report-card--pending.is-on-time {
+  border-left-color: #10b981 !important;
+}
+
+.inbox-report-card--pending.is-late {
+  border-left-color: #ef4444 !important;
+}
+
+.inbox-report-card--approved {
+  border-left-color: #059669 !important;
+  background: linear-gradient(90deg, #f0fdf7 0, #fff 34px) !important;
+}
+
+.zoom-week-scroll {
+  overscroll-behavior-x: contain;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.zoom-week-day {
+  background: #fff;
+}
+
+.zoom-week-day.is-today {
+  box-shadow: inset 0 0 0 1px #818cf8;
+}
+
+.zoom-week-event:focus-visible {
+  outline: 3px solid rgb(82 107 232 / 42%);
+  outline-offset: 2px;
+}
+
+/* Analytics: clearer hierarchy, restrained color coding, and readable table bands. */
+.analytics-view {
+  --analytics-blue: #526be8;
+  --analytics-teal: #118a70;
+  --analytics-amber: #bd7910;
+  --analytics-rose: #c94f60;
+  --analytics-ink: #1d2b42;
+  --analytics-line: #e5eaf1;
+  color: #263449;
+}
+
+.analytics-view > .analytics-header {
+  margin-bottom: 24px;
+}
+
+.analytics-view .analytics-subtitle,
+.analytics-view .analytics-section-caption {
+  margin-top: 5px;
+  color: #718096;
+  font-size: 13px;
+}
+
+.analytics-view .analytics-period-switcher {
+  padding: 4px;
+  border-color: #e4e9f1;
+  background: #f6f8fb;
+}
+
+.analytics-view .analytics-period-button,
+.analytics-view .analytics-category-button,
+.analytics-view .analytics-student-button {
+  border-radius: 9px;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.app-shell .analytics-view .analytics-period-button.is-active,
+.app-shell .analytics-view .analytics-category-button.is-active,
+.app-shell .analytics-view .analytics-student-button.is-active {
+  color: #fff !important;
+  background: var(--analytics-ink) !important;
+  border-color: var(--analytics-ink) !important;
+}
+
+.analytics-view .analytics-period-button:not(.is-active):hover,
+.analytics-view .analytics-category-button:not(.is-active):hover,
+.analytics-view .analytics-student-button:not(.is-active):hover {
+  border-color: #cbd5e3;
+  background: #f2f6fb;
+}
+
+.analytics-view .analytics-category-switcher {
+  gap: 8px;
+  border-color: var(--analytics-line);
+}
+
+.analytics-view .analytics-category-button {
+  min-height: 40px;
+}
+
+.analytics-view .analytics-kpi {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border-color: var(--analytics-line);
+  border-top-width: 3px;
+  padding: 18px 20px;
+  box-shadow: 0 2px 8px rgb(31 48 75 / 3%);
+}
+
+.analytics-view .analytics-kpi--revenue { border-top-color: var(--analytics-teal) !important; }
+.analytics-view .analytics-kpi--content { border-top-color: var(--analytics-blue) !important; }
+.analytics-view .analytics-kpi--ticket { border-top-color: #3180b8 !important; }
+.analytics-view .analytics-kpi--outreach { border-top-color: var(--analytics-amber) !important; }
+
+.analytics-view .analytics-kpi-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+}
+
+.analytics-view .analytics-kpi--revenue .analytics-kpi-icon { color: var(--analytics-teal); background: #e9f7f2; }
+.analytics-view .analytics-kpi--content .analytics-kpi-icon { color: var(--analytics-blue); background: #eef1ff; }
+.analytics-view .analytics-kpi--ticket .analytics-kpi-icon { color: #3180b8; background: #eaf5fb; }
+.analytics-view .analytics-kpi--outreach .analytics-kpi-icon { color: var(--analytics-amber); background: #fff5e5; }
+
+.analytics-view .analytics-secondary-metrics {
+  border-color: var(--analytics-line);
+  background: #f8fafc;
+}
+
+.analytics-view .analytics-secondary-metrics > div {
+  min-height: 26px;
+}
+
+.app-shell .analytics-view .analytics-positive-value,
+.app-shell .analytics-view .analytics-growth-badge,
+.app-shell .analytics-view .analytics-row-link {
+  color: var(--analytics-teal) !important;
+}
+
+.analytics-view .analytics-growth-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #eaf7f2;
+}
+
+.analytics-view .analytics-table-card,
+.analytics-view .analytics-student-card {
+  border-color: var(--analytics-line);
+  box-shadow: 0 3px 12px rgb(31 48 75 / 4%);
+}
+
+.analytics-view .analytics-section-heading {
+  background: #fbfcfe;
+}
+
+.analytics-view .analytics-section-caption {
+  font-size: 12px;
+}
+
+.analytics-view .analytics-table {
+  min-width: 850px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.analytics-view .analytics-table thead tr {
+  background: #f1f5fa !important;
+}
+
+.analytics-view .analytics-table thead th {
+  padding-top: 13px;
+  padding-bottom: 13px;
+  color: #65748a !important;
+  white-space: nowrap;
+  border-bottom: 1px solid #dfe6ef;
+}
+
+.app-shell .analytics-view .analytics-table tbody tr {
+  transition: background-color 140ms ease;
+}
+
+.app-shell .analytics-view .analytics-table tbody tr:nth-child(odd) {
+  background-color: #fff !important;
+}
+
+.app-shell .analytics-view .analytics-table tbody tr:nth-child(even) {
+  background-color: #f6f8fc !important;
+}
+
+.app-shell .analytics-view .analytics-table tbody tr:hover {
+  background-color: #eaf1fb !important;
+}
+
+.analytics-view .analytics-table tbody td {
+  padding-top: 15px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #e8edf4;
+}
+
+.analytics-view .analytics-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.analytics-view .analytics-discipline-badge {
+  display: inline-flex;
+  min-width: 52px;
+  justify-content: center;
+  padding: 4px 9px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.analytics-view .analytics-discipline-badge.is-good { color: #08785e; background: #e4f5ee; }
+.analytics-view .analytics-discipline-badge.is-warning { color: #986008; background: #fff2d9; }
+.analytics-view .analytics-discipline-badge.is-low { color: #b33d50; background: #fdebed; }
+
+.analytics-view .analytics-student-picker {
+  padding: 15px 17px 17px;
+  border: 1px solid var(--analytics-line);
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.analytics-view .analytics-student-picker > div:last-child {
+  gap: 8px;
+}
+
+.analytics-view .analytics-student-button {
+  min-height: 40px;
+  padding: 8px 13px;
+}
+
+.analytics-view .analytics-student-card {
+  margin-top: 2px;
+}
+
+.analytics-view .analytics-track-badge:not(.bg-slate-100) {
+  color: #08785e !important;
+  background: #e4f5ee !important;
+}
+
+.analytics-view .analytics-financial-grid {
+  background: #fff;
+}
+
+.analytics-view .analytics-financial-metric {
+  position: relative;
+  min-width: 0;
+  padding-top: 19px;
+  padding-bottom: 19px;
+}
+
+.analytics-view .analytics-financial-metric--current {
+  background: #f3faf7;
+}
+
+.analytics-view .analytics-financial-metric--growth {
+  background: #f4f6ff;
+}
+
+.app-shell .analytics-view .analytics-financial-metric--current .text-emerald-600 {
+  color: var(--analytics-teal) !important;
+}
+
+.app-shell .analytics-view .analytics-financial-metric--growth svg {
+  color: var(--analytics-blue) !important;
+}
+
+.analytics-view .analytics-activity-card {
+  border-color: #e4eaf2;
+  box-shadow: 0 1px 4px rgb(31 48 75 / 3%);
+}
+
+.analytics-view .analytics-activity-card:nth-child(1) { border-top: 2px solid #6978e8 !important; }
+.analytics-view .analytics-activity-card:nth-child(2) { border-top: 2px solid #4488c8 !important; }
+.analytics-view .analytics-activity-card:nth-child(3) { border-top: 2px solid #8b68cb !important; }
+.analytics-view .analytics-activity-card:nth-child(4) { border-top: 2px solid #d49234 !important; }
+.analytics-view .analytics-activity-card--clients { border-top-color: var(--analytics-teal) !important; }
+.analytics-view .analytics-activity-card--discipline { border-top-color: #526783 !important; }
+
+.analytics-view .analytics-activity-card:nth-child(1) svg { color: #6978e8 !important; }
+.analytics-view .analytics-activity-card:nth-child(2) svg { color: #4488c8 !important; }
+.analytics-view .analytics-activity-card:nth-child(3) svg { color: #8b68cb !important; }
+.analytics-view .analytics-activity-card:nth-child(4) svg { color: #bd7910 !important; }
+.analytics-view .analytics-activity-card--clients svg { color: var(--analytics-teal) !important; }
+.analytics-view .analytics-activity-card--discipline svg { color: #526783 !important; }
+
+.analytics-view .analytics-reflection-grid > div:first-child {
+  border-left: 3px solid #8794e8;
+  border-left-color: #8794e8 !important;
+}
+
+.analytics-view .analytics-reflection-grid > div:last-child {
+  border-left: 3px solid #47a58b;
+  border-left-color: #47a58b !important;
+}
+
 @media (max-width: 767px) {
   .app-content {
     padding: 28px 20px 56px;
@@ -234,6 +481,38 @@
 
   .app-content h2 {
     font-size: 24px;
+  }
+
+  .analytics-view .analytics-header {
+    gap: 16px;
+  }
+
+  .analytics-view .analytics-period-switcher {
+    width: 100%;
+  }
+
+  .analytics-view .analytics-period-button {
+    flex: 1;
+    padding-right: 8px;
+    padding-left: 8px;
+    white-space: nowrap;
+  }
+
+  .analytics-view .analytics-category-switcher {
+    overflow-x: auto;
+    padding-bottom: 12px;
+  }
+
+  .analytics-view .analytics-category-button {
+    flex: 0 0 auto;
+    padding-right: 12px;
+    padding-left: 12px;
+    font-size: 12px;
+  }
+
+  .analytics-view .analytics-financial-metric {
+    padding-right: 14px;
+    padding-left: 14px;
   }
 }
 

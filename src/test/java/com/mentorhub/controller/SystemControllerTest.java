@@ -39,12 +39,13 @@ class SystemControllerTest {
     private ObjectMapper objectMapper;
 
     @Test
-    @DisplayName("GET /api/system/status is permitAll and returns system diagnostics")
-    void testGetSystemStatusPublic() throws Exception {
-        mockMvc.perform(get("/api/system/status"))
+    @DisplayName("GET /api/system/status returns diagnostics only to an authenticated administrator")
+    void testGetSystemStatusAuthenticated() throws Exception {
+        mockMvc.perform(get("/api/system/status")
+                        .header("X-Admin-Token", ADMIN_TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.springBootVersion", is("3.4.2")))
+                .andExpect(jsonPath("$.springBootVersion", notNullValue()))
                 .andExpect(jsonPath("$.virtualThreadsEnabled", is(true)))
                 .andExpect(jsonPath("$.springAiStatus", is("NOT_CONFIGURED")))
                 .andExpect(jsonPath("$.zoomTracker.completedCallsTotal", is(19)))

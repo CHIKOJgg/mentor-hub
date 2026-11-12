@@ -12,9 +12,11 @@ public record ScheduleZoomRequest(
     String meetingNotes,
     String title,
     Integer callNumber,
-    String recordingUrl
+    String recordingUrl,
+    Instant linkSentAt,
+    String evidenceUrl
 ) {
     public ScheduleZoomRequest(Long studentId, String zoomUrl, Instant scheduledAt, String meetingNotes) {
-        this(studentId, zoomUrl, scheduledAt, meetingNotes, null, null, null);
+        this(studentId, zoomUrl, scheduledAt, meetingNotes, null, null, null, null, null);
     }
 }

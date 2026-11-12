@@ -27,6 +27,7 @@ public record StudentDisciplineResponse(
     String pauseReason,
     String nextZoomDate,
     Integer completedZoomsCount,
+    Integer contractZoomQuota,
     List<DayInfoResponse> weekDays,
     List<ZoomMeetingDto> zoomSessions
 ) {}

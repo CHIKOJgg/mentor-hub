@@ -12,6 +12,7 @@ import com.mentorhub.telegram.service.TelegramSenderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.SpringBootVersion;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +35,7 @@ public class SystemService {
     @Value("${telegram.bot.username:MentorHubBot}")
     private String botUsername;
 
-    @Value("${telegram.bot.enabled:true}")
+    @Value("${telegram.bot.enabled:false}")
     private Boolean botEnabled;
 
     @Value("${spring.ai.openai.api-key:}")
@@ -51,6 +52,7 @@ public class SystemService {
 
         long activeStudentsCount = studentRepository.findByIsActiveTrue().size();
         long pendingReportsToday = dailyReportRepository.countByStatus("PENDING");
+        String springBootVersion = SpringBootVersion.getVersion();
 
         Instant nextCallAt = resolveNextCallAt();
         long completedCallsTotal = resolveCompletedCallsTotal();
@@ -72,7 +74,7 @@ public class SystemService {
                 businessConnected,
                 activeStudentsCount,
                 pendingReportsToday,
-                "3.4.2",
+                springBootVersion == null ? "unknown" : springBootVersion,
                 virtualThreads,
                 aiApiKey != null && !aiApiKey.isBlank() && !"mock-key".equalsIgnoreCase(aiApiKey) ? "CONFIGURED" : "NOT_CONFIGURED",
                 zoomSummary
@@ -135,6 +137,8 @@ public class SystemService {
                 .zoomUrl(request.zoomUrl())
                 .recordingUrl(request.recordingUrl())
                 .scheduledAt(request.scheduledAt())
+                .linkSentAt(request.linkSentAt())
+                .evidenceUrl(request.evidenceUrl())
                 .meetingNotes(request.meetingNotes())
                 .isCompleted(false)
                 .build();
@@ -157,6 +161,8 @@ public class SystemService {
         if (request.zoomUrl() != null) meeting.setZoomUrl(request.zoomUrl());
         if (request.recordingUrl() != null) meeting.setRecordingUrl(request.recordingUrl());
         if (request.scheduledAt() != null) meeting.setScheduledAt(request.scheduledAt());
+        if (request.linkSentAt() != null) meeting.setLinkSentAt(request.linkSentAt());
+        if (request.evidenceUrl() != null) meeting.setEvidenceUrl(request.evidenceUrl());
         if (request.meetingNotes() != null) meeting.setMeetingNotes(request.meetingNotes());
         if (request.isCompleted() != null) {
             meeting.setIsCompleted(request.isCompleted());
@@ -279,6 +285,10 @@ public class SystemService {
                 meeting.getZoomUrl(),
                 meeting.getRecordingUrl(),
                 meeting.getScheduledAt(),
+                meeting.getLinkSentAt(),
+                meeting.getEvidenceUrl(),
+                meeting.getSourceChatId(),
+                meeting.getSourceMessageId(),
                 meeting.getCompletedAt(),
                 meeting.getIsCompleted(),
                 meeting.getMeetingNotes()

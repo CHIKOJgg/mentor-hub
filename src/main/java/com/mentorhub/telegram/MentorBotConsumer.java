@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
 import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
@@ -15,8 +14,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "telegram.bot.mode", havingValue = "long-polling", matchIfMissing = true)
-@ConditionalOnExpression("!'${telegram.bot.token:}'.isEmpty() && !'${telegram.bot.token:}'.startsWith('mock')")
+@ConditionalOnExpression("'${telegram.bot.enabled:false}' == 'true' && '${telegram.bot.mode:long-polling}' == 'long-polling' && !'${telegram.bot.token:}'.isEmpty() && !'${telegram.bot.token:}'.startsWith('mock')")
 public class MentorBotConsumer implements LongPollingSingleThreadUpdateConsumer, SpringLongPollingBot {
 
     private final TelegramMessageRouter telegramMessageRouter;

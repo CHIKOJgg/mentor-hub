@@ -27,7 +27,7 @@ COPY src ./src
 COPY --from=frontend-builder /workspace/frontend/dist ./src/main/resources/static/
 
 # Compile and package monolithic application jar
-RUN mvn clean package -DskipTests
+RUN mvn -B clean package
 
 # =============================================================================
 # Stage 3: Minimal Production JRE 21 Runtime
@@ -44,4 +44,5 @@ COPY --from=builder /workspace/target/*.jar app.jar
 EXPOSE 8080
 
 ENV JAVA_OPTS="-XX:+UseG1GC -XX:MaxRAMPercentage=75.0"
+ENV SPRING_PROFILES_ACTIVE=production
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

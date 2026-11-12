@@ -229,6 +229,21 @@ public class TelegramMessageRouter {
                 handleBindCommand(chatId, message, rawText, isMentor ? "Ксения" : "Катя");
                 return;
             }
+            if (telegramReportHandler.containsVideoMeetingLink(message)) {
+                Optional<Student> studentForMeeting = identifyStudent(chatId, fromId, from.getUserName(), message);
+                if (studentForMeeting.isPresent() && telegramReportHandler.captureZoomLinkFromMessage(studentForMeeting.get(), message)) {
+                    auditMessageLogRepository.save(AuditMessageLog.builder()
+                            .updateId(updateId)
+                            .tgChatId(chatId)
+                            .tgUserId(fromId)
+                            .sourceType(sourceType)
+                            .rawPayload(rawText)
+                            .processingStatus("ZOOM_LINK_CAPTURED")
+                            .createdAt(Instant.now())
+                            .build());
+                    return;
+                }
+            }
             log.debug("Mentor/Curator echo filtered: ignoring casual message from {} (tg_id={})",
                     isMentor ? "Ksenia" : "Katya", fromId);
             return;

@@ -551,22 +551,22 @@ public record ExtractedReportDto(
 
 ---
 
-## 7. Спецификация технологического стека и Production Fallback
+## 7. Production-стек и совместимость
 
 ### 7.1. Матрица версий и совместимости
-В соответствии с требованиями R2 и R3 разработан целевой стек новейшего поколения с гарантированным производственным фолбэком на проверенный LTS/GA стек:
+Версии ниже соответствуют production-конфигурации текущего приложения:
 
-| Компонент | Целевой стек (Target Next-Gen) | Продакшн фолбэк (Production GA) | Примечание |
+| Компонент | Production-версия | Примечание |
 |:---|:---|:---|:---|
-| **Java Platform** | Java 21 LTS / Java 25 | Java 21 LTS | Виртуальные потоки включены (`VirtualThreads`) |
-| **Spring Boot** | `4.0.0-M1` (Milestone) | `3.4.2` (Production Ready GA) | Архитектурная совместимость 100% |
-| **Spring AI** | `2.0.0-M1` | `1.0.0-M5` | `org.springframework.ai:spring-ai-bom` |
-| **Telegram API** | `10.3.0` | `10.3.0` | `telegrambots-springboot-longpolling-starter` |
-| **База данных** | PostgreSQL 16+ | PostgreSQL 16+ | JSONB, UUIDv4, индексы B-Tree |
-| **Миграции БД** | Flyway 10.20+ | Flyway 10.20+ | `flyway-database-postgresql` |
-| **Сборка** | Apache Maven 3.9+ | Apache Maven 3.9+ | Многомодульный или монолитный JAR |
+| **Java Platform** | Java 21 LTS | Виртуальные потоки включены |
+| **Spring Boot** | `3.5.16` | Стабильная ветка 3.x |
+| **Spring AI** | `1.1.8` | Стабильная ветка, совместимая со Spring Boot 3.5 |
+| **Telegram API** | `10.3.0` | `telegrambots-springboot-longpolling-starter` |
+| **База данных** | PostgreSQL 16+ | JSONB, UUIDv4, индексы B-Tree |
+| **Миграции БД** | Flyway из Spring Boot BOM | `flyway-database-postgresql` |
+| **Сборка** | Apache Maven 3.9+ | Монолитный JAR / Docker image |
 
-### 7.2. Конфигурация Maven `pom.xml` (Production Fallback & Target Switch)
+### 7.2. Production-конфигурация Maven `pom.xml`
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
@@ -578,8 +578,7 @@ public record ExtractedReportDto(
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <!-- Целевой: 4.0.0-M1 | Проверенный Fallback: 3.4.2 -->
-        <version>3.4.2</version>
+        <version>3.5.16</version>
         <relativePath/>
     </parent>
 
@@ -591,9 +590,8 @@ public record ExtractedReportDto(
 
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>1.0.0-M5</spring-ai.version>
+        <spring-ai.version>1.1.8</spring-ai.version>
         <telegrambots.version>10.3.0</telegrambots.version>
-        <postgresql.version>42.7.4</postgresql.version>
     </properties>
 
     <dependencyManagement>
@@ -631,7 +629,6 @@ public record ExtractedReportDto(
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>${postgresql.version}</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
@@ -658,7 +655,7 @@ public record ExtractedReportDto(
         <!-- Spring AI (OpenAI / Gemini Whisper & Chat) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
         </dependency>
 
         <!-- Apache Commons Codec для SHA-256 -->
@@ -731,7 +728,8 @@ spring:
 
 telegram:
   bot:
-    token: ${TELEGRAM_BOT_TOKEN:mock-token}
+    enabled: ${TELEGRAM_BOT_ENABLED:false}
+    token: ${TELEGRAM_BOT_TOKEN:}
     username: ${TELEGRAM_BOT_USERNAME:MentorHubBot}
   reminder:
     cron: "0 0 20 * * MON-SAT"
@@ -831,6 +829,7 @@ CREATE TABLE students (
     pause_reason VARCHAR(255),                            -- Причина паузы (например, 'Заболела ОРВИ')
     next_zoom_at TIMESTAMP WITH TIME ZONE,                -- Дата и время следующего запланированного Zoom-созвона
     completed_zooms_count INT DEFAULT 0,                  -- Количество проведенных встреч
+    contract_zoom_quota INT NOT NULL DEFAULT 8,            -- Базовая норма консультаций по договору
     total_carousels INT DEFAULT 0,                        -- Проверено каруселей за поток
     total_storytells INT DEFAULT 0,                       -- Проверено сторителлов за поток
     total_new_clients INT DEFAULT 0,                      -- Новых клиентов за поток (субботний автоопрос)
@@ -857,10 +856,17 @@ CREATE TABLE admin_tokens (
 CREATE TABLE zoom_meetings (
     id BIGSERIAL PRIMARY KEY,
     student_id BIGINT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-    zoom_url TEXT,                                        -- Ссылка на конференцию Zoom/Яндекс.Телемост
-    scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,       -- Дата/время запланированного созвона
+    meeting_title VARCHAR(255) NOT NULL DEFAULT 'Созвон', -- Этап / тема консультации
+    call_number INTEGER,                                  -- № 1..8 по договору, далее сверх плана
+    zoom_url TEXT,                                        -- Zoom / Google Meet / Яндекс Телемост
+    recording_url TEXT,                                   -- Запись проведенной консультации
+    scheduled_at TIMESTAMP WITH TIME ZONE,                -- Дата/время запланированного созвона
+    link_sent_at TIMESTAMP WITH TIME ZONE,                -- Время отправки приглашения в чат
     completed_at TIMESTAMP WITH TIME ZONE,                -- Фактическое время завершения
     is_completed BOOLEAN DEFAULT FALSE,
+    evidence_url TEXT,                                    -- Ссылка на сообщение Telegram или скриншот
+    source_chat_id BIGINT,                                -- Источник автоимпорта из Telegram
+    source_message_id INTEGER,                            -- Сообщение Telegram с приглашением/записью
     meeting_notes TEXT,                                   -- Краткие итоги созвона
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -868,6 +874,11 @@ CREATE TABLE zoom_meetings (
 CREATE INDEX idx_students_tg_chat_id ON students(tg_chat_id);
 CREATE INDEX idx_students_tg_username ON students(tg_username);
 CREATE INDEX idx_students_active ON students(is_active);
+
+-- При автопоиске в сообщениях наставника поддерживаются Zoom, Google Meet и Яндекс Телемост.
+-- Приглашение записывается в следующую свободную консультацию и не меняет is_completed;
+-- ссылка на запись может отметить консультацию проведенной. Повторная обработка одного
+-- Telegram-сообщения дедуплицируется по source_chat_id + source_message_id.
 
 -- -----------------------------------------------------------------------------
 -- 2. ТАБЛИЦА РЕГЛАМЕНТНЫХ ПРАВИЛ И ХЭШТЕГОВ (task_rules)
@@ -1195,7 +1206,7 @@ SELECT setval('students_id_seq', 10);
   "canReplyOnBehalf": true,
   "activeStudentsCount": 5,
   "pendingReportsToday": 3,
-  "springBootVersion": "3.4.2",
+  "springBootVersion": "3.5.16",
   "virtualThreadsEnabled": true,
   "springAiStatus": "AVAILABLE"
 }

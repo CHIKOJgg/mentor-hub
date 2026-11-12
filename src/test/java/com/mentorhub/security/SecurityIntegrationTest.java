@@ -16,6 +16,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -31,14 +33,21 @@ class SecurityIntegrationTest {
     private AdminTokenRepository adminTokenRepository;
 
     @Test
-    @DisplayName("PermitAll endpoint /api/system/status is accessible without token")
-    void testPublicStatusEndpoint() throws Exception {
-        // Even if controller does not exist yet in M1, security allows through (returns 404 from MVC, NOT 401 Unauthorized)
+    @DisplayName("System diagnostics require an authenticated administrator")
+    void testSystemStatusRequiresToken() throws Exception {
         mockMvc.perform(get("/api/system/status"))
-                .andExpect(result -> {
-                    int status = result.getResponse().getStatus();
-                    org.assertj.core.api.Assertions.assertThat(status).isNotEqualTo(401);
-                });
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Unconfigured CORS does not allow arbitrary browser origins")
+    void testCorsRejectsUntrustedOriginByDefault() throws Exception {
+        mockMvc.perform(options("/api/students")
+                        .header("Origin", "https://untrusted.example")
+                        .header("Access-Control-Request-Method", "GET")
+                        .header("Access-Control-Request-Headers", "X-Admin-Token"))
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
     }
 
     @Test
@@ -61,14 +70,11 @@ class SecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Protected endpoint with valid token parameter passes authentication")
-    void testProtectedEndpointWithValidQueryParamToken() throws Exception {
+    @DisplayName("Protected endpoint rejects valid credentials supplied in a query parameter")
+    void testProtectedEndpointRejectsQueryParamToken() throws Exception {
         mockMvc.perform(get("/api/inbox")
                         .param("token", "magic-katya-curator-token-112233"))
-                .andExpect(result -> {
-                    int status = result.getResponse().getStatus();
-                    org.assertj.core.api.Assertions.assertThat(status).isNotEqualTo(401);
-                });
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -86,7 +92,7 @@ class SecurityIntegrationTest {
         AdminToken expiredToken = AdminToken.builder()
                 .adminName("Тест")
                 .role("CURATOR")
-                .token(expiredTokenStr)
+                .token(AdminTokenHasher.hash(expiredTokenStr))
                 .isActive(true)
                 .expiresAt(Instant.now().minus(1, ChronoUnit.DAYS))
                 .build();
@@ -98,11 +104,11 @@ class SecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Curator role cannot access Mentor-only deleteStudent endpoint (returns 403 Forbidden)")
-    void testCuratorCannotDeleteStudent() throws Exception {
+    @DisplayName("Curator role has the same admin access to deleteStudent as mentor")
+    void testCuratorCanDeleteStudent() throws Exception {
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/students/1")
                         .header("X-Admin-Token", "magic-katya-curator-token-112233"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNoContent());
     }
 
     @Test

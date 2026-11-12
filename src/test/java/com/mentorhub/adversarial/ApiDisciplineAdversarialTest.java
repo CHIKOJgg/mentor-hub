@@ -6,6 +6,7 @@ import com.mentorhub.dto.TogglePauseRequest;
 import com.mentorhub.entity.AdminToken;
 import com.mentorhub.entity.Student;
 import com.mentorhub.repository.AdminTokenRepository;
+import com.mentorhub.security.AdminTokenHasher;
 import com.mentorhub.repository.StudentRepository;
 import com.mentorhub.service.AnalyticsService;
 import org.junit.jupiter.api.DisplayName;
@@ -90,18 +91,17 @@ public class ApiDisciplineAdversarialTest {
         }
 
         @Test
-        @DisplayName("Public status and health endpoints allow unauthenticated access (200 OK)")
+        @DisplayName("Only health is public; operational status requires authentication")
         void testPublicEndpointsAllowUnauthenticated() throws Exception {
             mockMvc.perform(get("/api/system/status"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.springBootVersion").value("3.4.2"));
+                    .andExpect(status().isUnauthorized());
 
             mockMvc.perform(get("/actuator/health"))
                     .andExpect(status().isOk());
         }
 
         @Test
-        @DisplayName("Ksenia's magic token works via header, Bearer, and query param")
+        @DisplayName("Ksenia's access token works via supported headers only")
         void testKseniaTokenAuthenticationMethods() throws Exception {
             // Header: X-Admin-Token
             mockMvc.perform(get("/api/students")
@@ -113,14 +113,14 @@ public class ApiDisciplineAdversarialTest {
                             .header("Authorization", "Bearer " + KSENIA_TOKEN))
                     .andExpect(status().isOk());
 
-            // Query parameter: ?token=
+            // Credentials in URLs are rejected to avoid leaking tokens through history and logs.
             mockMvc.perform(get("/api/students")
                             .param("token", KSENIA_TOKEN))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
-        @DisplayName("Katya's magic token works via header, Bearer, and query param")
+        @DisplayName("Katya's access token works via supported headers only")
         void testKatyaTokenAuthenticationMethods() throws Exception {
             // Header: X-Admin-Token
             mockMvc.perform(get("/api/inbox")
@@ -132,10 +132,10 @@ public class ApiDisciplineAdversarialTest {
                             .header("Authorization", "Bearer " + KATYA_TOKEN))
                     .andExpect(status().isOk());
 
-            // Query parameter: ?token=
+            // Credentials in URLs are rejected to avoid leaking tokens through history and logs.
             mockMvc.perform(get("/api/inbox")
                             .param("token", KATYA_TOKEN))
-                    .andExpect(status().isOk());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -161,7 +161,7 @@ public class ApiDisciplineAdversarialTest {
             AdminToken inactiveToken = AdminToken.builder()
                     .adminName("InactiveAdmin")
                     .role("CURATOR")
-                    .token(inactiveTokenStr)
+                    .token(AdminTokenHasher.hash(inactiveTokenStr))
                     .isActive(false)
                     .build();
             adminTokenRepository.save(inactiveToken);
@@ -175,7 +175,7 @@ public class ApiDisciplineAdversarialTest {
             AdminToken expiredToken = AdminToken.builder()
                     .adminName("ExpiredAdmin")
                     .role("CURATOR")
-                    .token(expiredTokenStr)
+                    .token(AdminTokenHasher.hash(expiredTokenStr))
                     .isActive(true)
                     .expiresAt(Instant.now().minus(2, ChronoUnit.HOURS))
                     .build();

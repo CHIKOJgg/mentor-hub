@@ -162,7 +162,18 @@ export const studentDisciplines: StudentDiscipline[] = [
     disciplineRate: 95,
     isOnPause: false,
     nextZoomDate: '11.11 в 17:00',
-    completedZoomsCount: 4,
+    contractZoomQuota: 8,
+    completedZoomsCount: 7,
+    zoomSessions: [
+      { callNumber: 1, title: 'Стратегия и распаковка Точки А (30 000 ₽)', date: '26.10', isCompleted: true, linkSentAt: '16:50', zoomLink: 'https://us05web.zoom.us/j/82910481921', recordingUrl: 'https://zoom.us/rec/play/milana-1', keyTakeaway: 'Декомпозиция цели до 180 000 ₽' },
+      { callNumber: 2, title: 'Упаковка премиум-оффера и капсульного гардероба', date: '30.10', isCompleted: true, linkSentAt: '14:30', zoomLink: 'https://us05web.zoom.us/j/82910481922', recordingUrl: 'https://zoom.us/rec/play/milana-2', keyTakeaway: 'Чек повышен с 3 000 ₽ до 45 000 ₽' },
+      { callNumber: 3, title: 'Сценарии Reels и каруселей по болям клиентов', date: '02.11', isCompleted: true, linkSentAt: '15:15', zoomLink: 'https://us05web.zoom.us/j/82910481923', recordingUrl: 'https://zoom.us/rec/play/milana-3', keyTakeaway: 'Выбрали связку Reels #14' },
+      { callNumber: 4, title: 'Скрипты квалификации лидов в Direct', date: '04.11', isCompleted: true, linkSentAt: '17:00', zoomLink: 'https://us05web.zoom.us/j/82910481924', recordingUrl: 'https://zoom.us/rec/play/milana-4', keyTakeaway: 'Конверсия в диалог 65%' },
+      { callNumber: 5, title: 'Дожим до оплаты и работа с рассрочками', date: '06.11', isCompleted: true, linkSentAt: '16:00', zoomLink: 'https://us05web.zoom.us/j/82910481925', recordingUrl: 'https://zoom.us/rec/play/milana-5', keyTakeaway: 'Закрыта продажа на 45 000 ₽' },
+      { callNumber: 6, title: 'Оцифровка воронки и повторные касания', date: '08.11', isCompleted: true, linkSentAt: '14:40', zoomLink: 'https://us05web.zoom.us/j/82910481926', recordingUrl: 'https://zoom.us/rec/play/milana-6', keyTakeaway: '+2 повторных клиента' },
+      { callNumber: 7, title: 'Масштабирование исходящего трафика', date: '10.11', isCompleted: true, linkSentAt: '15:00', zoomLink: 'https://us05web.zoom.us/j/82910481927', recordingUrl: 'https://zoom.us/rec/play/milana-7', keyTakeaway: '25 рассылок в день' },
+      { callNumber: 8, title: 'Финальная защита Точки Б и план на 300 000 ₽', date: '11.11 в 17:00', isCompleted: false, linkSentAt: '16:45', zoomLink: 'https://us05web.zoom.us/j/82910481928', keyTakeaway: 'Завершающая консультация по договору' },
+    ],
     periodStats: {
       week: {
         income: 45000,
@@ -225,6 +236,7 @@ export const studentDisciplines: StudentDiscipline[] = [
     totalNewClients: 2,
     disciplineRate: 64,
     isOnPause: false,
+    contractZoomQuota: 8,
     nextZoomDate: '12.11 в 19:00',
     completedZoomsCount: 3,
     periodStats: {
@@ -346,8 +358,21 @@ export const studentDisciplines: StudentDiscipline[] = [
     totalNewClients: 11,
     disciplineRate: 100,
     isOnPause: false,
+    contractZoomQuota: 8,
     nextZoomDate: '13.11 в 15:00',
-    completedZoomsCount: 5,
+    completedZoomsCount: 10,
+    zoomSessions: [
+      { callNumber: 1, title: 'Аудит текущей базы и распаковка чека 60 000 ₽', date: '20.10', isCompleted: true, linkSentAt: '14:00', zoomLink: 'https://us05web.zoom.us/j/91028374801', recordingUrl: 'https://zoom.us/rec/play/karina-1', keyTakeaway: 'Переход на мини-группы' },
+      { callNumber: 2, title: 'Упаковка флагманской программы наставничества', date: '23.10', isCompleted: true, linkSentAt: '15:10', zoomLink: 'https://us05web.zoom.us/j/91028374802', recordingUrl: 'https://zoom.us/rec/play/karina-2', keyTakeaway: 'Программа на 6 недель' },
+      { callNumber: 3, title: 'Прогрев через экспертные Reels и сторителлинг', date: '27.10', isCompleted: true, linkSentAt: '16:00', zoomLink: 'https://us05web.zoom.us/j/91028374803', recordingUrl: 'https://zoom.us/rec/play/karina-3', keyTakeaway: '14 заявок с одного видео' },
+      { callNumber: 4, title: 'Диагностические созвоны и квалификация анкет', date: '30.10', isCompleted: true, linkSentAt: '17:30', zoomLink: 'https://us05web.zoom.us/j/91028374804', recordingUrl: 'https://zoom.us/rec/play/karina-4', keyTakeaway: 'Скрипт дожима' },
+      { callNumber: 5, title: 'Закрытие первых 3 учениц на 180 000 ₽', date: '02.11', isCompleted: true, linkSentAt: '15:45', zoomLink: 'https://us05web.zoom.us/j/91028374805', recordingUrl: 'https://zoom.us/rec/play/karina-5', keyTakeaway: '100% предоплата' },
+      { callNumber: 6, title: 'Разбор юридического договора и чеков оплат', date: '04.11', isCompleted: true, linkSentAt: '18:00', zoomLink: 'https://us05web.zoom.us/j/91028374806', recordingUrl: 'https://zoom.us/rec/play/karina-6', keyTakeaway: 'Безопасные рассрочки' },
+      { callNumber: 7, title: 'Внедрение системы трекинга для подопечных', date: '06.11', isCompleted: true, linkSentAt: '14:20', zoomLink: 'https://us05web.zoom.us/j/91028374807', recordingUrl: 'https://zoom.us/rec/play/karina-7', keyTakeaway: 'Дисциплина 100%' },
+      { callNumber: 8, title: 'Защита Точки Б (норма договора 8 созвонов)', date: '08.11', isCompleted: true, linkSentAt: '16:15', zoomLink: 'https://us05web.zoom.us/j/91028374808', recordingUrl: 'https://zoom.us/rec/play/karina-8', keyTakeaway: 'Норма договора закрыта' },
+      { callNumber: 9, title: 'Бонус-сессия 1: Масштабирование на 500 000 ₽', date: '10.11', isCompleted: true, linkSentAt: '15:00', zoomLink: 'https://us05web.zoom.us/j/91028374809', recordingUrl: 'https://zoom.us/rec/play/karina-9', keyTakeaway: 'Сверхплановая сессия' },
+      { callNumber: 10, title: 'Бонус-сессия 2: Найм ассистента и автоворонка', date: '12.11', isCompleted: true, linkSentAt: '17:00', zoomLink: 'https://us05web.zoom.us/j/91028374810', recordingUrl: 'https://zoom.us/rec/play/karina-10', keyTakeaway: 'Перевыполнение плана наставника' },
+    ],
     periodStats: {
       week: {
         income: 80000,
@@ -411,6 +436,7 @@ export const studentDisciplines: StudentDiscipline[] = [
     disciplineRate: 88,
     isOnPause: true,
     pauseReason: 'Заболела (ОРВИ до 12.11)',
+    contractZoomQuota: 8,
     nextZoomDate: '14.11 в 16:00',
     completedZoomsCount: 3,
     periodStats: {
@@ -475,6 +501,7 @@ export const studentDisciplines: StudentDiscipline[] = [
     totalNewClients: 8,
     disciplineRate: 92,
     isOnPause: false,
+    contractZoomQuota: 8,
     nextZoomDate: '15.11 в 18:00',
     completedZoomsCount: 4,
     periodStats: {

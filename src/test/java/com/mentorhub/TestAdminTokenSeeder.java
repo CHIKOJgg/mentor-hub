@@ -1,5 +1,6 @@
 package com.mentorhub;
 
+import com.mentorhub.security.AdminTokenHasher;
 import com.mentorhub.repository.AdminTokenRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -16,13 +17,18 @@ public class TestAdminTokenSeeder {
     @PostConstruct
     @Transactional
     public void enableTestOnlyTokens() {
-        repository.findByToken("magic-ksenia-mentor-token-998877").ifPresent(token -> {
-            token.setIsActive(true);
-            repository.save(token);
-        });
-        repository.findByToken("magic-katya-curator-token-112233").ifPresent(token -> {
-            token.setIsActive(true);
-            repository.save(token);
-        });
+        setTestToken("Ксения", "magic-ksenia-mentor-token-998877");
+        setTestToken("Катя", "magic-katya-curator-token-112233");
+    }
+
+    private void setTestToken(String adminName, String rawToken) {
+        repository.findAll().stream()
+                .filter(token -> adminName.equals(token.getAdminName()))
+                .findFirst()
+                .ifPresent(token -> {
+                    token.setToken(AdminTokenHasher.hash(rawToken));
+                    token.setIsActive(true);
+                    repository.save(token);
+                });
     }
 }

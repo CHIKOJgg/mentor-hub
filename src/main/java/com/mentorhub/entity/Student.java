@@ -79,6 +79,10 @@ public class Student {
     @Builder.Default
     private Integer completedZoomsCount = 0;
 
+    @Column(name = "contract_zoom_quota", nullable = false)
+    @Builder.Default
+    private Integer contractZoomQuota = 8;
+
     @Column(name = "total_reels")
     @Builder.Default
     private Integer totalReels = 0;

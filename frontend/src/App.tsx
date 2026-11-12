@@ -1,18 +1,18 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { initialReports, studentDisciplines, taskRules, defaultSystemSettings, defaultCheatsheets } from './mockData';
 import { BEAUTY_NICHES, type DailyReport, type StudentDiscipline, type TabType, type ContentType, type TaskRule, type SystemSettings, type DayInfo, type ZoomSessionRecord, type CheatsheetItem } from './types';
 import type { ApiAdminSession, ApiCuratorScript, ApiDailyReport, ApiStudent, ApiSystemSettings, ApiTaskRule, ApiZoomSession } from './api/contracts';
-import { api, getAdminToken, saveAdminToken } from './api/client';
+import { api } from './api/client';
 import { readPersisted, writePersisted } from './persistence';
 import { ConfirmDialog } from './components/common/ConfirmDialog';
 import { DayStatusModal } from './components/modals/DayStatusModal';
 import { AddStudentModal } from './components/modals/AddStudentModal';
+import { StudentSettingsModal } from './components/modals/StudentSettingsModal';
 import { EditStudentModal } from './components/modals/EditStudentModal';
 import { ScriptModal } from './components/modals/ScriptModal';
 import { RuleModal } from './components/modals/RuleModal';
 import { ScheduleTimeModal } from './components/modals/ScheduleTimeModal';
 import { StudentDossierModal } from './components/modals/StudentDossierModal';
-import { ZoomModal } from './components/modals/ZoomModal';
+import { ZoomModal, type ZoomFormState } from './components/modals/ZoomModal';
 import { CheatsheetModal } from './components/modals/CheatsheetModal';
 import {
   ExternalLink,
@@ -26,7 +26,6 @@ import {
   Search,
   RefreshCw,
   BarChart3,
-  RotateCcw,
   FileText,
   Video,
   Coffee,
@@ -46,6 +45,8 @@ import {
   Trash2,
   Settings,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Eye,
   CheckCircle2,
@@ -99,42 +100,67 @@ const getContentTypeBadge = (type: ContentType) => {
 };
 
 const defaultZoomSessionTitles = [
-  'Стратегия и декомпозиция цели',
-  'Позиционирование и упаковка предложения',
-  'Контент и привлечение клиентов',
-  'Продажи и работа с возражениями',
-  'Итоги и следующий план действий',
+  'Стратегия, аудит воронки и распаковка Точки А',
+  'Позиционирование и упаковка премиум-предложения',
+  'Контентная воронка Reels и каруселей без выгорания',
+  'Скрипты квалификации и дожима лидов в Direct',
+  'Продажи на высокий чек и закрытие возражений',
+  'Оцифровка базы клиентов и повторные продажи',
+  'Масштабирование трафика и делегирование рутины',
+  'Итоговая защита Точки Б и стратегия масштабирования',
 ];
+
+const ensureContractZoomSessions = (student: StudentDiscipline, sessions: ZoomSessionRecord[]): ZoomSessionRecord[] => {
+  const quota = Math.max(8, student.contractZoomQuota ?? 8);
+  const byNumber = new Map<number, ZoomSessionRecord>();
+  sessions.forEach((session, index) => {
+    const callNumber = session.callNumber || index + 1;
+    if (!byNumber.has(callNumber)) byNumber.set(callNumber, { ...session, callNumber });
+  });
+  for (let callNumber = 1; callNumber <= quota; callNumber += 1) {
+    if (!byNumber.has(callNumber)) {
+      byNumber.set(callNumber, {
+        callNumber,
+        title: defaultZoomSessionTitles[callNumber - 1] ?? `Этап сопровождения ${callNumber}`,
+        date: '',
+        isCompleted: false,
+      });
+    }
+  }
+  return [...byNumber.values()].sort((left, right) => left.callNumber - right.callNumber);
+};
 
 const getStudentZoomSessions = (student: StudentDiscipline): ZoomSessionRecord[] => {
   const configuredSessions = student.zoomSessions ?? student.portalData?.zoomSessions;
   if (configuredSessions) {
-    return configuredSessions.map((session, index) => ({ ...session, callNumber: index + 1 }));
+    return ensureContractZoomSessions(student, configuredSessions);
   }
 
   const sessionCount = Math.max(
+    student.contractZoomQuota || 8,
     defaultZoomSessionTitles.length,
     student.completedZoomsCount + (student.nextZoomDate ? 1 : 0),
   );
 
-  return Array.from({ length: sessionCount }, (_, index) => ({
+  return ensureContractZoomSessions(student, Array.from({ length: sessionCount }, (_, index) => ({
     callNumber: index + 1,
     title: defaultZoomSessionTitles[index] ?? `Этап сопровождения ${index + 1}`,
     date: index === student.completedZoomsCount ? student.nextZoomDate ?? '' : '',
     isCompleted: index < student.completedZoomsCount,
-  }));
+  })));
 };
 
 const withZoomSessionSummary = (
   student: StudentDiscipline,
   sessions: ZoomSessionRecord[],
 ): StudentDiscipline => {
-  const zoomSessions = sessions.map((session, index) => ({ ...session, callNumber: index + 1 }));
+  const zoomSessions = ensureContractZoomSessions(student, sessions);
   const nextSession = zoomSessions.find(session => !session.isCompleted);
   const nextZoomDate = nextSession?.date.trim() || undefined;
 
   return {
     ...student,
+    contractZoomQuota: student.contractZoomQuota ?? 8,
     zoomSessions,
     completedZoomsCount: zoomSessions.filter(session => session.isCompleted).length,
     nextZoomDate,
@@ -174,6 +200,10 @@ const makeAvatarText = (fullName: string): string =>
 const parseZoomDate = (value: string): string | null => {
   const raw = value.trim();
   if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const parsed = new Date(`${raw}T12:00:00+03:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
   if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) {
     const parsed = new Date(raw);
     return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
@@ -188,58 +218,121 @@ const parseZoomDate = (value: string): string | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 };
 
+const getZoomSessionDate = (session: ZoomSessionRecord): Date | null => {
+  const rawValue = session.scheduledAt || session.date;
+  if (!rawValue.trim()) return null;
+  const value = parseZoomDate(rawValue);
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const getMinskDateKey = (date: Date): string => {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Europe/Minsk',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find(part => part.type === 'year')?.value ?? '';
+  const month = parts.find(part => part.type === 'month')?.value ?? '';
+  const day = parts.find(part => part.type === 'day')?.value ?? '';
+  return `${year}-${month}-${day}`;
+};
+
+const getZoomSessionTimeLabel = (session: ZoomSessionRecord): string => {
+  const explicitTime = session.date.match(/(?:в\s*)(\d{1,2}:\d{2})\s*$/i)?.[1];
+  if (explicitTime) return explicitTime;
+  if (session.scheduledAt) {
+    return new Date(session.scheduledAt).toLocaleTimeString('ru-RU', {
+      timeZone: 'Europe/Minsk',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+  return 'Время не указано';
+};
+
+const parseLinkSentAt = (value: string | undefined, sessionDate: string): string | null => {
+  const raw = value?.trim();
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime()) && /[Tz]/i.test(raw)) return parsed.toISOString();
+  if (/^\d{1,2}:\d{2}$/.test(raw)) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+      const dateWithTime = new Date(`${sessionDate}T${raw}:00+03:00`);
+      return Number.isNaN(dateWithTime.getTime()) ? null : dateWithTime.toISOString();
+    }
+    return parseZoomDate(`${sessionDate} в ${raw}`);
+  }
+  return parseZoomDate(raw.replace(/\s+(\d{1,2}:\d{2})$/, ' в $1'));
+};
+
 const mapApiZoomSession = (session: ApiZoomSession, index: number): ZoomSessionRecord => ({
   callNumber: session.callNumber ?? index + 1,
   title: session.title,
-  date: session.scheduledAt ? new Date(session.scheduledAt).toLocaleString('ru-RU', { timeZone: 'Europe/Minsk', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ' в') : '',
+  date: session.scheduledAt ? new Date(session.scheduledAt).toLocaleString('ru-RU', { timeZone: 'Europe/Minsk', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', ' в') : '',
+  scheduledAt: session.scheduledAt,
   isCompleted: session.isCompleted,
   zoomLink: session.zoomUrl,
   recordingUrl: session.recordingUrl,
   keyTakeaway: session.meetingNotes,
+  linkSentAt: session.linkSentAt,
+  evidenceUrl: session.evidenceUrl,
+  sourceChatId: session.sourceChatId,
+  sourceMessageId: session.sourceMessageId,
 });
 
 const serializeZoomSessions = (sessions: ZoomSessionRecord[]) => sessions.map((session, index) => ({
-  callNumber: index + 1,
+  callNumber: session.callNumber || index + 1,
   title: session.title,
   zoomUrl: session.zoomLink ?? null,
   recordingUrl: session.recordingUrl ?? null,
-  scheduledAt: parseZoomDate(session.date),
+  scheduledAt: parseZoomDate(session.scheduledAt || session.date),
+  linkSentAt: parseLinkSentAt(session.linkSentAt, session.date),
+  evidenceUrl: session.evidenceUrl ?? null,
   isCompleted: session.isCompleted,
   meetingNotes: session.keyTakeaway ?? null,
 }));
 
-const defaultCuratorScripts = [
-  {
-    id: 'local-script-seed-1',
-    title: 'Скрипт Direct: Первое касание (шаблон для учениц)',
-    description: 'Холодное касание экспертам и блогерам без давления и навязывания',
-    category: 'Продажи',
-    text: '«Привет, [Имя]! Увидела твой сторителл про запуск — очень откликается глубина. Заметила, что многие сильные эксперты на масштабе ловят выгорание и синдром самозванца. Я клинический психолог, помогаю экспертам пробить плато дохода без надрыва. Хочу подарить 15-минутный экспресс-разбор: где сейчас утекает энергия. Актуально на этой неделе?»',
-  },
-  {
-    id: 'local-script-seed-2',
-    title: 'Офер пакета консультаций за 15 000 ₽ (шаблон)',
-    description: 'Формула закрытия после бесплатного экспресс-разбора на высокий чек',
-    category: 'Продажи',
-    text: '«Мы вскрыли корень: страх отказа и обесценивание своего опыта. Чтобы убрать это системно за 3 недели и зафиксировать чек, предлагаю пакет из 4 сессий с моим личным сопровождением в Telegram между встречами. Стоимость — 15 000 ₽. Стартуем в четверг?»',
-  },
-  {
-    id: 'local-script-seed-3',
-    title: 'Напоминание о дедлайне в личку (от куратора Кати)',
-    description: 'Мягкий пуш ученицам за 1 час до дедлайна с фокусом на результат',
-    category: 'Кураторские',
-    text: '«Привет! Напоминаю, что сегодня ждём твой черновик контента и количество касаний до 21:00. Ксения сейчас на связи и разбирает отчёты в первую очередь. Если есть затык — отправляй голосовое с #вопрос, разберём!»',
-  },
-  {
-    id: 'local-script-seed-4',
-    title: 'Поддержка при спаде энергии и амнистия (от наставника Ксении)',
-    description: 'Личное сообщение ученице в риске слёта для возврата в стрик',
-    category: 'Удержание',
-    text: '«Привет, дорогая! Вижу, что накопилась усталость от совмещения. Давай снизим темп: на сегодня план-минимум — всего 15 рассылок и короткий Reels без сложного монтажа. Твоя Точка Б ближе, чем кажется, давай не сливать стрик!»',
-  },
-];
-
 type LocalDataDomain = 'reports' | 'students' | 'task-rules' | 'system-settings' | 'curator-scripts';
+
+const emptyStudent: StudentDiscipline = {
+  id: '',
+  fullName: '',
+  avatarText: '',
+  niche: '',
+  initialIncome: 0,
+  currentIncome: 0,
+  initialAvgTicket: 0,
+  currentAvgTicket: 0,
+  totalReels: 0,
+  totalCarousels: 0,
+  totalStorytells: 0,
+  totalMailings: 0,
+  totalNewClients: 0,
+  disciplineRate: 0,
+  weekDays: [],
+  isOnPause: false,
+  completedZoomsCount: 0,
+  zoomSessions: [],
+};
+
+const defaultSystemSettings: SystemSettings = {
+  morningPushEnabled: true,
+  morningPushTime: '09:00',
+  eveningReminderEnabled: true,
+  eveningReminderTime: '20:00',
+  dailyDeadlineTime: '21:00',
+  strictDeadlineEnabled: true,
+  saturdayPollEnabled: true,
+  saturdayPollTime: '18:00',
+  sundayRestEnabled: true,
+  aiWhisperEnabled: true,
+  aiSummaryEnabled: true,
+  antiFraudDedupEnabled: true,
+  zoomAutoDetectEnabled: true,
+};
 
 const mapApiReport = (report: ApiDailyReport): DailyReport => ({
   ...report,
@@ -260,6 +353,7 @@ const mapApiStudent = (student: ApiStudent): StudentDiscipline => {
     telegram: student.tgUsername ? (student.tgUsername.startsWith('@') ? student.tgUsername : `@${student.tgUsername}`) : undefined,
     telegramChatId: student.tgChatId,
     tariff: student.tariff?.toUpperCase() === 'VIP' ? 'VIP' : 'Стандарт',
+    contractZoomQuota: student.contractZoomQuota ?? 8,
     initialIncome: Number(student.initialIncome) || 0,
     currentIncome: Number(student.currentIncome) || 0,
     initialAvgTicket: Number(student.initialAvgTicket) || 0,
@@ -333,36 +427,42 @@ export default function App() {
     return saved === 'tasks' ? 'promotion' : saved;
   });
   const [inboxView, setInboxView] = useState<'pending' | 'approved'>('pending');
-  const [reports, setReports] = useState<DailyReport[]>(() => readPersisted('reports', initialReports));
-  const [allReports, setAllReports] = useState<DailyReport[]>(() => readPersisted('all-reports', initialReports));
+  const [reports, setReports] = useState<DailyReport[]>(() => readPersisted('reports', []));
+  const [allReports, setAllReports] = useState<DailyReport[]>(() => readPersisted('all-reports', []));
   const [students, setStudents] = useState<StudentDiscipline[]>(() =>
-    readPersisted('students', studentDisciplines.map(student => withZoomSessionSummary(student, getStudentZoomSessions(student)))),
+    readPersisted<StudentDiscipline[]>('students', [])
+      .map(student => withZoomSessionSummary(student, getStudentZoomSessions(student))),
   );
   const [replies, setReplies] = useState<Record<string, string>>(() => readPersisted('replies', {}));
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string>(() =>
-    readPersisted('selected-student-id', studentDisciplines[0].id),
+    readPersisted('selected-student-id', ''),
   );
   const selectedStudent = useMemo(
-    () => students.find(student => student.id === selectedStudentId) ?? students[0] ?? studentDisciplines[0],
+    () => students.find(student => student.id === selectedStudentId) ?? students[0] ?? emptyStudent,
     [students, selectedStudentId],
   );
   const setSelectedStudent = (student: StudentDiscipline) => {
     setSelectedStudentId(student.id);
   };
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeAdmin, setActiveAdmin] = useState<'Ксения' | 'Катя'>(() => readPersisted('active-admin', 'Ксения'));
   const [analyticsCategory, setAnalyticsCategory] = useState<'cohort' | 'students'>('cohort');
   const [analyticsPeriod, setAnalyticsPeriod] = useState<'week' | 'month' | 'all'>('all');
-  const [rules, setRules] = useState<TaskRule[]>(() => readPersisted('task-rules', taskRules));
+  const [rules, setRules] = useState<TaskRule[]>(() => readPersisted('task-rules', []));
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(() => readPersisted('system-settings', defaultSystemSettings));
   const [promotionSubTab, setPromotionSubTab] = useState<'scripts' | 'cheatsheets' | 'hashtags'>('scripts');
   const [studentsFilter, setStudentsFilter] = useState<'all' | 'perfect' | 'attention' | 'pause' | 'zooms'>('all');
   const [studentsViewMode, setStudentsViewMode] = useState<'calendar' | 'zooms'>('calendar');
+  const [zoomCalendarWeekOffset, setZoomCalendarWeekOffset] = useState(0);
+  const [zoomCalendarReferenceDate] = useState(() => {
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    return date;
+  });
   const [selectedScriptCategory, setSelectedScriptCategory] = useState<string>('Все');
-  const [curatorScripts, setCuratorScripts] = useState<ApiCuratorScript[]>(() => readPersisted('curator-scripts', defaultCuratorScripts));
-  const [cheatsheets, setCheatsheets] = useState<CheatsheetItem[]>(() => readPersisted('cheatsheets', defaultCheatsheets));
+  const [curatorScripts, setCuratorScripts] = useState<ApiCuratorScript[]>(() => readPersisted('curator-scripts', []));
+  const [cheatsheets, setCheatsheets] = useState<CheatsheetItem[]>(() => readPersisted('cheatsheets', []));
   const [selectedCheatsheetCategory, setSelectedCheatsheetCategory] = useState<string>('Все');
   const [isAddingCheatsheet, setIsAddingCheatsheet] = useState(false);
   const [editingCheatsheet, setEditingCheatsheet] = useState<CheatsheetItem | null>(null);
@@ -377,15 +477,17 @@ export default function App() {
   const [inspectingTab, setInspectingTab] = useState<'profile' | 'reports' | 'zooms'>('profile');
   const [managingZoomStudent, setManagingZoomStudent] = useState<StudentDiscipline | null>(null);
   const [isAddingZoom, setIsAddingZoom] = useState(false);
-  const [zoomForm, setZoomForm] = useState({
-    title: 'Разбор офера и чека',
+  const [zoomForm, setZoomForm] = useState<ZoomFormState>({
+    title: 'Разбор оффера и чека',
     scheduledAt: '',
-    zoomUrl: 'https://us02web.zoom.us/j/',
+    zoomUrl: '',
     meetingNotes: '',
+    linkSentAt: '',
+    evidenceUrl: '',
   });
 
-  const [adminToken, setAdminToken] = useState(getAdminToken);
-  const [adminTokenDraft, setAdminTokenDraft] = useState(getAdminToken);
+  const [accessKeyDraft, setAccessKeyDraft] = useState('');
+  const [isLoginSubmitting, setIsLoginSubmitting] = useState(false);
   const [apiSession, setApiSession] = useState<ApiAdminSession | null>(null);
   const [apiConnection, setApiConnection] = useState<'checking' | 'connected' | 'offline' | 'unauthorized' | 'needs-token'>('checking');
   const [apiConnectionMessage, setApiConnectionMessage] = useState('Проверяем подключение');
@@ -393,6 +495,7 @@ export default function App() {
   const [apiRefreshKey, setApiRefreshKey] = useState(0);
   const [pendingSyncDomains, setPendingSyncDomains] = useState<string[]>(() => readPersisted('pending-sync-domains', []));
   const [isAddingStudent, setIsAddingStudent] = useState(false);
+  const [isManagingStudents, setIsManagingStudents] = useState(false);
   const [newStudent, setNewStudent] = useState<{ fullName: string; niche: string; telegram: string; telegramChatId: string; initialIncome: number; initialAvgTicket: number; tariff?: string }>(newStudentTemplate);
 
   // Edit Modals State
@@ -510,40 +613,19 @@ export default function App() {
     writePersisted('replies', replies);
     writePersisted('selected-student-id', selectedStudentId);
     writePersisted('selected-student', selectedStudent);
-    writePersisted('active-admin', activeAdmin);
     writePersisted('task-rules', rules);
     writePersisted('system-settings', systemSettings);
     writePersisted('curator-scripts', curatorScripts);
     writePersisted('cheatsheets', cheatsheets);
     writePersisted('pending-sync-domains', pendingSyncDomains);
-  }, [activeTab, reports, allReports, students, replies, selectedStudentId, selectedStudent, activeAdmin, rules, systemSettings, curatorScripts, cheatsheets, pendingSyncDomains]);
+  }, [activeTab, reports, allReports, students, replies, selectedStudentId, selectedStudent, rules, systemSettings, curatorScripts, cheatsheets, pendingSyncDomains]);
 
   useEffect(() => {
-    saveAdminToken(adminToken);
     let isCurrent = true;
 
     const loadRemoteData = async () => {
       setApiConnection('checking');
       setApiConnectionMessage('Проверяем подключение');
-      setApiSession(null);
-
-      try {
-        await api.getSystemStatus<Record<string, unknown>>();
-      } catch {
-        if (isCurrent) {
-          setApiConnection('offline');
-          setApiConnectionMessage('Сервер недоступен; изменения сохраняются в этом браузере');
-        }
-        return;
-      }
-
-      if (!adminToken.trim()) {
-        if (isCurrent) {
-          setApiConnection('needs-token');
-          setApiConnectionMessage('Сервер доступен. Для синхронизации введите токен администратора');
-        }
-        return;
-      }
 
       let currentSession: ApiAdminSession;
       try {
@@ -551,14 +633,14 @@ export default function App() {
       } catch (error) {
         if (isCurrent) {
           const unauthorized = error instanceof Error && 'status' in error && error.status === 401;
-          setApiConnection(unauthorized ? 'unauthorized' : 'offline');
-          setApiConnectionMessage(unauthorized ? 'Токен не принят' : 'Не удалось проверить права администратора');
+          setApiSession(null);
+          setApiConnection(unauthorized ? 'needs-token' : 'offline');
+          setApiConnectionMessage(unauthorized ? 'Введите ключ доступа администратора.' : 'Не удалось подключиться. Проверьте соединение.');
         }
         return;
       }
       if (!isCurrent) return;
       setApiSession(currentSession);
-      setActiveAdmin(currentSession.adminName === 'Катя' ? 'Катя' : 'Ксения');
 
       const [reportsResult, studentsResult, rulesResult, settingsResult, scriptsResult] = await Promise.allSettled([
         api.getAllReports<ApiDailyReport[]>(),
@@ -595,21 +677,22 @@ export default function App() {
       if (scriptsResult.status === 'fulfilled' && !hasPending('curator-scripts')) setCuratorScripts(scriptsResult.value);
 
       if (unauthorized) {
-        setApiConnection('unauthorized');
-        setApiConnectionMessage('Токен не принят; локальные данные доступны, синхронизация отключена');
+        setApiSession(null);
+        setApiConnection('needs-token');
+        setApiConnectionMessage('Нет доступа к серверу. Обратитесь к администратору.');
       } else if (loadedCount === results.length) {
         setApiConnection('connected');
         setApiConnectionMessage(pendingDomainCount > 0
-          ? `Подключено; локальные изменения сохранены (${pendingDomainCount} раздела ожидают отправки)`
-          : 'Подключено к серверу; данные синхронизированы');
+          ? `Подключено. ${pendingDomainCount} раздела ожидают синхронизации.`
+          : 'Данные синхронизированы.');
       } else if (loadedCount > 0) {
         setApiConnection('connected');
         setApiConnectionMessage(pendingDomainCount > 0
-          ? `Подключено; локальные изменения сохранены (${pendingDomainCount} раздела ожидают отправки)`
-          : 'Подключено частично; недоступные данные восстановлены из локальной копии');
+          ? `Подключено. ${pendingDomainCount} раздела ожидают синхронизации.`
+          : 'Подключено частично. Некоторые данные временно недоступны.');
       } else {
         setApiConnection('offline');
-        setApiConnectionMessage('API недоступно; используется локальная копия');
+        setApiConnectionMessage('Не удалось загрузить данные. Проверьте соединение и повторите попытку.');
       }
     };
 
@@ -617,7 +700,7 @@ export default function App() {
     return () => {
       isCurrent = false;
     };
-  }, [adminToken, apiRefreshKey, pendingSyncDomains]);
+  }, [apiRefreshKey, pendingSyncDomains]);
 
   const markLocalChange = (domain: LocalDataDomain, entityId?: string) => {
     const key = entityId ? `${domain}:${entityId}` : domain;
@@ -659,12 +742,12 @@ export default function App() {
         return;
       } catch {
         markLocalChange('students', studentId);
-        setApiConnectionMessage('Изменение дня сохранено локально; сервер не принял обновление');
+        setApiConnectionMessage('Изменение дня ожидает синхронизации.');
       }
     } else {
       markLocalChange('students', studentId);
     }
-    showToast(`Статус за ${updatedDay.date} сохранен локально`);
+    showToast(`Статус за ${updatedDay.date} обновлен; ожидает синхронизации`);
   };
 
   const saveStudentProfile = async (updated: StudentDiscipline) => {
@@ -692,12 +775,12 @@ export default function App() {
         return;
       } catch {
         markLocalChange('students', localKey);
-        setApiConnectionMessage('Профиль сохранен в браузере; сервер пока недоступен');
+        setApiConnectionMessage('Профиль ожидает синхронизации.');
       }
     } else {
       markLocalChange('students', localKey);
     }
-    showToast(`Профиль ${normalized.fullName} сохранен локально`);
+    showToast(`Профиль ${normalized.fullName} обновлен; ожидает синхронизации`);
   };
 
   const addStudent = async () => {
@@ -735,9 +818,11 @@ export default function App() {
       isOnPause: false,
       completedZoomsCount: 0,
       zoomSessions: [],
+      contractZoomQuota: 8,
     };
+    const localStudentWithSessions = withZoomSessionSummary(localStudent, getStudentZoomSessions(localStudent));
 
-    setStudents(prev => [...prev, localStudent]);
+    setStudents(prev => [...prev, localStudentWithSessions]);
     setNewStudent(newStudentTemplate);
     setIsAddingStudent(false);
 
@@ -754,19 +839,26 @@ export default function App() {
           initialAvgTicket,
           startDate: localStudent.startDate,
         });
-        const serverStudent = withZoomSessionSummary(mapApiStudent(created), []);
+        const mappedServerStudent = mapApiStudent(created);
+        const serverStudent = withZoomSessionSummary(mappedServerStudent, mappedServerStudent.zoomSessions ?? []);
         setStudents(prev => prev.map(student => student.id === localId ? serverStudent : student));
         clearLocalChange('students', localId);
+        try {
+          await api.replaceStudentZoomSessions(serverStudent.id, serializeZoomSessions(serverStudent.zoomSessions ?? []));
+        } catch {
+          markLocalChange('students', `${serverStudent.id}:zooms`);
+          setApiConnectionMessage('Ученица создана; 8 консультаций сохранятся на сервере при следующей синхронизации');
+        }
         showToast(`Ученица ${fullName} создана на сервере`);
         return;
       } catch {
         markLocalChange('students', localId);
-        setApiConnectionMessage('Новая ученица сохранена локально; сервер пока недоступен');
+          setApiConnectionMessage('Новая ученица ожидает синхронизации.');
       }
     } else {
       markLocalChange('students', localId);
     }
-    showToast(`Ученица ${fullName} сохранена локально`);
+    showToast(`Ученица ${fullName} добавлена; ожидает синхронизации`);
   };
 
   const deleteStudent = (studentId: string, fullName: string) => {
@@ -788,7 +880,7 @@ export default function App() {
             return;
           } catch {
             markLocalChange('students', studentId);
-            setApiConnectionMessage('Ученица удалена локально; сервер пока недоступен');
+            setApiConnectionMessage('Удаление ученицы ожидает синхронизации.');
           }
         } else {
           markLocalChange('students', studentId);
@@ -802,7 +894,7 @@ export default function App() {
     const targetStudent = students.find(s => s.id === studentId);
     if (!targetStudent) return;
     const existing = targetStudent.zoomSessions ?? [];
-    const nextCallNumber = existing.length + 1;
+    const nextCallNumber = Math.max(0, ...existing.map(session => session.callNumber || 0)) + 1;
     const newSession: ZoomSessionRecord = {
       callNumber: nextCallNumber,
       title: zoomForm.title.trim() || `Консультация #${nextCallNumber}`,
@@ -810,6 +902,8 @@ export default function App() {
       isCompleted: false,
       zoomLink: zoomForm.zoomUrl.trim() || undefined,
       keyTakeaway: zoomForm.meetingNotes.trim() || undefined,
+      linkSentAt: zoomForm.linkSentAt?.trim() || undefined,
+      evidenceUrl: zoomForm.evidenceUrl?.trim() || undefined,
     };
     const updatedSessions = [...existing, newSession];
     const updatedStudent = withZoomSessionSummary(targetStudent, updatedSessions);
@@ -817,11 +911,11 @@ export default function App() {
     if (managingZoomStudent?.id === studentId) setManagingZoomStudent(updatedStudent);
     if (inspectingStudent?.id === studentId) setInspectingStudent(updatedStudent);
     setIsAddingZoom(false);
-    setZoomForm({ title: 'Разбор офера и чека', scheduledAt: '', zoomUrl: 'https://us02web.zoom.us/j/', meetingNotes: '' });
+    setZoomForm({ title: 'Разбор оффера и чека', scheduledAt: '', zoomUrl: '', meetingNotes: '', linkSentAt: '', evidenceUrl: '' });
 
     if (apiConnection === 'connected' && !studentId.startsWith('local-')) {
       try {
-        await api.replaceStudentZoomSessions(studentId, updatedSessions);
+        await api.replaceStudentZoomSessions(studentId, serializeZoomSessions(updatedSessions));
         showToast('Созвон сохранен на сервере');
         return;
       } catch {
@@ -932,20 +1026,6 @@ export default function App() {
     showToast('Резервная копия базы (JSON) успешно скачана');
   };
 
-  const copyMagicLink = (role: 'ksenia' | 'katya') => {
-    const token = role === 'ksenia' ? 'magic-ksenia-mentor-token-998877' : 'magic-katya-curator-token-112233';
-    const link = `${window.location.origin}/?token=${token}`;
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(link).then(() => {
-        showToast(`Ссылка для ${role === 'ksenia' ? 'Ксении' : 'Кати'} скопирована!`);
-      }).catch(() => {
-        showToast(`Токен: ${token}`);
-      });
-    } else {
-      showToast(`Токен: ${token}`);
-    }
-  };
-
   const saveScript = async (index: number, scriptData: { title: string; description: string; text: string }) => {
     const previous = curatorScripts[index];
     const updated = { ...previous, ...scriptData };
@@ -963,12 +1043,12 @@ export default function App() {
         return;
       } catch {
         markLocalChange('curator-scripts', localKey);
-        setApiConnectionMessage('Скрипт сохранен локально; сервер не принял обновление');
+        setApiConnectionMessage('Скрипт ожидает синхронизации.');
       }
     } else {
       markLocalChange('curator-scripts', localKey);
     }
-    showToast(`Скрипт «${scriptData.title}» сохранен локально`);
+    showToast(`Скрипт «${scriptData.title}» обновлен; ожидает синхронизации`);
   };
 
   const addScript = async (scriptData: { title: string; description: string; text: string }) => {
@@ -983,12 +1063,12 @@ export default function App() {
         return;
       } catch {
         markLocalChange('curator-scripts', localId);
-        setApiConnectionMessage('Скрипт сохранен локально; сервер не принял создание');
+        setApiConnectionMessage('Скрипт ожидает синхронизации.');
       }
     } else {
       markLocalChange('curator-scripts', localId);
     }
-    showToast(`Скрипт «${scriptData.title}» сохранен локально`);
+    showToast(`Скрипт «${scriptData.title}» добавлен; ожидает синхронизации`);
   };
 
   const deleteScript = (index: number) => {
@@ -1012,12 +1092,12 @@ export default function App() {
             return;
           } catch {
             markLocalChange('curator-scripts', localKey);
-            setApiConnectionMessage('Скрипт скрыт локально; сервер не принял удаление');
+            setApiConnectionMessage('Удаление скрипта ожидает синхронизации.');
           }
         } else {
           markLocalChange('curator-scripts', localKey);
         }
-        showToast('Скрипт удален локально');
+        showToast('Удаление скрипта ожидает синхронизации');
       },
     });
   };
@@ -1040,12 +1120,12 @@ export default function App() {
         return;
       } catch {
         markLocalChange('task-rules', updatedRule.id);
-        setApiConnectionMessage('Правило сохранено локально; сервер не принял обновление');
+        setApiConnectionMessage('Правило ожидает синхронизации.');
       }
     } else {
       markLocalChange('task-rules', updatedRule.id);
     }
-    showToast(`Правило ${updatedRule.hashtag} сохранено локально`);
+    showToast(`Правило ${updatedRule.hashtag} обновлено; ожидает синхронизации`);
   };
 
   const addRule = async (ruleData: { hashtag: string; title: string; description: string; required: boolean; example: string }) => {
@@ -1060,12 +1140,12 @@ export default function App() {
         return;
       } catch {
         markLocalChange('task-rules', localRule.id);
-        setApiConnectionMessage('Правило сохранено локально; сервер не принял создание');
+        setApiConnectionMessage('Правило ожидает синхронизации.');
       }
     } else {
       markLocalChange('task-rules', localRule.id);
     }
-    showToast(`Хэштег ${ruleData.hashtag} сохранен локально`);
+    showToast(`Хэштег ${ruleData.hashtag} добавлен; ожидает синхронизации`);
   };
 
   const deleteRule = (ruleId: string, tag: string) => {
@@ -1084,12 +1164,12 @@ export default function App() {
             return;
           } catch {
             markLocalChange('task-rules', ruleId);
-            setApiConnectionMessage('Правило удалено локально; сервер не принял удаление');
+            setApiConnectionMessage('Удаление правила ожидает синхронизации.');
           }
         } else {
           markLocalChange('task-rules', ruleId);
         }
-        showToast(`Хэштег ${tag} удален локально`);
+        showToast(`Удаление правила ${tag} ожидает синхронизации`);
       },
     });
   };
@@ -1104,12 +1184,12 @@ export default function App() {
         return;
       } catch {
         markLocalChange('system-settings');
-        setApiConnectionMessage('Настройки сохранены локально; сервер не принял обновление');
+        setApiConnectionMessage('Настройки ожидают синхронизации.');
       }
     } else {
       markLocalChange('system-settings');
     }
-    showToast(`${label}: сохранено локально`);
+    showToast(`${label}: ожидает синхронизации`);
   };
 
   const updateScheduleTime = (key: keyof SystemSettings, val: string, label: string) => {
@@ -1132,37 +1212,6 @@ export default function App() {
     const nextSettings = { ...systemSettings, [key]: !systemSettings[key] };
     setSystemSettings(nextSettings);
     void persistSystemSettings(nextSettings, label);
-  };
-
-  const markStudentZoomCompleted = async (studentId: string, studentName: string) => {
-    const student = students.find(item => item.id === studentId);
-    if (!student) return;
-    const sessions = getStudentZoomSessions(student);
-    const nextSessionIndex = sessions.findIndex(session => !session.isCompleted);
-    if (nextSessionIndex < 0) {
-      showToast(`Для ${studentName} нет незавершенных созвонов`);
-      return;
-    }
-    const nextSessions = sessions.map((session, index) =>
-      index === nextSessionIndex ? { ...session, isCompleted: true } : session,
-    );
-    const updated = withZoomSessionSummary(student, nextSessions);
-    setStudents(prev => prev.map(item => item.id === studentId ? updated : item));
-
-    if (apiConnection === 'connected' && !studentId.startsWith('local-')) {
-      try {
-        await api.replaceStudentZoomSessions(studentId, serializeZoomSessions(nextSessions));
-        clearLocalChange('students', studentId);
-        showToast(`Созвон ${nextSessionIndex + 1}/${sessions.length} сохранен на сервере`);
-        return;
-      } catch {
-        markLocalChange('students', studentId);
-        setApiConnectionMessage('Статус созвона сохранен локально; сервер не принял обновление');
-      }
-    } else {
-      markLocalChange('students', studentId);
-    }
-    showToast(`Созвон ${nextSessionIndex + 1}/${sessions.length} сохранен локально`);
   };
 
   const updateEditingZoomSession = (index: number, changes: Partial<ZoomSessionRecord>) => {
@@ -1194,7 +1243,9 @@ export default function App() {
   const removeEditingZoomSession = (index: number) => {
     setEditingStudent(current => {
       if (!current) return current;
-      const sessions = (current.zoomSessions ?? []).filter((_, sessionIndex) => sessionIndex !== index);
+      const currentSessions = current.zoomSessions ?? [];
+      if (index < (current.contractZoomQuota ?? 8)) return current;
+      const sessions = currentSessions.filter((_, sessionIndex) => sessionIndex !== index);
       return withZoomSessionSummary(current, sessions);
     });
   };
@@ -1363,7 +1414,7 @@ export default function App() {
           completedKeys.push(key);
         }
       } catch (error) {
-        setApiConnectionMessage(error instanceof Error ? `Не удалось отправить часть локальных изменений: ${error.message}` : 'Не удалось отправить часть локальных изменений');
+        setApiConnectionMessage(error instanceof Error ? `Не удалось синхронизировать изменения: ${error.message}` : 'Не удалось синхронизировать изменения.');
       }
     }
 
@@ -1372,10 +1423,10 @@ export default function App() {
   };
 
   const handleApiSync = async () => {
-    if (!adminToken.trim()) {
+    if (!apiSession) {
       setApiConnection('needs-token');
-      setApiConnectionMessage('Для синхронизации введите токен администратора');
-      showToast('Локальная копия сохранена; сначала подключите сервер');
+      setApiConnectionMessage('Для синхронизации требуется авторизация.');
+      showToast('Для синхронизации требуется доступ к серверу');
       return;
     }
 
@@ -1386,14 +1437,17 @@ export default function App() {
       setApiRefreshKey(value => value + 1);
       showToast(localSyncCompleted
         ? result.message || 'Синхронизация завершена'
-        : 'Часть локальных изменений осталась в очереди повторной отправки');
+        : 'Часть изменений ожидает повторной синхронизации');
     } catch (error) {
       const unauthorized = error instanceof Error && 'status' in error && error.status === 401;
-      setApiConnection(unauthorized ? 'unauthorized' : 'offline');
+      if (unauthorized) {
+        setApiSession(null);
+      }
+      setApiConnection(unauthorized ? 'needs-token' : 'offline');
       setApiConnectionMessage(unauthorized
-        ? 'Токен не принят; локальная копия сохранена'
-        : 'Не удалось связаться с сервером; локальная копия сохранена');
-      showToast(unauthorized ? 'Токен администратора не принят' : 'Сервер недоступен; данные оставлены локально');
+        ? 'Нет доступа к серверу.'
+        : 'Сервер недоступен. Проверьте соединение и повторите попытку.');
+      showToast(unauthorized ? 'Нет доступа к серверу' : 'Сервер недоступен; синхронизация не выполнена');
     } finally {
       setIsApiSyncing(false);
     }
@@ -1441,7 +1495,7 @@ export default function App() {
         })
         .catch((_error: unknown) => {
           markLocalChange('reports', reportId);
-          setApiConnectionMessage('Одобрение сохранено локально; сервер временно недоступен');
+          setApiConnectionMessage('Отчёт принят; синхронизация ожидает подключения.');
         });
     } else {
       markLocalChange('reports', reportId);
@@ -1481,7 +1535,7 @@ export default function App() {
           delete next[reportId];
           return next;
         });
-        showToast(`Возврат ${name} сохранен локально; сервер не подтвердил отправку`);
+        showToast(`Возврат отчёта ${name} ожидает синхронизации`);
         return;
       }
     } else {
@@ -1496,7 +1550,7 @@ export default function App() {
     });
     showToast(apiConnection === 'connected'
       ? messageDelivered ? `Отчет возвращен ${name}; сообщение доставлено в Telegram` : `Отчет возвращен ${name}; сообщение не доставлено в Telegram`
-      : `Отчет возвращен локально; сообщение ${name} не отправлено`);
+      : `Отчёт возвращён; сообщение ${name} не отправлено, синхронизация ожидает подключения`);
   };
 
   const toggleStudentPause = async (studentId: string) => {
@@ -1514,35 +1568,12 @@ export default function App() {
         return;
       } catch {
         markLocalChange('students', studentId);
-        setApiConnectionMessage('Статус паузы сохранен локально; сервер не принял обновление');
+        setApiConnectionMessage('Изменение статуса ожидает синхронизации.');
       }
     } else {
       markLocalChange('students', studentId);
     }
-    showToast(nextState ? `${student.fullName} поставлена на паузу локально` : `${student.fullName} возвращена локально`);
-  };
-
-  const handleCopyCase = () => {
-    const s = selectedStudent;
-    const g = s.initialIncome <= 0 ? '1.0' : calculateMultiplier(s.currentIncome, s.initialIncome);
-    const text =
-      `КЕЙС ПОТОКА: ${s.fullName}\n` +
-      `Ниша: ${s.niche}\n\n` +
-      `Точка А: ${s.initialIncome.toLocaleString('ru-RU')} ₽ -> Точка Б: ${s.currentIncome.toLocaleString('ru-RU')} ₽ (РОСТ x${g}!)\n` +
-      `Средний чек: вырос с ${s.initialAvgTicket.toLocaleString('ru-RU')} ₽ до ${s.currentAvgTicket.toLocaleString('ru-RU')} ₽\n` +
-      `Проверено: ${s.totalReels} Reels, ${s.totalCarousels} каруселей, ${s.totalStorytells} сторителлов\n` +
-      `Исходящий трафик: ${s.totalMailings} рассылок по скрипту\n` +
-      `Прирост новых клиентов: +${s.totalNewClients}\n` +
-      `Дисциплина сдачи: ${s.disciplineRate}%\n\n` +
-      `«Она просто перестала сливать дедлайны и внедрила ежедневный трекинг ключевых действий»`;
-
-    if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(text)
-        .then(() => showToast('Текст скопирован для сторис'))
-        .catch(() => showToast('Текст скопирован'));
-    } else {
-      showToast('Текст скопирован');
-    }
+    showToast(`${student.fullName}: статус обновлён; ожидает синхронизации`);
   };
 
   const q = searchQuery.trim().toLowerCase();
@@ -1556,9 +1587,41 @@ export default function App() {
     if (studentsFilter === 'perfect') return s.disciplineRate >= 95;
     if (studentsFilter === 'attention') return s.disciplineRate < 75 || s.weekDays.some(d => d.status === 'MISSED');
     if (studentsFilter === 'pause') return s.isOnPause;
-    if (studentsFilter === 'zooms') return Boolean(s.zoomSessions?.length);
+    if (studentsFilter === 'zooms') return Boolean(s.nextZoomDate) || getStudentZoomSessions(s).some(session =>
+      Boolean(getZoomSessionDate(session) || session.zoomLink),
+    );
     return true;
   });
+  const saturdayDateLabel = students[0]?.weekDays.find(day => day.day === 'Сб')?.date;
+
+  const zoomCalendarDays = useMemo(() => {
+    const today = new Date(zoomCalendarReferenceDate);
+    const mondayOffset = (today.getDay() + 6) % 7;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - mondayOffset + zoomCalendarWeekOffset * 7);
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = new Date(monday);
+      day.setDate(monday.getDate() + index);
+      return day;
+    });
+  }, [zoomCalendarReferenceDate, zoomCalendarWeekOffset]);
+
+  const zoomCalendarEvents = useMemo(() => {
+    const firstDay = getMinskDateKey(zoomCalendarDays[0]);
+    const lastDay = getMinskDateKey(zoomCalendarDays[6]);
+    return filtered.flatMap(student => getStudentZoomSessions(student).flatMap(session => {
+      const date = getZoomSessionDate(session);
+      if (!date) return [];
+      const dateKey = getMinskDateKey(date);
+      if (dateKey < firstDay || dateKey > lastDay) return [];
+      return [{ student, session, date, dateKey, timeLabel: getZoomSessionTimeLabel(session) }];
+    })).sort((left, right) => left.date.getTime() - right.date.getTime()
+      || left.student.fullName.localeCompare(right.student.fullName, 'ru-RU'));
+  }, [filtered, zoomCalendarDays]);
+
+  const unscheduledZoomSessions = filtered.flatMap(student => getStudentZoomSessions(student)
+    .filter(session => !session.isCompleted && !getZoomSessionDate(session))
+    .map(session => ({ student, session })));
 
   const approvedReports = useMemo(
     () => allReports.filter(r => r.status === 'APPROVED'),
@@ -1635,6 +1698,78 @@ export default function App() {
     };
   };
   const selectedStudentPeriodStats = getStudentPeriodStats(selectedStudent);
+  const logout = async () => {
+    try {
+      await api.logout();
+    } catch (error) {
+      const expired = error instanceof Error && 'status' in error && error.status === 401;
+      if (!expired) {
+        showToast('Не удалось завершить сеанс. Проверьте соединение и повторите попытку.');
+        return;
+      }
+    }
+    setApiSession(null);
+    setApiConnection('needs-token');
+    setApiConnectionMessage('Введите ключ доступа, выданный администратором.');
+  };
+
+  if (!apiSession) {
+    return (
+      <div className="app-shell min-h-screen flex items-center justify-center px-4 py-10">
+        <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm" aria-labelledby="login-title">
+          <div className="mb-6">
+            <h1 id="login-title" className="text-xl font-bold tracking-tight text-slate-900">Вход в панель</h1>
+            <p className="mt-1 text-sm text-slate-500">Введите ключ доступа, выданный администратором.</p>
+          </div>
+          <form
+            className="space-y-4"
+            onSubmit={event => {
+              event.preventDefault();
+              const accessKey = accessKeyDraft.trim();
+              if (!accessKey || isLoginSubmitting) return;
+              setIsLoginSubmitting(true);
+              setApiConnection('checking');
+              setApiConnectionMessage('Проверяем ключ доступа…');
+              void api.login<ApiAdminSession>(accessKey).then(session => {
+                setApiSession(session);
+                setAccessKeyDraft('');
+                setApiConnection('connected');
+                setApiConnectionMessage('Вход выполнен. Загружаем данные…');
+                setApiRefreshKey(key => key + 1);
+              }).catch(error => {
+                const unauthorized = error instanceof Error && 'status' in error && error.status === 401;
+                setApiConnection(unauthorized ? 'unauthorized' : 'offline');
+                setApiConnectionMessage(unauthorized ? 'Ключ доступа не принят.' : 'Не удалось подключиться. Проверьте соединение.');
+              }).finally(() => setIsLoginSubmitting(false));
+              setApiSession(null);
+            }}
+          >
+            <label htmlFor="admin-access-key" className="block text-sm font-medium text-slate-700">Ключ доступа</label>
+            <input
+              id="admin-access-key"
+              type="password"
+              value={accessKeyDraft}
+              onChange={event => setAccessKeyDraft(event.target.value)}
+              autoComplete="current-password"
+              required
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              aria-describedby="login-status"
+            />
+            <button
+              type="submit"
+              disabled={!accessKeyDraft.trim() || isLoginSubmitting}
+              className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isLoginSubmitting ? 'Вход…' : 'Войти'}
+            </button>
+          </form>
+          <p id="login-status" className="mt-4 text-sm text-slate-500" role="status" aria-live="polite">
+            {apiConnectionMessage}
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell min-h-screen bg-[#fcfdfd] text-slate-800">
@@ -1672,53 +1807,20 @@ export default function App() {
             ))}
           </nav>
 
-          {/* Admin Switcher & Session */}
+          {/* Authenticated session */}
           <div className="px-3 pt-5 border-t border-slate-100 mt-4 space-y-3.5">
-            <div className="text-xs text-slate-400 font-medium uppercase tracking-wider">Профиль</div>
-
-            {apiConnection === 'connected' && apiSession ? (
-              <div className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900">
-                {apiSession.adminName}
-                <span className="ml-2 text-xs font-normal text-slate-500">{apiSession.role === 'MENTOR' ? 'Наставник' : 'Куратор'}</span>
+            <div className="text-xs text-slate-400 font-medium uppercase tracking-wider">Аккаунт</div>
+            {apiSession ? (
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2">
+                <div className="text-sm font-semibold text-slate-900">
+                  {apiSession.adminName}
+                  <span className="ml-2 text-xs font-normal text-slate-500">{apiSession.role === 'MENTOR' ? 'Наставник' : 'Куратор'}</span>
+                </div>
+                <button type="button" onClick={logout} className="text-xs font-medium text-slate-500 hover:text-slate-900">Выйти</button>
               </div>
             ) : (
-            <div className="grid grid-cols-2 gap-1.5 bg-slate-100/80 p-1 rounded-xl text-xs font-medium">
-              <button
-                onClick={() => {
-                  setActiveAdmin('Ксения');
-                  showToast('Активный профиль: Ксения (Главный ментор)');
-                }}
-                className={`py-1.5 rounded-lg transition cursor-pointer text-center ${
-                  activeAdmin === 'Ксения'
-                    ? 'bg-white text-slate-900 font-bold'
-                    : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                Ксения
-              </button>
-              <button
-                onClick={() => {
-                  setActiveAdmin('Катя');
-                  showToast('Активный профиль: Катя (Куратор / Управление)');
-                }}
-                className={`py-1.5 rounded-lg transition cursor-pointer text-center ${
-                  activeAdmin === 'Катя'
-                    ? 'bg-white text-slate-900 font-bold'
-                    : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                Катя
-              </button>
-            </div>
-            )}
-
-            {!(apiConnection === 'connected' && apiSession) && (
-              <div className="flex items-center gap-3 pt-1">
-                <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">{activeAdmin[0]}</div>
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">{activeAdmin}</div>
-                  <div className="text-xs text-slate-500">Локальный режим</div>
-                </div>
+              <div className="text-xs text-slate-500">
+                {apiConnection === 'checking' ? 'Подключение…' : apiConnection === 'needs-token' || apiConnection === 'unauthorized' ? 'Требуется доступ' : 'Нет соединения'}
               </div>
             )}
           </div>
@@ -1730,44 +1832,21 @@ export default function App() {
             <div>
               <h1 className="text-base font-bold text-slate-900 tracking-tight">Панель наставника</h1>
               <p className="text-xs text-slate-500">
-                {apiSession ? `${apiSession.adminName} · ${apiSession.role === 'MENTOR' ? 'Наставник' : 'Куратор'}` : `${activeAdmin} · Локальный режим`}
+                {apiSession ? `${apiSession.adminName} · ${apiSession.role === 'MENTOR' ? 'Наставник' : 'Куратор'}` : apiConnection === 'checking' ? 'Подключение…' : 'Нет соединения'}
               </p>
             </div>
-            <button
-              onClick={() => void handleApiSync()}
-              disabled={isApiSyncing}
-              aria-label="Синхронизировать данные"
-              className="text-slate-500 hover:text-slate-900 transition cursor-pointer p-1.5"
-            >
-              <RefreshCw className="w-4 h-4" strokeWidth={1.8} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void handleApiSync()}
+                disabled={isApiSyncing}
+                aria-label="Синхронизировать данные"
+                className="text-slate-500 hover:text-slate-900 transition cursor-pointer p-1.5"
+              >
+                <RefreshCw className="w-4 h-4" strokeWidth={1.8} />
+              </button>
+              {apiSession && <button type="button" onClick={logout} className="text-xs font-medium text-slate-500 hover:text-slate-900">Выйти</button>}
+            </div>
           </div>
-          {apiConnection !== 'connected' || !apiSession ? (
-          <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold mb-2.5">
-            <button
-              onClick={() => {
-                setActiveAdmin('Ксения');
-                showToast('Активный профиль: Ксения (Главный ментор)');
-              }}
-              className={`py-1.5 rounded-lg transition cursor-pointer text-center ${
-                activeAdmin === 'Ксения' ? 'bg-white text-slate-900 font-bold ' : 'text-slate-500'
-              }`}
-            >
-              Ксения
-            </button>
-            <button
-              onClick={() => {
-                setActiveAdmin('Катя');
-                showToast('Активный профиль: Катя (Куратор потока)');
-              }}
-              className={`py-1.5 rounded-lg transition cursor-pointer text-center ${
-                activeAdmin === 'Катя' ? 'bg-white text-slate-900 font-bold ' : 'text-slate-500'
-              }`}
-            >
-              Катя
-            </button>
-          </div>
-          ) : null}
           <div className="flex gap-2 overflow-x-auto pb-1">
             {tabs.map(t => (
               <button
@@ -1840,20 +1919,13 @@ export default function App() {
                   reports.length === 0 ? (
                     <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/60 p-8">
                     <CheckCheck className="w-8 h-8 text-slate-400 mx-auto mb-3" strokeWidth={1.5} />
-                    <p className="text-lg font-bold text-slate-800">Все черновики проверены</p>
-                    <p className="text-sm text-slate-500 mt-1">Всё проверено — ученицы получили обратную связь в чатах.</p>
-                    <button
-                      onClick={() => setReports(initialReports)}
-                      className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                      Загрузить демо-отчёты
-                    </button>
+                    <p className="text-lg font-bold text-slate-800">Нет отчётов для проверки</p>
+                    <p className="text-sm text-slate-500 mt-1">Новые отчёты появятся здесь.</p>
                   </div>
                 ) : (
                   <div className="space-y-5">
                     {reports.map((r) => (
-                      <div key={r.id} className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
+                      <div key={r.id} className={`inbox-report-card inbox-report-card--pending ${r.isOnTime ? 'is-on-time' : 'is-late'} bg-white rounded-2xl border border-slate-200/60 overflow-hidden`}>
                         {/* Header */}
                         <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100">
                           <div className="flex items-center gap-3.5">
@@ -1866,14 +1938,14 @@ export default function App() {
                                 <span className="text-xs sm:text-sm text-slate-500">@{r.tgUsername}</span>
                                 <span className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md font-mono flex items-center gap-1">
                                   <Clock className="w-3 h-3 text-slate-400" />
-                                  {r.submittedAt}
+                                  {r.submittedAt.replace(/\s*\(опоздание.*?\)/i, '')}
                                 </span>
-                                <span className={`text-xs font-medium px-2 py-0.5 rounded-md border ${
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-md border ${
                                   r.isOnTime
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                    : 'bg-amber-50 text-amber-700 border-amber-100'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-rose-50 text-rose-700 border-rose-200'
                                 }`}>
-                                  {r.isOnTime ? 'в срок' : 'опоздание'}
+                                  {r.isOnTime ? 'в срок · до 21:00' : 'опоздание'}
                                 </span>
                               </div>
                             </div>
@@ -2025,7 +2097,7 @@ export default function App() {
                               <button
                                 onClick={() => void handleApprove(r.id, r.studentName)}
                                 title="Одобрить отчёт (нажмите Enter в строке ввода)"
-                                className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-xs"
+                                className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-xs"
                               >
                                 <CheckCheck className="w-4 h-4" strokeWidth={1.8} />
                                 <span>Одобрить</span>
@@ -2034,9 +2106,9 @@ export default function App() {
                                 type="button"
                                 onClick={() => void handleReject(r.id, r.studentName)}
                                 title="Вернуть отчёт на доработку с указанием правок"
-                                className="flex-1 sm:flex-initial rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition shrink-0 cursor-pointer text-center"
+                                className="flex-1 sm:flex-initial rounded-xl border border-rose-300 text-rose-700 bg-rose-50/50 hover:bg-rose-100 px-4 py-2.5 text-sm font-semibold transition shrink-0 cursor-pointer text-center"
                               >
-                                Вернуть
+                                На доработку
                               </button>
                             </div>
                           </div>
@@ -2053,7 +2125,7 @@ export default function App() {
                   ) : (
                     <div className="space-y-5">
                       {approvedReports.map(r => (
-                        <div key={`approved-${r.id}`} className="bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
+                        <div key={`approved-${r.id}`} className="inbox-report-card inbox-report-card--approved bg-white rounded-2xl border border-slate-200/70 overflow-hidden">
                           {/* Header */}
                           <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/50">
                             <div className="flex items-center gap-3.5">
@@ -2105,7 +2177,7 @@ export default function App() {
                             <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200/70">
                               <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900 uppercase tracking-wider mb-1.5">
                                 <CheckCheck className="w-4 h-4 text-emerald-600" />
-                                <span>Ответ наставника (отправлен в Telegram):</span>
+                                <span>Ответ по отчёту (отправлен в Telegram):</span>
                               </div>
                               <p className="text-sm text-emerald-950 font-medium whitespace-pre-line leading-relaxed">
                                 {r.mentorReply || 'Отчёт принят и зачтён в общий прогресс'}
@@ -2123,35 +2195,57 @@ export default function App() {
             {/* ════════════ TAB: STUDENTS ════════════ */}
             {activeTab === 'students' && (
               <div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-                  <div>
+                {/* 1st Row: Title + Gear Settings + View Mode Switcher */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                  <div className="flex items-center gap-3">
                     <h2 className="text-2xl font-bold tracking-tight text-slate-900">Ученицы</h2>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <div className="relative">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" strokeWidth={1.8} />
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        aria-label="Поиск учениц"
-                        placeholder="Поиск по имени или нише..."
-                        className="text-sm pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-500 transition w-full sm:w-64 placeholder:text-slate-400"
-                      />
-                    </div>
                     <button
                       type="button"
-                      onClick={() => setIsAddingStudent(true)}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
+                      onClick={() => setIsManagingStudents(true)}
+                      title="Настройки состава потока и безопасное управление ученицами"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition cursor-pointer shadow-2xs"
                     >
-                      <Plus className="w-4 h-4" />
-                      <span>Добавить ученицу</span>
+                      <Settings className="w-4 h-4 text-slate-600" />
+                      <span>Настройки</span>
+                    </button>
+                  </div>
+
+                  {/* View Mode Toggle: Calendar vs Zoom Board */}
+                  <div className="flex items-center gap-1 p-1 bg-white border border-slate-200 rounded-xl shrink-0 self-start sm:self-auto">
+                    <button
+                      onClick={() => setStudentsViewMode('calendar')}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        studentsViewMode === 'calendar' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Календарь дисциплины
+                    </button>
+                    <button
+                      onClick={() => setStudentsViewMode('zooms')}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                        studentsViewMode === 'zooms' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Video className="w-3.5 h-3.5" />
+                       <span>Созвоны потока</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Sub-tabs & Filter Bar for Quick Student Checks */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                {/* 2nd Row: Search bar & Quick Category Filter Pills */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6">
+                  <div className="relative w-full md:w-72">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" strokeWidth={1.8} />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      aria-label="Поиск учениц"
+                      placeholder="Поиск по имени или нише..."
+                      className="text-sm pl-10 pr-4 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-500 transition w-full placeholder:text-slate-400"
+                    />
+                  </div>
+
                   {/* Category Filter Pills */}
                   <div className="flex flex-wrap items-center gap-2">
                     {[
@@ -2166,7 +2260,7 @@ export default function App() {
                         onClick={() => setStudentsFilter(tab.id as typeof studentsFilter)}
                         className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                           studentsFilter === tab.id
-                            ? 'bg-slate-900 text-white'
+                            ? 'bg-slate-900 text-white shadow-xs'
                             : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                         }`}
                       >
@@ -2177,27 +2271,6 @@ export default function App() {
                         <span>{tab.label}</span>
                       </button>
                     ))}
-                  </div>
-
-                  {/* View Mode Toggle: Calendar vs Zoom Board */}
-                  <div className="flex items-center gap-1 p-1 bg-white border border-slate-200 rounded-xl shrink-0 self-start md:self-auto">
-                    <button
-                      onClick={() => setStudentsViewMode('calendar')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                        studentsViewMode === 'calendar' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Календарь
-                    </button>
-                    <button
-                      onClick={() => setStudentsViewMode('zooms')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                        studentsViewMode === 'zooms' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      <Video className="w-3.5 h-3.5" />
-                      <span>Созвоны</span>
-                    </button>
                   </div>
                 </div>
 
@@ -2258,15 +2331,20 @@ export default function App() {
                     </div>
 
                     <div className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
+                      {filtered.length === 0 ? (
+                        <p className="px-6 py-10 text-center text-sm text-slate-500">
+                          {students.length === 0 ? 'Добавьте учениц, чтобы увидеть календарь дисциплины.' : 'По выбранным условиям ученицы не найдены.'}
+                        </p>
+                      ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-left">
                           <thead>
                             <tr className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-100 bg-slate-50/50">
-                              <th className="py-4 px-6">Ученица & Zoom-созвоны</th>
+                              <th className="py-4 px-6">Ученица</th>
                               {['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d => (
                                 <th key={d} className={`py-4 px-2 text-center w-12 ${d === 'Сб' ? 'text-indigo-600 font-bold' : ''}`}>
                                   {d}
-                                  {d === 'Сб' && <span className="block text-xs text-indigo-400 font-normal">07.11</span>}
+                                  {d === 'Сб' && saturdayDateLabel && <span className="block text-xs text-indigo-400 font-normal">{saturdayDateLabel}</span>}
                                 </th>
                               ))}
                               <th className="py-4 px-4 text-center">Статус</th>
@@ -2293,97 +2371,27 @@ export default function App() {
                                           <Eye className="w-3 h-3 text-indigo-600" />
                                           <span>Досье</span>
                                         </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => setManagingZoomStudent(s)}
-                                          title="Управление Zoom-созвонами и записями"
-                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition cursor-pointer"
-                                        >
-                                          <Video className="w-3 h-3 text-indigo-600" />
-                                          <span>Созвоны</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => setEditingStudent(s)}
-                                          title="Редактировать профиль и Точку А/Б"
-                                          className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
-                                        >
-                                          <Pencil className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => void deleteStudent(s.id, s.fullName)}
-                                          title="Удалить ученицу"
-                                          className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                        {s.telegram && (
+                                          {s.telegram && (
                                           <button
                                             onClick={() => {
                                               navigator.clipboard?.writeText(s.telegram || '');
                                               showToast(`Юзернейм ${s.telegram} скопирован для диалога в TG`);
                                             }}
-                                            className="text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition cursor-pointer"
+                                            className="text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition cursor-pointer"
                                             title="Скопировать юзернейм ученицы для Telegram"
                                           >
-                                            <Send className="w-3 h-3" />
+                                            <Send className="w-3 h-3 text-indigo-500" />
                                             <span>{s.telegram}</span>
                                           </button>
                                         )}
                                         {s.isOnPause && (
-                                          <span className="text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                                          <span className="text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
                                             <Coffee className="w-3 h-3" />
                                             <span>на паузе</span>
                                           </span>
                                         )}
                                       </div>
-                                      <div className="text-xs sm:text-sm text-slate-500">{s.niche}</div>
-                                      
-                                      {/* Zoom Calls Progress Line */}
-                                      {s.zoomSessions && s.zoomSessions.length > 0 && (
-                                        <div className="mt-2 pt-2 border-t border-slate-100">
-                                          <div className="flex items-center justify-between text-xs text-slate-600 mb-1.5 gap-2">
-                                            <span className="inline-flex items-center gap-1.5">
-                                              <Video className="w-3.5 h-3.5 text-indigo-500" />
-                                              <span>Следующий: <strong>{s.nextZoomDate || 'не назначен'}</strong></span>
-                                            </span>
-                                            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
-                                              {s.completedZoomsCount} из {s.zoomSessions.length}
-                                            </span>
-                                          </div>
-
-                                          <div className="flex items-center gap-1 flex-wrap">
-                                            {s.zoomSessions.map((session, index) => {
-                                              const isNext = !session.isCompleted && s.zoomSessions?.findIndex(item => !item.isCompleted) === index;
-                                              return (
-                                                <span
-                                                  key={`${s.id}-session-${index}`}
-                                                  title={`Этап ${index + 1}: ${session.isCompleted ? 'проведен' : session.date || 'не назначен'}`}
-                                                  className={`inline-flex items-center justify-center text-xs font-bold w-5 h-5 rounded-md border ${
-                                                    session.isCompleted
-                                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                                                      : isNext
-                                                      ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
-                                                      : 'bg-slate-100 text-slate-400 border-slate-200'
-                                                  }`}
-                                                >
-                                                  {session.isCompleted ? <Check className="w-2.5 h-2.5 text-emerald-700 stroke-[3]" /> : index + 1}
-                                                </span>
-                                              );
-                                            })}
-                                            {s.completedZoomsCount < s.zoomSessions.length && (
-                                              <button
-                                                onClick={() => void markStudentZoomCompleted(s.id, s.fullName)}
-                                                title="Отметить следующий созвон проведенным"
-                                                className="ml-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition cursor-pointer"
-                                              >
-                                                + Зачесть
-                                              </button>
-                                            )}
-                                          </div>
-                                        </div>
-                                      )}
+                                      <div className="text-xs sm:text-sm text-slate-500 mt-0.5">{s.niche}</div>
                                     </div>
                                   </div>
                                 </td>
@@ -2462,125 +2470,151 @@ export default function App() {
                           </tbody>
                         </table>
                       </div>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {/* Configurable calls tracker */}
+                {/* Unified weekly calendar for Ksenia's cohort calls */}
                 {studentsViewMode === 'zooms' && (
-                  <div className="space-y-6">
-                    <div className="bg-white rounded-2xl border border-slate-200/60 p-5 flex items-center justify-between">
+                  <section className="zoom-week-calendar space-y-4" aria-labelledby="zoom-calendar-title">
+                    <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/70 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                       <div>
-                        <h3 className="text-lg font-bold text-slate-900">Созвоны</h3>
+                        <h3 id="zoom-calendar-title" className="text-lg font-bold text-slate-900">Календарь созвонов Ксении</h3>
+                        <p className="mt-1 text-xs text-slate-500">Общее расписание консультаций со всеми ученицами потока</p>
                       </div>
-                      <div className="text-right">
-                        <span className="text-2xl font-bold text-slate-900">
-                          {students.reduce((sum, student) => sum + student.completedZoomsCount, 0)} / {students.reduce((sum, student) => sum + (student.zoomSessions?.length ?? 0), 0)}
-                        </span>
-                        <div className="text-xs text-slate-400">проведено этапов</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setZoomCalendarWeekOffset(offset => offset - 1)}
+                          aria-label="Предыдущая неделя"
+                          title="Предыдущая неделя"
+                          className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <div className="min-w-44 text-center text-sm font-semibold text-slate-800">
+                          {zoomCalendarDays[0].toLocaleDateString('ru-RU', { timeZone: 'Europe/Minsk', day: '2-digit', month: 'long' })}
+                          {' — '}
+                          {zoomCalendarDays[6].toLocaleDateString('ru-RU', { timeZone: 'Europe/Minsk', day: '2-digit', month: 'long', year: 'numeric' })}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setZoomCalendarWeekOffset(offset => offset + 1)}
+                          aria-label="Следующая неделя"
+                          title="Следующая неделя"
+                          className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setZoomCalendarWeekOffset(0)}
+                          disabled={zoomCalendarWeekOffset === 0}
+                          className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-default disabled:opacity-45"
+                        >
+                          Эта неделя
+                        </button>
                       </div>
                     </div>
 
-                    <div className="space-y-5">
-                      {filtered.map(s => {
-                        const sessions = s.zoomSessions ?? [];
-                        const totalSessions = sessions.length;
-                        const completedSessions = sessions.filter(session => session.isCompleted).length;
-                        const nextSession = sessions.find(session => !session.isCompleted);
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1.5 font-semibold text-indigo-700">
+                        На неделе: {zoomCalendarEvents.length} созвонов
+                      </span>
+                      <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 font-semibold text-emerald-700">
+                        Проведено: {zoomCalendarEvents.filter(event => event.session.isCompleted).length}
+                      </span>
+                      <span className="rounded-full border border-amber-100 bg-amber-50 px-3 py-1.5 font-semibold text-amber-800">
+                        Без даты: {unscheduledZoomSessions.length}
+                      </span>
+                    </div>
 
-                        return (
-                          <div key={s.id} className="bg-white rounded-2xl border border-slate-200/60 p-6">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 mb-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-800 flex items-center justify-center font-bold text-sm">
-                                  {s.avatarText}
-                                </div>
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-lg font-bold text-slate-900">{s.fullName}</span>
+                    {zoomCalendarEvents.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-12 text-center">
+                        <Calendar className="mx-auto mb-3 h-7 w-7 text-slate-400" />
+                        <p className="font-semibold text-slate-800">На этой неделе созвонов нет</p>
+                        <p className="mt-1 text-sm text-slate-500">Переключите неделю или назначьте дату встречи в профиле ученицы.</p>
+                      </div>
+                    ) : (
+                      <div className="zoom-week-scroll overflow-x-auto rounded-2xl">
+                        <div className="zoom-week-grid grid min-w-[1120px] grid-cols-7 gap-2.5">
+                          {zoomCalendarDays.map(day => {
+                            const dayKey = getMinskDateKey(day);
+                            const dayEvents = zoomCalendarEvents.filter(event => event.dateKey === dayKey);
+                            const isToday = dayKey === getMinskDateKey(zoomCalendarReferenceDate);
+
+                            return (
+                              <section
+                                key={dayKey}
+                                className={`zoom-week-day min-h-[350px] rounded-xl border ${isToday ? 'is-today border-indigo-300' : 'border-slate-200'}`}
+                                aria-label={day.toLocaleDateString('ru-RU', { timeZone: 'Europe/Minsk', weekday: 'long', day: 'numeric', month: 'long' })}
+                              >
+                                <header className={`zoom-week-day-header sticky top-0 rounded-t-xl border-b px-3 py-3 ${isToday ? 'bg-indigo-50' : 'bg-slate-50'}`}>
+                                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    {day.toLocaleDateString('ru-RU', { timeZone: 'Europe/Minsk', weekday: 'short' }).replace('.', '')}
+                                  </div>
+                                  <div className={`mt-0.5 text-sm font-bold ${isToday ? 'text-indigo-700' : 'text-slate-900'}`}>
+                                    {day.toLocaleDateString('ru-RU', { timeZone: 'Europe/Minsk', day: '2-digit', month: 'long' })}
+                                    {isToday && <span className="ml-1.5 text-[10px] font-semibold uppercase">сегодня</span>}
+                                  </div>
+                                </header>
+                                <div className="space-y-2 p-2">
+                                  {dayEvents.length === 0 ? (
+                                    <div className="px-2 py-5 text-center text-[11px] text-slate-400">Свободно</div>
+                                  ) : dayEvents.map(({ student, session, timeLabel }) => (
                                     <button
+                                      key={`${student.id}-${session.callNumber}`}
                                       type="button"
-                                      onClick={() => setEditingStudent(s)}
-                                      title="Настроить этапы созвонов"
-                                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 transition cursor-pointer text-xs font-semibold"
+                                      onClick={() => setManagingZoomStudent(student)}
+                                      className={`zoom-week-event w-full rounded-lg border p-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${
+                                        session.isCompleted
+                                          ? 'border-emerald-200 bg-emerald-50/80'
+                                          : 'border-indigo-200 bg-white hover:border-indigo-300'
+                                      }`}
                                     >
-                                      <Settings className="w-3.5 h-3.5" />
-                                      <span>Настроить этапы</span>
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className="text-xs font-bold text-slate-900">{timeLabel}</span>
+                                        <span className={`text-[9px] font-semibold ${session.isCompleted ? 'text-emerald-700' : 'text-indigo-700'}`}>
+                                          {session.isCompleted ? 'Проведён' : 'Запланирован'}
+                                        </span>
+                                      </div>
+                                      <div className="mt-1 text-[11px] font-bold text-slate-800">{student.fullName}</div>
+                                      <div className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-600">{session.title}</div>
+                                      {session.zoomLink && <div className="mt-1 text-[10px] font-semibold text-indigo-600">Есть ссылка на встречу</div>}
                                     </button>
-                                    <span className="text-xs text-slate-500">({s.niche})</span>
-                                  </div>
-                                  <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
-                                    <Calendar className="w-3.5 h-3.5" />
-                                    <span>Следующий созвон: <strong>{nextSession?.date || 'не назначен'}</strong></span>
-                                  </div>
+                                  ))}
                                 </div>
-                              </div>
+                              </section>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
-                              <div className="flex items-center gap-3 self-start sm:self-auto">
-                                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                                  {completedSessions}/{totalSessions} проведено
-                                </span>
-                                {completedSessions < totalSessions && (
-                                  <button
-                                    onClick={() => void markStudentZoomCompleted(s.id, s.fullName)}
-                                    className="text-xs font-semibold px-3.5 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-                                  >
-                                    <Check className="w-3.5 h-3.5" />
-                                    <span>Зачесть созвон</span>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            {totalSessions === 0 ? (
-                              <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
-                                Этапы пока не добавлены
-                              </div>
-                            ) : (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {sessions.map((session, index) => {
-                                  const isNext = nextSession === session;
-                                  return (
-                                    <div
-                                      key={`${s.id}-zoom-${index}`}
-                                      className={`p-4 rounded-xl border ${session.isCompleted ? 'bg-slate-50 border-slate-200' : isNext ? 'bg-white border-slate-400' : 'bg-white border-slate-200'}`}
-                                    >
-                                      <div className="flex items-center justify-between gap-2 mb-2">
-                                        <span className="text-xs font-semibold uppercase tracking-wide">Этап {index + 1}</span>
-                                        <span className="text-xs text-slate-500">{session.isCompleted ? 'Проведен' : isNext ? 'Следующий' : 'Запланирован'}</span>
-                                      </div>
-                                      <div className="text-sm font-semibold text-slate-900">{session.title}</div>
-                                      <div className="mt-2 text-xs text-slate-500">{session.date || 'Дата не назначена'}</div>
-                                      {session.keyTakeaway && <p className="mt-2 text-xs text-slate-600">{session.keyTakeaway}</p>}
-                                      <div className="mt-3 flex flex-wrap gap-3 text-xs">
-                                        {session.zoomLink && <a href={session.zoomLink} target="_blank" rel="noreferrer" className="underline underline-offset-2">Подключиться</a>}
-                                        {session.recordingUrl && <a href={session.recordingUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">Запись</a>}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                    {unscheduledZoomSessions.length > 0 && (
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
+                        <span className="font-semibold text-slate-800">Созвоны без даты:</span>{' '}
+                        {unscheduledZoomSessions.length} — откройте досье ученицы, чтобы назначить встречу и добавить её в календарь.
+                      </div>
+                    )}
+                  </section>
                 )}
               </div>
             )}
 
             {/* ════════════ TAB: ANALYTICS ════════════ */}
             {activeTab === 'analytics' && (
-              <div>
+              <div className="analytics-view">
                 {/* Header with Category and Period Controls */}
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-7">
+                <div className="analytics-header flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-7">
                   <div>
                     <h2 className="text-2xl font-bold tracking-tight text-slate-900">Аналитика</h2>
+                    <p className="analytics-subtitle">Результаты потока и динамика каждой ученицы</p>
                   </div>
 
                   {/* Period Switcher */}
-                  <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200/60 rounded-xl self-start lg:self-auto">
+                  <div className="analytics-period-switcher flex items-center gap-1.5 p-1 bg-white border border-slate-200/60 rounded-xl self-start lg:self-auto">
                     {[
                       { id: 'week', label: 'За неделю' },
                       { id: 'month', label: 'За месяц' },
@@ -2589,9 +2623,9 @@ export default function App() {
                       <button
                         key={p.id}
                         onClick={() => setAnalyticsPeriod(p.id as 'week' | 'month' | 'all')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        className={`analytics-period-button px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
                           analyticsPeriod === p.id
-                            ? 'bg-slate-900 text-white'
+                            ? 'is-active bg-slate-900 text-white'
                             : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                         }`}
                       >
@@ -2602,12 +2636,12 @@ export default function App() {
                 </div>
 
                 {/* Sub-Category Switcher: Поток vs По ученицам */}
-                <div className="flex items-center gap-2 border-b border-slate-200 pb-4 mb-7">
+                <div className="analytics-category-switcher flex items-center gap-2 border-b border-slate-200 pb-4 mb-7">
                   <button
                     onClick={() => setAnalyticsCategory('cohort')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
+                    className={`analytics-category-button flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
                       analyticsCategory === 'cohort'
-                        ? 'bg-slate-900 text-white'
+                        ? 'is-active bg-slate-900 text-white'
                         : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
@@ -2616,9 +2650,9 @@ export default function App() {
                   </button>
                   <button
                     onClick={() => setAnalyticsCategory('students')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
+                    className={`analytics-category-button flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
                       analyticsCategory === 'students'
-                        ? 'bg-slate-900 text-white'
+                        ? 'is-active bg-slate-900 text-white'
                         : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
@@ -2633,66 +2667,68 @@ export default function App() {
                     {/* Compact KPI strip (Behance Minimal - no screen hogging) */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                       {/* Metric 1: Revenue */}
-                      <div className="bg-white rounded-2xl border border-slate-200/60 p-5">
+                      <div className="analytics-kpi analytics-kpi--revenue bg-white rounded-2xl border border-slate-200/60 p-5">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Выручка потока</span>
-                          <TrendingUp className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
+                          <span className="analytics-kpi-icon"><TrendingUp className="w-4 h-4" strokeWidth={1.8} /></span>
                         </div>
                         <div className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">
-                          {analyticsPeriod === 'week' ? '223 000 ₽' : analyticsPeriod === 'month' ? '742 000 ₽' : (analyticsRevenue > 0 ? `${analyticsRevenue.toLocaleString('ru-RU')} ₽` : '895 000 ₽')}
+                          {analyticsRevenue.toLocaleString('ru-RU')} ₽
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
                           {analyticsPeriod === 'week'
-                            ? '+223 000 ₽ за 7 дней'
+                            ? 'за 7 дней'
                             : analyticsPeriod === 'month'
-                            ? '+310% за 30 дней'
-                            : `${calculateMultiplier(currentIncomeTotal, initialIncomeTotal)}× к суммарному доходу на старте`}
+                            ? 'за 30 дней'
+                            : initialIncomeTotal > 0
+                            ? `${calculateMultiplier(currentIncomeTotal, initialIncomeTotal)}× к суммарному доходу на старте`
+                            : 'по ученицам'}
                         </div>
                       </div>
 
                       {/* Metric 2: Reels */}
-                      <div className="bg-white rounded-2xl border border-slate-200/60 p-5">
+                      <div className="analytics-kpi analytics-kpi--content bg-white rounded-2xl border border-slate-200/60 p-5">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Reels проверено</span>
-                          <Video className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
+                          <span className="analytics-kpi-icon"><Video className="w-4 h-4" strokeWidth={1.8} /></span>
                         </div>
                         <div className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">
-                          {analyticsPeriod === 'week' ? '17' : analyticsPeriod === 'month' ? '57' : (totalReelsCount || '66')}
+                          {totalReelsCount}
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
-                          {analyticsPeriod === 'week' ? '17 черновиков за неделю' : analyticsPeriod === 'month' ? '57 черновиков за 30 дней' : '66 черновиков за поток'}
+                          {analyticsPeriod === 'week' ? 'за неделю' : analyticsPeriod === 'month' ? 'за 30 дней' : 'за поток'}
                         </div>
                       </div>
 
                       {/* Metric 3: Average Ticket */}
-                      <div className="bg-white rounded-2xl border border-slate-200/60 p-5">
+                      <div className="analytics-kpi analytics-kpi--ticket bg-white rounded-2xl border border-slate-200/60 p-5">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Средний чек</span>
-                          <BarChart3 className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
+                          <span className="analytics-kpi-icon"><BarChart3 className="w-4 h-4" strokeWidth={1.8} /></span>
                         </div>
                         <div className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">
-                          {averageTicket > 0 ? `${averageTicket.toLocaleString('ru-RU')} ₽` : '40 600 ₽'}
+                          {averageTicket > 0 ? `${averageTicket.toLocaleString('ru-RU')} ₽` : '—'}
                         </div>
                         <div className="text-xs text-slate-500 mt-1">среднее по {students.length} ученицам</div>
                       </div>
 
                       {/* Metric 4: Direct Mailings */}
-                      <div className="bg-white rounded-2xl border border-slate-200/60 p-5">
+                      <div className="analytics-kpi analytics-kpi--outreach bg-white rounded-2xl border border-slate-200/60 p-5">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Рассылок (Direct)</span>
-                          <MessageSquare className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
+                          <span className="analytics-kpi-icon"><MessageSquare className="w-4 h-4" strokeWidth={1.8} /></span>
                         </div>
                         <div className="text-2xl font-bold text-slate-900 mt-2">
-                          {analyticsPeriod === 'week' ? '204' : analyticsPeriod === 'month' ? '590' : (totalMailingsCount || '702')}
+                          {totalMailingsCount}
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
-                          {analyticsPeriod === 'week' ? '204 рассылки за 7 дней' : analyticsPeriod === 'month' ? '590 рассылок за месяц' : '702 за поток'}
+                          {analyticsPeriod === 'week' ? 'за 7 дней' : analyticsPeriod === 'month' ? 'за месяц' : 'за поток'}
                         </div>
                       </div>
                     </div>
 
                     {/* Secondary Inline Bar: Carousels, Storytells, New Clients */}
-                    <div className="bg-white rounded-2xl border border-slate-200/60 p-4 px-6 flex flex-wrap items-center justify-between gap-4 text-sm">
+                    <div className="analytics-secondary-metrics bg-white rounded-2xl border border-slate-200/60 p-4 px-6 flex flex-wrap items-center justify-between gap-4 text-sm">
                       <div className="flex items-center gap-2">
                         <Layers className="w-4 h-4 text-slate-400" strokeWidth={1.8} />
                         <span className="text-slate-500">Карусели:</span>
@@ -2710,7 +2746,7 @@ export default function App() {
                       <div className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-slate-400" strokeWidth={1.8} />
                         <span className="text-slate-500">Новые клиенты:</span>
-                        <span className="font-bold text-indigo-600">
+                        <span className="analytics-positive-value font-bold text-indigo-600">
                           +{totalNewClientsCount}
                         </span>
                         <span className="text-xs text-slate-400">(субботний опрос)</span>
@@ -2721,12 +2757,18 @@ export default function App() {
                     </div>
 
                     {/* Cohort Performance Breakdown Table */}
-                    <div className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
-                      <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                        <div className="text-sm font-bold text-slate-900 uppercase tracking-wider">Сводная динамика учениц потока</div>
+                    <div className="analytics-table-card bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
+                      <div className="analytics-section-heading px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-bold text-slate-900 uppercase tracking-wider">Сводная динамика учениц потока</div>
+                          <p className="analytics-section-caption">Нажмите на строку, чтобы открыть подробную аналитику</p>
+                        </div>
                       </div>
+                      {students.length === 0 ? (
+                        <p className="px-6 py-10 text-center text-sm text-slate-500">Данные появятся после добавления учениц и первых отчётов.</p>
+                      ) : (
                       <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
+                        <table className="analytics-table w-full text-left text-sm">
                           <thead>
                             <tr className="bg-slate-50/70 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-100">
                               <th className="px-6 py-3.5">Ученица</th>
@@ -2768,7 +2810,7 @@ export default function App() {
                                   <td className="px-4 py-4 font-semibold text-slate-900">
                                     {incomeDisplay}
                                     {analyticsPeriod === 'all' && (
-                                      <span className="ml-1.5 text-xs text-emerald-600 font-bold">
+                                      <span className="analytics-growth-badge ml-1.5 text-xs text-emerald-600 font-bold">
                                         ×{calculateMultiplier(s.currentIncome, s.initialIncome)}
                                       </span>
                                     )}
@@ -2782,18 +2824,18 @@ export default function App() {
                                   <td className="px-4 py-4 text-slate-700 font-semibold">
                                     {mailingsDisp}
                                   </td>
-                                  <td className="px-4 py-4 text-indigo-600 font-bold">
+                                  <td className="analytics-positive-value px-4 py-4 text-indigo-600 font-bold">
                                     +{clientsDisp}
                                   </td>
                                   <td className="px-4 py-4">
-                                    <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-semibold ${
-                                      discDisp >= 90 ? 'bg-emerald-50 text-emerald-700' : discDisp >= 75 ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
+                                    <span className={`analytics-discipline-badge ${
+                                      discDisp >= 90 ? 'is-good' : discDisp >= 75 ? 'is-warning' : 'is-low'
                                     }`}>
                                       {discDisp}%
                                     </span>
                                   </td>
                                   <td className="px-6 py-4 text-right">
-                                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+                                    <span className="analytics-row-link inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700">
                                       <span>Подробнее</span>
                                       <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={2} />
                                     </span>
@@ -2804,27 +2846,34 @@ export default function App() {
                           </tbody>
                         </table>
                       </div>
+                      )}
                     </div>
                   </div>
                 )}
 
                 {/* ──────── CATEGORY 2: INDIVIDUAL STUDENT ANALYTICS ──────── */}
                 {analyticsCategory === 'students' && (
+                  students.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white py-16 text-center">
+                      <Users className="mx-auto mb-3 h-8 w-8 text-slate-300" strokeWidth={1.5} />
+                      <p className="font-semibold text-slate-800">Нет данных по ученицам</p>
+                      <p className="mt-1 text-sm text-slate-500">Добавьте ученицу, чтобы увидеть индивидуальную аналитику.</p>
+                    </div>
+                  ) : (
                   <div className="space-y-6">
                     {/* Student selector pills */}
-                    <div>
+                    <div className="analytics-student-picker">
                       <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
                         Ученица
                       </div>
                       <div className="flex flex-wrap gap-2.5">
-                        {/* studentDisciplines.map(s => ( */}
-                        {(students.length > 0 ? students : studentDisciplines).map(s => (
+                        {students.map(s => (
                           <button
                             key={s.id}
                             onClick={() => setSelectedStudent(s)}
-                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer ${
+                            className={`analytics-student-button flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer ${
                               selectedStudent.id === s.id
-                                ? 'bg-slate-900 text-white'
+                                ? 'is-active bg-slate-900 text-white'
                                 : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
                             }`}
                           >
@@ -2840,13 +2889,13 @@ export default function App() {
                     </div>
 
                     {/* Detailed Student Analytics Dossier */}
-                    <div className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
+                    <div className="analytics-student-card bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
                       {/* Student Card Top Bar */}
                       <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
                           <div className="flex items-center gap-3">
                             <h3 className="text-xl font-bold text-slate-900">{selectedStudent.fullName}</h3>
-                            <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                            <span className={`analytics-track-badge text-xs font-semibold px-2.5 py-0.5 rounded-full ${
                               selectedStudent.isOnPause ? 'bg-slate-100 text-slate-600' : 'bg-emerald-50 text-emerald-700'
                             }`}>
                               {selectedStudent.isOnPause ? 'На паузе (болезнь)' : 'Активный трек'}
@@ -2855,37 +2904,54 @@ export default function App() {
                           <div className="text-xs sm:text-sm text-slate-500 mt-1">{selectedStudent.niche} · {selectedStudent.telegram || 'Telegram не указан'}</div>
                         </div>
 
-                        {/* Copy Case Button */}
-                        <button
-                          onClick={handleCopyCase}
-                          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition cursor-pointer self-start sm:self-auto shrink-0"
-                        >
-                          <Copy className="w-4 h-4" strokeWidth={1.8} />
-                          <span>Скопировать кейс для сторис</span>
-                        </button>
+                        {/* Student Status Toggle (Replacing Copy Case Button) */}
+                        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => void toggleStudentPause(selectedStudent.id)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition cursor-pointer shadow-2xs ${
+                              selectedStudent.isOnPause
+                                ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                            }`}
+                            title="Переключить статус ученицы (активный трек / пауза)"
+                          >
+                            {selectedStudent.isOnPause ? (
+                              <>
+                                <Coffee className="w-3.5 h-3.5 text-amber-600" />
+                                <span>Статус: На паузе</span>
+                              </>
+                            ) : (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Статус: Активный трек</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
 
                       {/* Financial Growth Grid (Point A -> Point B & Period Metrics) */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
-                        <div className="px-6 py-5">
+                      <div className="analytics-financial-grid grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
+                        <div className="analytics-financial-metric px-6 py-5">
                           <div className="text-xs text-slate-400 uppercase font-semibold mb-1">Точка А</div>
                           <div className="text-xl sm:text-2xl font-bold text-slate-900">{selectedStudent.initialIncome.toLocaleString('ru-RU')} ₽</div>
                           <div className="text-xs text-slate-500 mt-0.5">чек: {selectedStudent.initialAvgTicket.toLocaleString('ru-RU')} ₽</div>
                         </div>
-                        <div className="px-6 py-5">
+                        <div className="analytics-financial-metric analytics-financial-metric--current px-6 py-5">
                           <div className="text-xs text-slate-400 uppercase font-semibold mb-1">Точка Б (текущий)</div>
-                          <div className="text-xl sm:text-2xl font-bold text-emerald-600">{selectedStudent.currentIncome.toLocaleString('ru-RU')} ₽</div>
+                          <div className="analytics-positive-value text-xl sm:text-2xl font-bold text-emerald-600">{selectedStudent.currentIncome.toLocaleString('ru-RU')} ₽</div>
                           <div className="text-xs text-slate-500 mt-0.5">чек: {selectedStudent.currentAvgTicket.toLocaleString('ru-RU')} ₽</div>
                         </div>
-                        <div className="px-6 py-5">
+                        <div className="analytics-financial-metric analytics-financial-metric--growth px-6 py-5">
                           <div className="text-xs text-slate-400 uppercase font-semibold mb-1">Рост дохода</div>
                           <div className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-1.5">
                             <TrendingUp className="w-5 h-5 text-indigo-600" strokeWidth={2} />
                             ×{calculateMultiplier(selectedStudent.currentIncome, selectedStudent.initialIncome)}
                           </div>
-                          <div className="text-xs text-indigo-600 font-medium mt-0.5">+{(selectedStudent.currentIncome - selectedStudent.initialIncome).toLocaleString('ru-RU')} ₽ к старту</div>
+                          <div className="analytics-positive-value text-xs text-indigo-600 font-medium mt-0.5">+{(selectedStudent.currentIncome - selectedStudent.initialIncome).toLocaleString('ru-RU')} ₽ к старту</div>
                         </div>
-                        <div className="px-6 py-5">
+                        <div className="analytics-financial-metric px-6 py-5">
                           <div className="text-xs text-slate-400 uppercase font-semibold mb-1">
                             {analyticsPeriod === 'week' ? 'Доход за неделю' : analyticsPeriod === 'month' ? 'Доход за месяц' : 'Средний чек'}
                           </div>
@@ -2906,8 +2972,8 @@ export default function App() {
                         <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
                           Контент и активность из Telegram ({analyticsPeriod === 'week' ? 'за неделю' : analyticsPeriod === 'month' ? 'за месяц' : 'за весь период'}):
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-6 gap-4">
-                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/60">
+                        <div className="analytics-activity-grid grid grid-cols-2 sm:grid-cols-6 gap-4">
+                          <div className="analytics-activity-card bg-white p-3.5 rounded-xl border border-slate-200/60">
                             <div className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                               <Video className="w-3.5 h-3.5 text-indigo-500" />
                               <span>Reels</span>
@@ -2918,7 +2984,7 @@ export default function App() {
                             <div className="text-xs text-slate-400">из {selectedStudent.totalReels} за поток</div>
                           </div>
 
-                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/60">
+                          <div className="analytics-activity-card bg-white p-3.5 rounded-xl border border-slate-200/60">
                             <div className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                               <Layers className="w-3.5 h-3.5 text-indigo-500" />
                               <span>Карусели</span>
@@ -2929,7 +2995,7 @@ export default function App() {
                             <div className="text-xs text-slate-400">из {selectedStudent.totalCarousels} за поток</div>
                           </div>
 
-                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/60">
+                          <div className="analytics-activity-card bg-white p-3.5 rounded-xl border border-slate-200/60">
                             <div className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                               <Smartphone className="w-3.5 h-3.5 text-indigo-500" />
                               <span>Сторителлы</span>
@@ -2940,7 +3006,7 @@ export default function App() {
                             <div className="text-xs text-slate-400">из {selectedStudent.totalStorytells} за поток</div>
                           </div>
 
-                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/60">
+                          <div className="analytics-activity-card bg-white p-3.5 rounded-xl border border-slate-200/60">
                             <div className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                               <MessageSquare className="w-3.5 h-3.5 text-indigo-500" />
                               <span>Рассылки</span>
@@ -2951,18 +3017,18 @@ export default function App() {
                             <div className="text-xs text-slate-400">из {selectedStudent.totalMailings} за поток</div>
                           </div>
 
-                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/60">
+                          <div className="analytics-activity-card analytics-activity-card--clients bg-white p-3.5 rounded-xl border border-slate-200/60">
                             <div className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                               <Users className="w-3.5 h-3.5 text-indigo-500" />
                               <span>Новые клиенты</span>
                             </div>
-                            <div className="text-lg font-bold text-indigo-600">
+                            <div className="analytics-positive-value text-lg font-bold text-indigo-600">
                               +{selectedStudentPeriodStats.newClients}
                             </div>
                             <div className="text-xs text-slate-400">из {selectedStudent.totalNewClients} за поток</div>
                           </div>
 
-                          <div className="bg-white p-3.5 rounded-xl border border-slate-200/60">
+                          <div className="analytics-activity-card analytics-activity-card--discipline bg-white p-3.5 rounded-xl border border-slate-200/60">
                             <div className="text-xs text-slate-400 flex items-center gap-1 mb-1">
                               <CheckCheck className="w-3.5 h-3.5 text-emerald-500" />
                               <span>Дисциплина</span>
@@ -2982,7 +3048,7 @@ export default function App() {
                             Краткая сводка рефлексии ({analyticsPeriod === 'week' ? 'за неделю' : analyticsPeriod === 'month' ? 'за месяц' : 'за весь период'})
                           </span>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                        <div className="analytics-reflection-grid grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
                             <div className="text-xs font-medium text-slate-400 mb-1">Эмоциональный трек & затыки</div>
                             <div className="text-slate-800 leading-relaxed font-medium">
@@ -3010,13 +3076,13 @@ export default function App() {
                           `Средний чек: вырос с ${selectedStudent.initialAvgTicket.toLocaleString('ru-RU')} ₽ до ${selectedStudent.currentAvgTicket.toLocaleString('ru-RU')} ₽\n` +
                           `Проверено: ${selectedStudent.totalReels} Reels, ${selectedStudent.totalCarousels} каруселей, ${selectedStudent.totalStorytells} сторителлов\n` +
                           `Исходящий трафик: ${selectedStudent.totalMailings} рассылок по скрипту\n` +
-                          `Прирост новых клиентов: +${selectedStudent.totalNewClients}\n` +
-                          `Дисциплина сдачи: ${selectedStudent.disciplineRate}%\n\n` +
-                          `«Она просто перестала сливать дедлайны и внедрила ежедневный трекинг ключевых действий»`}
+                           `Прирост новых клиентов: +${selectedStudent.totalNewClients}\n` +
+                           `Дисциплина сдачи: ${selectedStudent.disciplineRate}%`}
                         </div>
                       </div>
                     </div>
                   </div>
+                  )
                 )}
               </div>
             )}
@@ -3031,16 +3097,6 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-2.5 self-start sm:self-auto">
-                    <button
-                      onClick={() => void handleApiSync()}
-                      disabled={isApiSyncing}
-                      className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5"
-                      title="Синхронизировать данные с сервером и Telegram"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{isApiSyncing ? 'Синхронизация…' : 'Синхронизировать'}</span>
-                    </button>
-
                     {promotionSubTab === 'scripts' && (
                       <button
                         onClick={() => {
@@ -3398,7 +3454,7 @@ export default function App() {
                     <h2 className="text-2xl font-bold tracking-tight text-slate-900">Настройки</h2>
                   </div>
 
-                  <div className="flex items-center gap-2.5 self-start sm:self-auto">
+                  <div className="hidden md:flex items-center gap-2.5 self-start sm:self-auto">
                     <button
                       onClick={() => void handleApiSync()}
                       disabled={isApiSyncing}
@@ -3407,14 +3463,6 @@ export default function App() {
                     >
                       <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
                       <span>{isApiSyncing ? 'Синхронизация…' : 'Синхронизировать'}</span>
-                    </button>
-                    <button
-                      onClick={exportFullBackup}
-                      className="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-                      title="Скачать полную резервную копию базы"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Скачать бэкап (JSON)</span>
                     </button>
                   </div>
                 </div>
@@ -3631,132 +3679,17 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Direct Magic Links / Access Tokens Card */}
-                <div className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 hover:border-slate-300 transition">
-                  <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-                    <ShieldCheck className="w-5 h-5 text-indigo-600" />
+                <section className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-3" aria-labelledby="server-connection-title">
+                  <div className="flex items-center justify-between gap-4">
                     <div>
-                      <h3 className="text-base font-bold text-slate-900">Быстрый вход и Magic-ссылки</h3>
-                      <p className="text-xs text-slate-500">Ссылки для мгновенного входа без ввода паролей для Ксении и Кати</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 rounded-xl border border-slate-200/70 bg-slate-50/50 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-xs font-bold text-slate-900 block">Ксения (Главный наставник)</span>
-                          <span className="text-xs text-slate-500">Полный доступ ко всем тарифам, кейсам и финансам</span>
-                        </div>
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
-                          Наставник
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => copyMagicLink('ksenia')}
-                        className="w-full px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Скопировать ссылку для Ксении</span>
-                      </button>
-                    </div>
-
-                    <div className="p-4 rounded-xl border border-slate-200/70 bg-slate-50/50 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-xs font-bold text-slate-900 block">Катя (Куратор потока)</span>
-                          <span className="text-xs text-slate-500">Проверка отчётов, скрипты удержания, созвоны</span>
-                        </div>
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          Куратор
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => copyMagicLink('katya')}
-                        className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Скопировать ссылку для Кати</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Server Connection & Token Override */}
-                <section className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4" aria-labelledby="server-connection-title">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 id="server-connection-title" className="text-base font-bold text-slate-900">Подключение и синхронизация базы</h3>
-                      <p className="mt-1 text-xs text-slate-500">При доступном сервере данные синхронизируются с базой. При сбое сохраняется локальная копия.</p>
+                      <h3 id="server-connection-title" className="text-base font-bold text-slate-900">Состояние сервера</h3>
+                      <p className="mt-1 text-xs text-slate-500">Статус подключения к рабочей базе данных.</p>
                     </div>
                     <span className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
-                      {apiConnection === 'connected' ? 'Подключено' : apiConnection === 'checking' ? 'Проверка' : apiConnection === 'needs-token' ? 'Нужен токен' : apiConnection === 'unauthorized' ? 'Нет доступа' : 'Локальный режим'}
+                      {apiConnection === 'connected' ? 'Подключено' : apiConnection === 'checking' ? 'Подключение…' : apiConnection === 'needs-token' || apiConnection === 'unauthorized' ? 'Нет доступа' : 'Нет соединения'}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-600" role="status">{apiConnectionMessage}</p>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <input
-                      type="password"
-                      value={adminTokenDraft}
-                      onChange={event => setAdminTokenDraft(event.target.value)}
-                      autoComplete="new-password"
-                      aria-label="Токен администратора"
-                      placeholder="Токен администратора"
-                      className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAdminToken(adminTokenDraft.trim());
-                        showToast(adminTokenDraft.trim() ? 'Проверяем токен администратора' : 'Включен локальный режим');
-                      }}
-                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white cursor-pointer"
-                    >
-                      Подключить
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAdminTokenDraft('');
-                        setAdminToken('');
-                        saveAdminToken('');
-                      }}
-                      disabled={Boolean(import.meta.env.VITE_ADMIN_TOKEN)}
-                      className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 cursor-pointer"
-                    >
-                      Локально
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-                    <span className="text-slate-400">Быстрый вход:</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const token = 'magic-ksenia-mentor-token-998877';
-                        setAdminTokenDraft(token);
-                        setAdminToken(token);
-                        saveAdminToken(token);
-                        showToast('Вход выполнен: Наставник Ксения');
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-medium transition cursor-pointer"
-                    >
-                      🌸 Ксения (Наставник)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const token = 'magic-katya-curator-token-112233';
-                        setAdminTokenDraft(token);
-                        setAdminToken(token);
-                        saveAdminToken(token);
-                        showToast('Вход выполнен: Куратор Катя');
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium transition cursor-pointer"
-                    >
-                      📋 Катя (Куратор)
-                    </button>
-                  </div>
+                  <p className="text-sm text-slate-600" role="status" aria-live="polite">{apiConnectionMessage}</p>
                 </section>
 
                 {/* Message processing and integrity controls */}
@@ -3823,11 +3756,11 @@ export default function App() {
                       </button>
                     </div>
 
-                    {/* Setting 9: Zoom Auto Detect */}
+                    {/* Setting 9: Video Meeting Link Auto Detect */}
                     <div className="py-3.5 flex items-center justify-between">
                       <div>
-                        <div className="text-sm font-semibold text-slate-900">Авто-определение Zoom-созвонов и синхронизация календаря</div>
-                        <div className="text-xs text-slate-500">Автоматический учёт проведённых этапов наставничества при загрузке ссылки на запись</div>
+                        <div className="text-sm font-semibold text-slate-900">Сохранять ссылки на Zoom, Meet и Телемост из Telegram</div>
+                        <div className="text-xs text-slate-500">Записывает ссылку, время отправки и сообщение-источник; приглашение не засчитывается как проведённый созвон</div>
                       </div>
                       <button
                         onClick={() => toggleSystemSetting('zoomAutoDetectEnabled', 'Авто-определение Zoom-созвонов')}
@@ -3843,7 +3776,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Backup & Reset Card */}
+                {/* Data export */}
                 <div className="bg-white rounded-2xl border border-slate-200/60 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div>
                     <h3 className="text-base font-bold text-slate-900">Экспорт данных потока</h3>
@@ -3855,24 +3788,7 @@ export default function App() {
                       className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>Скачать бэкап</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        requestConfirm({
-                          title: 'Сбросить демо-данные?',
-                          message: 'Сбросить все данные к первоначальным демонстрационным значениям? Сохранённые локально изменения будут очищены.',
-                          confirmLabel: 'Сбросить к демо',
-                          isDanger: true,
-                          onConfirm: () => {
-                            localStorage.clear();
-                            window.location.reload();
-                          },
-                        });
-                      }}
-                      className="px-4 py-2 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition cursor-pointer"
-                    >
-                      Сброс к демо
+                      <span>Скачать данные</span>
                     </button>
                   </div>
                 </div>
@@ -3902,7 +3818,16 @@ export default function App() {
         onSubmit={addStudent}
       />
 
-      {/* ─── MODAL 2: STUDENT PROFILE & FINANCIALS EDITOR ─── */}
+      {/* ─── MODAL 2A: STUDENT SETTINGS & ROSTER MANAGEMENT ─── */}
+      <StudentSettingsModal
+        isOpen={isManagingStudents}
+        onClose={() => setIsManagingStudents(false)}
+        students={students}
+        onEditStudent={s => setEditingStudent(s)}
+        onAddStudent={() => setIsAddingStudent(true)}
+      />
+
+      {/* ─── MODAL 2B: STUDENT PROFILE & FINANCIALS EDITOR ─── */}
       <EditStudentModal
         student={editingStudent}
         setEditingStudent={setEditingStudent}
@@ -3911,6 +3836,7 @@ export default function App() {
         addEditingZoomSession={addEditingZoomSession}
         removeEditingZoomSession={removeEditingZoomSession}
         updateEditingZoomSession={updateEditingZoomSession}
+        onDelete={deleteStudent}
       />
 
       {/* ─── MODAL 3: SCRIPT EDITOR / CREATOR ─── */}

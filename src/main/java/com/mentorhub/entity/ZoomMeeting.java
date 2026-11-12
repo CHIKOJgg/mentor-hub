@@ -38,6 +38,18 @@ public class ZoomMeeting {
     @Column(name = "scheduled_at")
     private Instant scheduledAt;
 
+    @Column(name = "link_sent_at")
+    private Instant linkSentAt;
+
+    @Column(name = "evidence_url", columnDefinition = "TEXT")
+    private String evidenceUrl;
+
+    @Column(name = "source_chat_id")
+    private Long sourceChatId;
+
+    @Column(name = "source_message_id")
+    private Integer sourceMessageId;
+
     @Column(name = "completed_at")
     private Instant completedAt;
 

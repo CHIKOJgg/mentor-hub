@@ -38,7 +38,7 @@ class SystemServiceTest {
         assertThat(status.botUsername()).isEqualTo("MockTestBot");
         assertThat(status.businessConnectionStatus()).isEqualTo("DISCONNECTED");
         assertThat(status.canReplyOnBehalf()).isFalse();
-        assertThat(status.springBootVersion()).isEqualTo("3.4.2");
+        assertThat(status.springBootVersion()).isNotBlank();
         assertThat(status.virtualThreadsEnabled()).isTrue();
         assertThat(status.springAiStatus()).isEqualTo("NOT_CONFIGURED");
         assertThat(status.activeStudentsCount()).isEqualTo(5);

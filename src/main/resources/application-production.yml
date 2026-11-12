@@ -1,0 +1,9 @@
+spring:
+  flyway:
+    locations: classpath:db/production-migration
+    baseline-on-migrate: true
+    baseline-version: 9
+    validate-on-migrate: true
+    # Preserve existing v1-v9 histories while ensuring production only applies
+    # the clean, additive v10 schema reconciliation migration.
+    ignore-migration-patterns: "*:missing"

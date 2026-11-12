@@ -35,8 +35,8 @@ public class AdminTokenAuthenticationFilter extends OncePerRequestFilter {
 
         String token = resolveToken(request);
 
-        if (StringUtils.hasText(token)) {
-            Optional<AdminToken> adminTokenOpt = adminTokenRepository.findByTokenAndIsActiveTrue(token);
+        if (StringUtils.hasText(token) && token.length() <= 512) {
+            Optional<AdminToken> adminTokenOpt = adminTokenRepository.findByTokenAndIsActiveTrue(AdminTokenHasher.hash(token));
 
             if (adminTokenOpt.isPresent()) {
                 AdminToken adminToken = adminTokenOpt.get();
@@ -89,12 +89,6 @@ public class AdminTokenAuthenticationFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
         if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
             return authHeader.substring(7).trim();
-        }
-
-        String paramToken = request.getParameter("token");
-        if (StringUtils.hasText(paramToken)) {
-            log.warn("Security notice: Admin token received via URL query parameter. Header 'X-Admin-Token' or 'Authorization: Bearer' is strongly recommended.");
-            return paramToken.trim();
         }
 
         return null;

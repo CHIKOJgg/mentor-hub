@@ -64,6 +64,7 @@ export interface ApiStudent {
   pauseReason?: string;
   nextZoomDate?: string;
   completedZoomsCount: number;
+  contractZoomQuota?: number;
   weekDays: DayInfo[];
   zoomSessions?: ApiZoomSession[];
 }
@@ -77,6 +78,10 @@ export interface ApiZoomSession {
   zoomUrl?: string;
   recordingUrl?: string;
   scheduledAt?: string;
+  linkSentAt?: string;
+  evidenceUrl?: string;
+  sourceChatId?: number;
+  sourceMessageId?: number;
   completedAt?: string;
   isCompleted: boolean;
   meetingNotes?: string;

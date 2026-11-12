@@ -22,6 +22,7 @@ import org.telegram.telegrambots.meta.api.objects.photo.PhotoSize;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 
 import java.math.BigDecimal;
+import java.net.URI;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -30,6 +31,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,6 +46,7 @@ public class TelegramReportHandler {
     private static final Pattern HASHTAG_DRAFT_PATTERN = Pattern.compile(
             "#(?i)(контент|рилс|карусель|карусели|сторителл|сторис)[:\\s]*([^#\n]*)"
     );
+    private static final Pattern URL_PATTERN = Pattern.compile("(?i)https?://[^\\s<>\\\"']+");
 
     private final DailyReportRepository dailyReportRepository;
     private final StudentRepository studentRepository;
@@ -336,10 +339,6 @@ public class TelegramReportHandler {
             }
         }
 
-        if (settings == null || Boolean.TRUE.equals(settings.getZoomAutoDetectEnabled())) {
-            completeZoomFromMessage(student, rawContent);
-        }
-
         // 9. Accumulate Raw message text without duplicating identical blocks
         String existingRaw = report.getRawMessageText();
         String trimmedRaw = rawContent.trim();
@@ -370,8 +369,8 @@ public class TelegramReportHandler {
             Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
             String timeStr = TIME_FORMATTER.format(report.getSubmittedAt());
             String acknowledgement = wasAlreadySubmitted
-                    ? "Принято на проверку Ксении и Кате (" + timeStr + ")! ✍️ Черновик обновлён."
-                    : "Принято на проверку Ксении и Кате (" + timeStr + ")! ✍️ Черновик сохранён.";
+                    ? "Принято на проверку (" + timeStr + ")! ✍️ Черновик обновлён."
+                    : "Принято на проверку (" + timeStr + ")! ✍️ Черновик сохранён.";
             String businessConnectionId = message.getBusinessConnectionId();
             if (StringUtils.hasText(businessConnectionId)) {
                 telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement, businessConnectionId);
@@ -679,28 +678,133 @@ public class TelegramReportHandler {
         }
     }
 
-    private void completeZoomFromMessage(Student student, String rawContent) {
-        if (zoomMeetingRepository == null || student == null || !StringUtils.hasText(rawContent)) return;
-        Matcher matcher = Pattern.compile("https?://\\S*zoom\\.us/(?:j/|rec/|rec/share/)\\S+", Pattern.CASE_INSENSITIVE).matcher(rawContent);
-        if (!matcher.find()) return;
+    @Transactional
+    public boolean captureZoomLinkFromMessage(Student student, Message message) {
+        if (zoomMeetingRepository == null || student == null || message == null) return false;
+        MentorSetting settings = mentorSettingRepository != null
+                ? mentorSettingRepository.findFirstByOrderByIdAsc().orElse(null)
+                : null;
+        if (settings != null && !Boolean.TRUE.equals(settings.getZoomAutoDetectEnabled())) return false;
+        String rawContent = message.getText() != null ? message.getText() : message.getCaption();
+        if (!StringUtils.hasText(rawContent)) return false;
 
-        ZoomMeeting meeting = zoomMeetingRepository.findFirstByStudentIdAndIsCompletedFalseOrderByScheduledAtAsc(student.getId())
-                .orElse(null);
-        if (meeting == null) return;
+        Matcher matcher = URL_PATTERN.matcher(rawContent);
+        String link = null;
+        boolean isRecording = false;
+        while (matcher.find()) {
+            String candidate = matcher.group().replaceAll("[),.;!?]+$", "");
+            try {
+                URI uri = URI.create(candidate);
+                String host = uri.getHost();
+                if (!isSupportedMeetingHost(host)) continue;
+                link = candidate;
+                String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.ROOT);
+                boolean isZoom = "zoom.us".equalsIgnoreCase(host) || host.toLowerCase(Locale.ROOT).endsWith(".zoom.us");
+                isRecording = isZoom && (path.contains("/rec/") || path.contains("/recording/"));
+                break;
+            } catch (IllegalArgumentException ignored) {
+                // Ignore malformed URLs embedded in a message.
+            }
+        }
+        if (link == null) return false;
+        final String capturedLink = link;
 
-        String link = matcher.group().replaceAll("[),.]+$", "");
-        if (link.toLowerCase().contains("/rec/")) meeting.setRecordingUrl(link);
-        else meeting.setZoomUrl(link);
-        meeting.setIsCompleted(true);
-        meeting.setCompletedAt(Instant.now());
+        List<ZoomMeeting> sessions = zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(student.getId());
+        Long chatId = message.getChat() != null ? message.getChat().getId() : null;
+        Integer messageId = message.getMessageId();
+        if (chatId != null && messageId != null && sessions.stream().anyMatch(session ->
+                Objects.equals(session.getSourceChatId(), chatId) && Objects.equals(session.getSourceMessageId(), messageId))) {
+            return true;
+        }
+
+        Instant messageAt = message.getDate() != null
+                ? Instant.ofEpochSecond(message.getDate().longValue())
+                : Instant.now();
+        final boolean recordingLink = isRecording;
+        ZoomMeeting meeting = sessions.stream()
+                .filter(session -> recordingLink
+                        ? Objects.equals(session.getRecordingUrl(), capturedLink)
+                        : Objects.equals(session.getZoomUrl(), capturedLink))
+                .findFirst()
+                .orElseGet(() -> sessions.stream()
+                .filter(session -> recordingLink
+                        ? StringUtils.hasText(session.getZoomUrl()) && !StringUtils.hasText(session.getRecordingUrl())
+                        : !StringUtils.hasText(session.getZoomUrl()) && !Boolean.TRUE.equals(session.getIsCompleted()))
+                .findFirst()
+                .orElseGet(() -> {
+                    int nextCallNumber = sessions.stream()
+                            .map(ZoomMeeting::getCallNumber)
+                            .filter(Objects::nonNull)
+                            .max(Integer::compareTo)
+                            .orElse(0) + 1;
+                    return ZoomMeeting.builder()
+                            .student(student)
+                            .callNumber(nextCallNumber)
+                            .meetingTitle("Сверхплановая консультация #" + nextCallNumber)
+                            .isCompleted(false)
+                            .build();
+                }));
+
+        if (recordingLink) {
+            meeting.setRecordingUrl(capturedLink);
+            meeting.setIsCompleted(true);
+            meeting.setCompletedAt(messageAt);
+        } else {
+            meeting.setZoomUrl(capturedLink);
+            meeting.setLinkSentAt(messageAt);
+            // Sending an invitation is not proof that the consultation took place.
+        }
+        meeting.setSourceChatId(chatId);
+        meeting.setSourceMessageId(messageId);
+        String evidenceUrl = buildTelegramMessageUrl(message);
+        if (StringUtils.hasText(evidenceUrl)) meeting.setEvidenceUrl(evidenceUrl);
         zoomMeetingRepository.save(meeting);
-        student.setCompletedZoomsCount(Math.toIntExact(zoomMeetingRepository.countByStudentIdAndIsCompletedTrue(student.getId())));
-        student.setNextZoomAt(zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(student.getId()).stream()
-                .filter(item -> !Boolean.TRUE.equals(item.getIsCompleted()))
-                .map(ZoomMeeting::getScheduledAt)
-                .filter(java.util.Objects::nonNull)
-                .min(Comparator.naturalOrder())
-                .orElse(null));
+
+        if (recordingLink) {
+            student.setCompletedZoomsCount(Math.toIntExact(zoomMeetingRepository.countByStudentIdAndIsCompletedTrue(student.getId())));
+            student.setNextZoomAt(zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(student.getId()).stream()
+                    .filter(item -> !Boolean.TRUE.equals(item.getIsCompleted()))
+                    .map(ZoomMeeting::getScheduledAt)
+                    .filter(Objects::nonNull)
+                    .min(Comparator.naturalOrder())
+                    .orElse(null));
+            studentRepository.save(student);
+        }
+        return true;
+    }
+
+    public boolean containsVideoMeetingLink(Message message) {
+        if (message == null) return false;
+        String rawContent = message.getText() != null ? message.getText() : message.getCaption();
+        if (!StringUtils.hasText(rawContent)) return false;
+        Matcher matcher = URL_PATTERN.matcher(rawContent);
+        while (matcher.find()) {
+            try {
+                if (isSupportedMeetingHost(URI.create(matcher.group().replaceAll("[),.;!?]+$", "")).getHost())) return true;
+            } catch (IllegalArgumentException ignored) {
+                // Ignore malformed URLs embedded in a message.
+            }
+        }
+        return false;
+    }
+
+    private boolean isSupportedMeetingHost(String host) {
+        if (!StringUtils.hasText(host)) return false;
+        String normalizedHost = host.toLowerCase(Locale.ROOT);
+        return normalizedHost.equals("zoom.us") || normalizedHost.endsWith(".zoom.us")
+                || normalizedHost.equals("meet.google.com")
+                || normalizedHost.equals("telemost.yandex.ru") || normalizedHost.equals("telemost.yandex.com");
+    }
+
+    private String buildTelegramMessageUrl(Message message) {
+        if (message.getChat() == null || message.getMessageId() == null) return null;
+        String username = message.getChat().getUserName();
+        if (StringUtils.hasText(username)) return "https://t.me/" + username + "/" + message.getMessageId();
+        Long chatId = message.getChat().getId();
+        if (chatId != null && message.getChat().isSuperGroupChat() && chatId.toString().startsWith("-100")) {
+            return "https://t.me/c/" + chatId.toString().replaceFirst("^-100", "") + "/" + message.getMessageId();
+        }
+        return null;
     }
 
     private void appendQuestion(DailyReport report, String questionText) {
