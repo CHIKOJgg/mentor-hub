@@ -1,0 +1,6 @@
+-- Archived: this migration was unsafe for production because it deleted rows
+-- without verifying that they were demo data. It must not be placed in any
+-- configured Flyway location or applied to a live database.
+--
+-- The original migration body is intentionally not retained here: production
+-- secrets and student data must not be altered by a blanket cleanup script.

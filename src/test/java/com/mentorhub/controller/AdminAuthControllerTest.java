@@ -27,6 +27,10 @@ class AdminAuthControllerTest {
 
     @Test
     void loginExchangesAccessKeyForHttpOnlySessionAndLogoutInvalidatesIt() throws Exception {
+        mockMvc.perform(get("/api/auth/session"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated").value(false));
+
         MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
                 .andExpect(status().isOk())
                 .andReturn();
@@ -41,6 +45,7 @@ class AdminAuthControllerTest {
                         .content("{\"accessKey\":\"" + TEST_ACCESS_KEY + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("MENTOR"))
+                .andExpect(jsonPath("$.authenticated").value(true))
                 .andReturn();
 
         MockHttpSession session = (MockHttpSession) loginResult.getRequest().getSession(false);

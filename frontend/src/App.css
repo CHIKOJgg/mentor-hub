@@ -27,6 +27,103 @@
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
 }
 
+.app-shell button,
+.app-shell input,
+.app-shell select {
+  min-height: 44px;
+}
+
+.app-shell textarea {
+  min-height: 96px;
+}
+
+.app-shell button:focus-visible,
+.app-shell a:focus-visible,
+.app-shell input:focus-visible,
+.app-shell select:focus-visible,
+.app-shell textarea:focus-visible {
+  outline: 3px solid #526be8;
+  outline-offset: 2px;
+}
+
+.mobile-bottom-nav {
+  position: fixed;
+  z-index: 30;
+  inset-inline: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-around;
+  gap: 2px;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  border-top: 1px solid #e7e7e7;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 -4px 16px rgb(15 23 42 / 7%);
+  backdrop-filter: blur(14px);
+}
+
+.mobile-bottom-nav__item {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 56px !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 3px 2px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-bottom-nav__item.is-active {
+  background: #f1f3f5;
+  color: #111;
+}
+
+.mobile-bottom-nav__icon-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.mobile-bottom-nav__badge {
+  position: absolute;
+  top: -5px;
+  right: -9px;
+  display: grid;
+  min-width: 17px;
+  min-height: 17px;
+  place-items: center;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #c2413b;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.mobile-bottom-nav__label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-toast {
+  bottom: 1.5rem;
+  max-width: min(92vw, 34rem);
+  text-align: center;
+}
+
 /* Background & neutral container styling */
 .app-shell .bg-slate-50 { background-color: #fafafa; }
 .app-shell .bg-slate-100 { background-color: #f3f4f6; }
@@ -476,7 +573,12 @@
   }
 
   .app-main {
-    padding-top: 10.5rem;
+    padding-top: 5.25rem;
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+
+  .app-toast {
+    bottom: calc(5rem + env(safe-area-inset-bottom));
   }
 
   .app-content h2 {

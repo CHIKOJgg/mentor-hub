@@ -1,6 +1,7 @@
 import type React from 'react';
 import { X, Send, Video, Check, ExternalLink } from 'lucide-react';
 import type { StudentDiscipline, DailyReport } from '../../types';
+import { AccessibleModal } from '../common/AccessibleModal';
 
 interface StudentDossierModalProps {
   student: StudentDiscipline | null;
@@ -26,14 +27,8 @@ export const StudentDossierModal = ({
   if (!student) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-2xl w-full p-6 border border-slate-200 space-y-5 my-8 shadow-2xl"
-        onClick={e => e.stopPropagation()}
-      >
+    <AccessibleModal title={`Досье ученицы ${student.fullName}`} onClose={onClose}>
+      <div className="bg-white rounded-2xl max-w-2xl w-full p-5 border border-slate-200 space-y-5 shadow-2xl sm:p-6">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -51,6 +46,8 @@ export const StudentDossierModal = ({
           </div>
           <button
             onClick={onClose}
+            type="button"
+            aria-label="Закрыть досье"
             className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -279,6 +276,6 @@ export const StudentDossierModal = ({
           </button>
         </div>
       </div>
-    </div>
+    </AccessibleModal>
   );
 };

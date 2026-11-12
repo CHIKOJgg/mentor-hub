@@ -35,7 +35,7 @@ class ProductionFlywayMigrationTest {
         Flyway production = productionFlyway();
         production.migrate();
 
-        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("11");
+        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("10");
         assertThat(count("students")).isZero();
         assertThat(count("daily_reports")).isZero();
         assertThat(count("task_rules")).isZero();
@@ -48,7 +48,7 @@ class ProductionFlywayMigrationTest {
     }
 
     @Test
-    void productionBaselineSkipsUnappliedDestructiveLegacyDataFixes() throws Exception {
+    void productionBaselinePreservesExistingDataAndSkipsLegacyDataFixes() throws Exception {
         Flyway legacy = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
@@ -61,8 +61,8 @@ class ProductionFlywayMigrationTest {
         Flyway production = productionFlyway();
         production.migrate();
 
-        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("11");
-        assertThat(count("daily_reports")).isZero();
+        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("10");
+        assertThat(count("daily_reports")).isEqualTo(seededReports);
         assertThat(appliedLegacyDataFixes()).isZero();
         assertThat(count("admin_tokens WHERE is_active = TRUE AND token IN ('magic-ksenia-mentor-token-998877', 'magic-katya-curator-token-112233')"))
                 .isZero();

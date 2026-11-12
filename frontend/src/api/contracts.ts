@@ -124,4 +124,5 @@ export interface ApiCuratorScript {
 export interface ApiAdminSession {
   adminName: string;
   role: string;
+  authenticated: boolean;
 }

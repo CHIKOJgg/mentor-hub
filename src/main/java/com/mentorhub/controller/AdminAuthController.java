@@ -15,6 +15,8 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -44,6 +46,20 @@ public class AdminAuthController {
     @GetMapping("/csrf")
     public CsrfTokenResponse getCsrfToken(CsrfToken csrfToken) {
         return new CsrfTokenResponse(csrfToken.getToken());
+    }
+
+    @GetMapping("/session")
+    public ResponseEntity<AdminSessionDto> getSessionStatus(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated() || authentication instanceof AnonymousAuthenticationToken) {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                    .body(new AdminSessionDto("", "", false));
+        }
+        String role = authentication.getAuthorities().stream()
+                .map(authority -> authority.getAuthority().replaceFirst("^ROLE_", ""))
+                .findFirst()
+                .orElse("");
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(new AdminSessionDto(authentication.getName(), role, true));
     }
 
     @PostMapping("/login")
@@ -84,7 +100,7 @@ public class AdminAuthController {
 
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(new AdminSessionDto(admin.getAdminName(), role));
+                .body(new AdminSessionDto(admin.getAdminName(), role, true));
     }
 
     @PostMapping("/logout")

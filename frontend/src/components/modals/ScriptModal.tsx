@@ -1,5 +1,8 @@
+import { useCallback, useState } from 'react';
 import type React from 'react';
 import { X, Save } from 'lucide-react';
+import { AccessibleModal } from '../common/AccessibleModal';
+import { useModalDismiss } from '../common/useModalDismiss';
 
 export interface ScriptItem {
   title: string;
@@ -36,17 +39,15 @@ export const ScriptModal = ({
   onSave,
   showToast,
 }: ScriptModalProps) => {
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const closeDialog = useCallback(() => { setHasUnsavedChanges(false); onClose(); }, [onClose]);
+  const requestClose = useModalDismiss(closeDialog, hasUnsavedChanges);
+
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
+    <AccessibleModal title={isAddingScript ? 'Добавить скрипт' : 'Редактировать скрипт'} onClose={requestClose}>
+      <div className="bg-white rounded-2xl max-w-lg w-full p-5 border border-slate-200 space-y-4 shadow-xl sm:p-6">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <h3 className="text-base font-bold text-slate-900">
@@ -54,7 +55,9 @@ export const ScriptModal = ({
             </h3>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
+            type="button"
+            aria-label="Закрыть скрипт"
             className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -68,6 +71,7 @@ export const ScriptModal = ({
               type="text"
               value={isAddingScript ? newScript.title : editingScript?.title || ''}
               onChange={e => {
+                setHasUnsavedChanges(true);
                 const val = e.target.value;
                 if (isAddingScript) setNewScript(prev => ({ ...prev, title: val }));
                 else if (editingScript) setEditingScript({ ...editingScript, title: val });
@@ -81,14 +85,14 @@ export const ScriptModal = ({
                     }
                     onAdd(newScript);
                     setNewScript({ title: '', description: '', text: '' });
-                    onClose();
+                    closeDialog();
                   } else if (editingScript) {
                     onSave(editingScript.index, {
                       title: editingScript.title,
                       description: editingScript.description,
                       text: editingScript.text,
                     });
-                    onClose();
+                    closeDialog();
                   }
                 }
               }}
@@ -103,6 +107,7 @@ export const ScriptModal = ({
               type="text"
               value={isAddingScript ? newScript.description : editingScript?.description || ''}
               onChange={e => {
+                setHasUnsavedChanges(true);
                 const val = e.target.value;
                 if (isAddingScript) setNewScript(prev => ({ ...prev, description: val }));
                 else if (editingScript) setEditingScript({ ...editingScript, description: val });
@@ -118,6 +123,7 @@ export const ScriptModal = ({
               rows={4}
               value={isAddingScript ? newScript.text : editingScript?.text || ''}
               onChange={e => {
+                setHasUnsavedChanges(true);
                 const val = e.target.value;
                 if (isAddingScript) setNewScript(prev => ({ ...prev, text: val }));
                 else if (editingScript) setEditingScript({ ...editingScript, text: val });
@@ -131,7 +137,7 @@ export const ScriptModal = ({
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
           >
             Отмена
@@ -146,14 +152,14 @@ export const ScriptModal = ({
                 }
                 onAdd(newScript);
                 setNewScript({ title: '', description: '', text: '' });
-                onClose();
+                closeDialog();
               } else if (editingScript) {
                 onSave(editingScript.index, {
                   title: editingScript.title,
                   description: editingScript.description,
                   text: editingScript.text,
                 });
-                onClose();
+                closeDialog();
               }
             }}
             className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
@@ -163,6 +169,6 @@ export const ScriptModal = ({
           </button>
         </div>
       </div>
-    </div>
+    </AccessibleModal>
   );
 };

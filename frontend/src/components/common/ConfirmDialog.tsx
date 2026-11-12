@@ -1,4 +1,5 @@
 import { AlertTriangle, Info } from 'lucide-react';
+import { AccessibleModal } from './AccessibleModal';
 
 export interface ConfirmDialogProps {
   isOpen: boolean;
@@ -24,14 +25,8 @@ export function ConfirmDialog({
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200/80 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150"
-        onClick={e => e.stopPropagation()}
-      >
+    <AccessibleModal title={title} onClose={onClose} overlayClassName="z-[60] animate-in fade-in duration-150">
+      <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-slate-200/80 shadow-2xl space-y-4 sm:p-6">
         <div className="flex items-start gap-3.5">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
             isDanger ? 'bg-rose-100 text-rose-600' : 'bg-indigo-100 text-indigo-600'
@@ -67,6 +62,6 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </AccessibleModal>
   );
 }

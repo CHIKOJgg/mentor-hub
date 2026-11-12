@@ -1,6 +1,9 @@
+import { useCallback, useState } from 'react';
 import type React from 'react';
 import { X, Save } from 'lucide-react';
 import type { CheatsheetItem } from '../../types';
+import { AccessibleModal } from '../common/AccessibleModal';
+import { useModalDismiss } from '../common/useModalDismiss';
 
 interface CheatsheetModalProps {
   isOpen: boolean;
@@ -25,17 +28,14 @@ export const CheatsheetModal = ({
   onSave,
   onAdd,
 }: CheatsheetModalProps) => {
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const closeDialog = useCallback(() => { setHasUnsavedChanges(false); onClose(); }, [onClose]);
+  const requestClose = useModalDismiss(closeDialog, hasUnsavedChanges);
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-xl w-full p-6 border border-slate-200 space-y-4 my-8 shadow-2xl"
-        onClick={e => e.stopPropagation()}
-      >
+    <AccessibleModal title={isAddingCheatsheet ? 'Новая шпаргалка для учениц' : 'Редактировать шпаргалку'} onClose={requestClose}>
+      <div className="bg-white rounded-2xl max-w-xl w-full p-5 border border-slate-200 space-y-4 shadow-2xl sm:p-6">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <h3 className="text-base font-bold text-slate-900">
@@ -43,7 +43,9 @@ export const CheatsheetModal = ({
             </h3>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
+            type="button"
+            aria-label="Закрыть шпаргалку"
             className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -56,6 +58,7 @@ export const CheatsheetModal = ({
             <select
               value={editingCheatsheet ? editingCheatsheet.category : newCheatsheet.category}
               onChange={e => {
+                setHasUnsavedChanges(true);
                 const cat = e.target.value as CheatsheetItem['category'];
                 if (editingCheatsheet) setEditingCheatsheet({ ...editingCheatsheet, category: cat });
                 else setNewCheatsheet({ ...newCheatsheet, category: cat });
@@ -75,6 +78,7 @@ export const CheatsheetModal = ({
               type="text"
               value={editingCheatsheet ? editingCheatsheet.title : newCheatsheet.title}
               onChange={e => {
+                setHasUnsavedChanges(true);
                 if (editingCheatsheet) setEditingCheatsheet({ ...editingCheatsheet, title: e.target.value });
                 else setNewCheatsheet({ ...newCheatsheet, title: e.target.value });
               }}
@@ -89,6 +93,7 @@ export const CheatsheetModal = ({
               type="text"
               value={editingCheatsheet ? editingCheatsheet.description : newCheatsheet.description}
               onChange={e => {
+                setHasUnsavedChanges(true);
                 if (editingCheatsheet) setEditingCheatsheet({ ...editingCheatsheet, description: e.target.value });
                 else setNewCheatsheet({ ...newCheatsheet, description: e.target.value });
               }}
@@ -103,6 +108,7 @@ export const CheatsheetModal = ({
               rows={8}
               value={editingCheatsheet ? editingCheatsheet.content : newCheatsheet.content}
               onChange={e => {
+                setHasUnsavedChanges(true);
                 if (editingCheatsheet) setEditingCheatsheet({ ...editingCheatsheet, content: e.target.value });
                 else setNewCheatsheet({ ...newCheatsheet, content: e.target.value });
               }}
@@ -115,7 +121,7 @@ export const CheatsheetModal = ({
         <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
           >
             Отмена
@@ -126,8 +132,10 @@ export const CheatsheetModal = ({
               if (editingCheatsheet) {
                 onSave(editingCheatsheet);
                 setEditingCheatsheet(null);
+                closeDialog();
               } else {
                 onAdd();
+                closeDialog();
               }
             }}
             className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
@@ -137,6 +145,6 @@ export const CheatsheetModal = ({
           </button>
         </div>
       </div>
-    </div>
+    </AccessibleModal>
   );
 };

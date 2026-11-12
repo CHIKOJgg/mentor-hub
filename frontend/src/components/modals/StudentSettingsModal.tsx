@@ -1,6 +1,7 @@
 import type React from 'react';
 import { X, Plus, Pencil, Send, Coffee, Check, ShieldAlert } from 'lucide-react';
 import type { StudentDiscipline } from '../../types';
+import { AccessibleModal } from '../common/AccessibleModal';
 
 interface StudentSettingsModalProps {
   isOpen: boolean;
@@ -20,14 +21,8 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-2xl w-full p-6 border border-slate-200 space-y-5 my-8 shadow-2xl"
-        onClick={e => e.stopPropagation()}
-      >
+    <AccessibleModal title="Управление составом учениц потока" onClose={onClose}>
+      <div className="bg-white rounded-2xl max-w-2xl w-full p-5 border border-slate-200 space-y-5 shadow-2xl sm:p-6">
         {/* Header */}
         <div className="flex items-start justify-between pb-3 border-b border-slate-100">
           <div>
@@ -38,6 +33,8 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            type="button"
+            aria-label="Закрыть управление ученицами"
             className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -144,6 +141,6 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </AccessibleModal>
   );
 };

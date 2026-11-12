@@ -1,6 +1,9 @@
+import { useCallback, useState } from 'react';
 import type React from 'react';
 import { X } from 'lucide-react';
 import type { TaskRule } from '../../types';
+import { AccessibleModal } from '../common/AccessibleModal';
+import { useModalDismiss } from '../common/useModalDismiss';
 
 export type NewRuleForm = Omit<TaskRule, 'id'>;
 
@@ -29,18 +32,16 @@ export const RuleModal = ({
   onSave,
   showToast,
 }: RuleModalProps) => {
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const closeDialog = useCallback(() => { setHasUnsavedChanges(false); onClose(); }, [onClose]);
+  const requestClose = useModalDismiss(closeDialog, hasUnsavedChanges);
+
   if (!isOpen) return null;
   const isReelsRule = ((isAddingRule ? newRule.hashtag : editingRule?.hashtag) ?? '').trim().toLowerCase() === '#рилс';
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
+    <AccessibleModal title={isAddingRule ? 'Новый хэштег или задание' : `Редактирование правила ${editingRule?.hashtag ?? ''}`} onClose={requestClose}>
+      <div className="bg-white rounded-2xl max-w-lg w-full p-5 border border-slate-200 space-y-4 shadow-xl sm:p-6">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <h3 className="text-base font-bold text-slate-900">
@@ -48,7 +49,9 @@ export const RuleModal = ({
             </h3>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
+            type="button"
+            aria-label="Закрыть правило"
             className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -69,6 +72,7 @@ export const RuleModal = ({
                 type="text"
                 value={isAddingRule ? newRule.hashtag : editingRule?.hashtag || ''}
                 onChange={e => {
+                  setHasUnsavedChanges(true);
                   const val = e.target.value.startsWith('#') ? e.target.value : `#${e.target.value}`;
                   const required = val.trim().toLowerCase() === '#рилс';
                   if (isAddingRule) setNewRule(prev => ({ ...prev, hashtag: val, required: required || prev.required }));
@@ -84,6 +88,7 @@ export const RuleModal = ({
                 type="text"
                 value={isAddingRule ? newRule.title : editingRule?.title || ''}
                 onChange={e => {
+                  setHasUnsavedChanges(true);
                   const val = e.target.value;
                   if (isAddingRule) setNewRule(prev => ({ ...prev, title: val }));
                   else if (editingRule) setEditingRule({ ...editingRule, title: val });
@@ -97,10 +102,10 @@ export const RuleModal = ({
                       }
                       onAdd({ ...newRule, required: newRule.required || isReelsRule });
                       setNewRule({ hashtag: '#', title: '', description: '', required: false, example: '' });
-                      onClose();
+                      closeDialog();
                     } else if (editingRule) {
                       onSave({ ...editingRule, required: editingRule.required || isReelsRule });
-                      onClose();
+                      closeDialog();
                     }
                   }
                 }}
@@ -116,6 +121,7 @@ export const RuleModal = ({
               rows={2}
               value={isAddingRule ? newRule.description : editingRule?.description || ''}
               onChange={e => {
+                setHasUnsavedChanges(true);
                 const val = e.target.value;
                 if (isAddingRule) setNewRule(prev => ({ ...prev, description: val }));
                 else if (editingRule) setEditingRule({ ...editingRule, description: val });
@@ -131,6 +137,7 @@ export const RuleModal = ({
               type="text"
               value={isAddingRule ? newRule.example : editingRule?.example || ''}
               onChange={e => {
+                setHasUnsavedChanges(true);
                 const val = e.target.value;
                 if (isAddingRule) setNewRule(prev => ({ ...prev, example: val }));
                 else if (editingRule) setEditingRule({ ...editingRule, example: val });
@@ -146,6 +153,7 @@ export const RuleModal = ({
               type="button"
               disabled={isReelsRule}
               onClick={() => {
+                setHasUnsavedChanges(true);
                 if (isAddingRule) setNewRule(prev => ({ ...prev, required: !prev.required }));
                 else if (editingRule) setEditingRule({ ...editingRule, required: !editingRule.required });
               }}
@@ -163,7 +171,7 @@ export const RuleModal = ({
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
           >
             Отмена
@@ -178,10 +186,10 @@ export const RuleModal = ({
                 }
                 onAdd({ ...newRule, required: newRule.required || isReelsRule });
                 setNewRule({ hashtag: '#', title: '', description: '', required: false, example: '' });
-                onClose();
+                closeDialog();
               } else if (editingRule) {
                 onSave({ ...editingRule, required: editingRule.required || isReelsRule });
-                onClose();
+                closeDialog();
               }
             }}
             className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
@@ -190,6 +198,6 @@ export const RuleModal = ({
           </button>
         </div>
       </div>
-    </div>
+    </AccessibleModal>
   );
 };

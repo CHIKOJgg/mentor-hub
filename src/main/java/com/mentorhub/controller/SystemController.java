@@ -42,7 +42,7 @@ public class SystemController {
                 .map(authority -> authority.getAuthority().replaceFirst("^ROLE_", ""))
                 .findFirst()
                 .orElse("ADMIN");
-        return ResponseEntity.ok(new AdminSessionDto(authentication.getName(), role));
+        return ResponseEntity.ok(new AdminSessionDto(authentication.getName(), role, true));
     }
 
     @GetMapping("/settings")

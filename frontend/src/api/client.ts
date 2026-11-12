@@ -41,29 +41,49 @@ export async function apiRequest<T>(
     headers.set('X-XSRF-TOKEN', csrfToken);
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const abortRequest = () => controller.abort();
+  if (init.signal?.aborted) abortRequest();
+  else init.signal?.addEventListener('abort', abortRequest, { once: true });
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers,
+      signal: controller.signal,
       credentials: 'same-origin',
     });
   } catch (error) {
-    throw new ApiError(error instanceof Error ? error.message : 'Сервер недоступен', 0);
+    clearTimeout(timeout);
+    init.signal?.removeEventListener('abort', abortRequest);
+    throw new ApiError(
+      controller.signal.aborted ? 'Сервер не ответил за 20 секунд. Попробуйте ещё раз.' : 'Не удалось подключиться к серверу. Проверьте соединение.',
+      0,
+      error,
+    );
   }
 
-  const responseBody = response.status === 204
-    ? undefined
-    : await response.json().catch(() => undefined);
+  let responseBody: unknown;
+  try {
+    responseBody = response.status === 204 ? undefined : await response.json().catch(() => undefined);
 
-  if (!response.ok) {
-    const message = typeof responseBody === 'object' && responseBody !== null && 'message' in responseBody
-      ? String(responseBody.message)
-      : `Ошибка API (${response.status})`;
-    throw new ApiError(message, response.status, responseBody);
+    if (!response.ok) {
+      const message = typeof responseBody === 'object' && responseBody !== null && 'message' in responseBody
+        ? String(responseBody.message)
+        : `Ошибка API (${response.status})`;
+      throw new ApiError(message, response.status, responseBody);
+    }
+
+    return responseBody as T;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Не удалось обработать ответ сервера. Повторите попытку.', 0, error);
+  } finally {
+    clearTimeout(timeout);
+    init.signal?.removeEventListener('abort', abortRequest);
   }
-
-  return responseBody as T;
 }
 
 const json = (method: string, payload?: unknown): RequestInit => ({
@@ -78,7 +98,7 @@ export const api = {
     return apiRequest<T>('/auth/login', json('POST', { accessKey }));
   },
   logout: () => apiRequest<void>('/auth/logout', json('POST')),
-  getCurrentSession: <T>() => apiRequest<T>('/system/session'),
+  getCurrentSession: <T>() => apiRequest<T>('/auth/session'),
   getInbox: <T>() => apiRequest<T>('/inbox?status=PENDING'),
   getAllReports: <T>() => apiRequest<T>('/inbox?status=ALL'),
   approveReport: <T>(id: string, replyText?: string) =>

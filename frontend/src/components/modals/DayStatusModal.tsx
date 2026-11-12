@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { X, Save } from 'lucide-react';
 import type { DayInfo } from '../../types';
+import { AccessibleModal } from '../common/AccessibleModal';
+import { useModalDismiss } from '../common/useModalDismiss';
 
 export interface DayStatusModalProps {
   editingDay: {
@@ -14,17 +17,18 @@ export interface DayStatusModalProps {
 }
 
 export function DayStatusModal({ editingDay, onClose, onSave, onUpdateDay }: DayStatusModalProps) {
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const closeDialog = () => { setHasUnsavedChanges(false); onClose(); };
+  const requestClose = useModalDismiss(closeDialog, hasUnsavedChanges);
   if (!editingDay) return null;
+  const updateDay = (day: DayInfo) => {
+    setHasUnsavedChanges(true);
+    onUpdateDay(day);
+  };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
+    <AccessibleModal title="Редактировать статус дня" onClose={requestClose}>
+      <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-slate-200 space-y-4 shadow-xl sm:p-6">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <h3 className="text-base font-bold text-slate-900">Редактировать статус дня</h3>
@@ -33,7 +37,9 @@ export function DayStatusModal({ editingDay, onClose, onSave, onUpdateDay }: Day
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
+            type="button"
+            aria-label="Закрыть изменение статуса"
             className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -54,7 +60,7 @@ export function DayStatusModal({ editingDay, onClose, onSave, onUpdateDay }: Day
                 key={opt.status}
                 type="button"
                 onClick={() => {
-                  onUpdateDay({ ...editingDay.day, status: opt.status as DayInfo['status'] });
+                  updateDay({ ...editingDay.day, status: opt.status as DayInfo['status'] });
                 }}
                 className={`text-xs font-semibold p-2.5 rounded-xl border text-left transition cursor-pointer flex items-center gap-2 ${
                   editingDay.day.status === opt.status
@@ -88,12 +94,12 @@ export function DayStatusModal({ editingDay, onClose, onSave, onUpdateDay }: Day
               type="text"
               value={editingDay.day.missedDetails || ''}
               onChange={e => {
-                onUpdateDay({ ...editingDay.day, missedDetails: e.target.value });
+                updateDay({ ...editingDay.day, missedDetails: e.target.value });
               }}
               onKeyDown={e => {
                 if (e.key === 'Enter') {
                   onSave(editingDay.studentId, editingDay.dayIndex, editingDay.day);
-                  onClose();
+                  closeDialog();
                 }
               }}
               placeholder="Например: Reels #14, карусель, 25 рассылок, +2 клиента (Enter чтобы сохранить)"
@@ -105,7 +111,7 @@ export function DayStatusModal({ editingDay, onClose, onSave, onUpdateDay }: Day
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
           >
             Отмена
@@ -114,7 +120,7 @@ export function DayStatusModal({ editingDay, onClose, onSave, onUpdateDay }: Day
             type="button"
             onClick={() => {
               onSave(editingDay.studentId, editingDay.dayIndex, editingDay.day);
-              onClose();
+              closeDialog();
             }}
             className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
           >
@@ -123,6 +129,6 @@ export function DayStatusModal({ editingDay, onClose, onSave, onUpdateDay }: Day
           </button>
         </div>
       </div>
-    </div>
+    </AccessibleModal>
   );
 }

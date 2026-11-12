@@ -1,5 +1,7 @@
 import { X, Save } from 'lucide-react';
 import { BEAUTY_NICHES } from '../../types';
+import { AccessibleModal } from '../common/AccessibleModal';
+import { useModalDismiss } from '../common/useModalDismiss';
 
 export interface NewStudentForm {
   fullName: string;
@@ -26,24 +28,20 @@ export function AddStudentModal({
   onUpdate,
   onSubmit,
 }: AddStudentModalProps) {
+  const hasUnsavedChanges = JSON.stringify(newStudent) !== JSON.stringify({ fullName: '', niche: BEAUTY_NICHES[0], telegram: '', telegramChatId: '', initialIncome: 0, initialAvgTicket: 0 });
+  const requestClose = useModalDismiss(onClose, hasUnsavedChanges);
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-xl space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
+    <AccessibleModal title="Новая ученица" onClose={requestClose}>
+      <div className="w-full max-w-xl space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:p-6">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
             <h3 className="text-base font-bold text-slate-900">Новая ученица</h3>
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Закрыть"
             className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
           >
@@ -104,7 +102,7 @@ export function AddStudentModal({
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600"
           >
             Отмена
@@ -119,6 +117,6 @@ export function AddStudentModal({
           </button>
         </div>
       </div>
-    </div>
+    </AccessibleModal>
   );
 }

@@ -538,73 +538,6 @@ export default function App() {
     });
   };
 
-  // Global Escape key listener to close active modals gracefully
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (confirmModal) {
-          setConfirmModal(null);
-          return;
-        }
-        if (editingScheduleTime) {
-          setEditingScheduleTime(null);
-          return;
-        }
-        if (isAddingStudent) {
-          setIsAddingStudent(false);
-          return;
-        }
-        if (editingStudent) {
-          setEditingStudent(null);
-          return;
-        }
-        if (editingDay) {
-          setEditingDay(null);
-          return;
-        }
-        if (isAddingScript || editingScript) {
-          setIsAddingScript(false);
-          setEditingScript(null);
-          return;
-        }
-        if (isAddingRule || editingRule) {
-          setIsAddingRule(false);
-          setEditingRule(null);
-          return;
-        }
-        if (isAddingCheatsheet || editingCheatsheet) {
-          setIsAddingCheatsheet(false);
-          setEditingCheatsheet(null);
-          return;
-        }
-        if (managingZoomStudent) {
-          setManagingZoomStudent(null);
-          return;
-        }
-        if (inspectingStudent) {
-          setInspectingStudent(null);
-          return;
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    confirmModal,
-    editingScheduleTime,
-    isAddingStudent,
-    editingStudent,
-    editingDay,
-    isAddingScript,
-    editingScript,
-    isAddingRule,
-    editingRule,
-    isAddingCheatsheet,
-    editingCheatsheet,
-    managingZoomStudent,
-    inspectingStudent,
-  ]);
-
   useEffect(() => {
     writePersisted('active-tab', activeTab);
     writePersisted('reports', reports);
@@ -640,6 +573,12 @@ export default function App() {
         return;
       }
       if (!isCurrent) return;
+      if (!currentSession.authenticated) {
+        setApiSession(null);
+        setApiConnection('needs-token');
+        setApiConnectionMessage('Введите ключ доступа администратора.');
+        return;
+      }
       setApiSession(currentSession);
 
       const [reportsResult, studentsResult, rulesResult, settingsResult, scriptsResult] = await Promise.allSettled([
@@ -1850,25 +1789,27 @@ export default function App() {
               {apiSession && <button type="button" onClick={logout} className="text-xs font-medium text-slate-500 hover:text-slate-900">Выйти</button>}
             </div>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {tabs.map(t => (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition shrink-0 cursor-pointer ${
-                    activeTab === t.id
-                      ? 'is-active bg-neutral-900 text-white'
-                    : 'text-neutral-500 hover:text-neutral-900 hover:bg-slate-100'
-                }`}
-              >
-                {t.label}
-                {t.count !== undefined && t.count > 0 && (
-                  <span className="ml-1.5 text-xs font-bold opacity-80">{t.count}</span>
-                )}
-              </button>
-            ))}
-          </div>
         </div>
+
+        <nav className="mobile-bottom-nav md:hidden" aria-label="Основные разделы">
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setActiveTab(t.id)}
+              aria-current={activeTab === t.id ? 'page' : undefined}
+              className={`mobile-bottom-nav__item ${activeTab === t.id ? 'is-active' : ''}`}
+            >
+              <span className="mobile-bottom-nav__icon-wrap">
+                <t.icon className="h-5 w-5" strokeWidth={1.8} aria-hidden="true" />
+                {t.count !== undefined && t.count > 0 && (
+                  <span className="mobile-bottom-nav__badge">{t.count}</span>
+                )}
+              </span>
+              <span className="mobile-bottom-nav__label">{t.label === 'На проверку' ? 'Проверка' : t.label}</span>
+            </button>
+          ))}
+        </nav>
 
         {/* Main content */}
         <main className="app-main flex-1 md:ml-64 pt-28 md:pt-0">
@@ -3772,7 +3713,10 @@ export default function App() {
       <AddStudentModal
         isOpen={isAddingStudent}
         newStudent={newStudent}
-        onClose={() => setIsAddingStudent(false)}
+        onClose={() => {
+          setIsAddingStudent(false);
+          setNewStudent(newStudentTemplate);
+        }}
         onUpdate={updater => setNewStudent(updater)}
         onSubmit={addStudent}
       />
@@ -3809,6 +3753,7 @@ export default function App() {
         onClose={() => {
           setEditingScript(null);
           setIsAddingScript(false);
+          setNewScript({ title: '', description: '', text: '' });
         }}
         onAdd={addScript}
         onSave={saveScript}
@@ -3826,6 +3771,7 @@ export default function App() {
         onClose={() => {
           setEditingRule(null);
           setIsAddingRule(false);
+          setNewRule({ hashtag: '#', title: '', description: '', required: false, example: '' });
         }}
         onAdd={addRule}
         onSave={saveRule}
@@ -3864,7 +3810,11 @@ export default function App() {
         setZoomForm={setZoomForm}
         onToggleCompleted={toggleZoomSessionCompleted}
         onAddZoomSession={addZoomSessionToStudent}
-        onClose={() => setManagingZoomStudent(null)}
+        onClose={() => {
+          setManagingZoomStudent(null);
+          setIsAddingZoom(false);
+          setZoomForm({ title: 'Разбор оффера и чека', scheduledAt: '', zoomUrl: '', meetingNotes: '', linkSentAt: '', evidenceUrl: '' });
+        }}
       />
 
       {/* ─── MODAL 8: CHEATSHEET EDITOR / CREATOR ─── */}
@@ -3878,6 +3828,7 @@ export default function App() {
         onClose={() => {
           setIsAddingCheatsheet(false);
           setEditingCheatsheet(null);
+          setNewCheatsheet({ title: '', category: 'reels', description: '', content: '' });
         }}
         onSave={saveCheatsheet}
         onAdd={addCheatsheet}
@@ -3899,7 +3850,7 @@ export default function App() {
 
 {/* Toast */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl text-sm font-semibold">
+        <div className="app-toast fixed left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl text-sm font-semibold" role="status" aria-live="polite">
           {toastMessage}
         </div>
       )}

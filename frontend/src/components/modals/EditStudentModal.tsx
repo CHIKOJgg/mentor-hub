@@ -1,6 +1,9 @@
+import { useCallback, useState } from 'react';
 import type React from 'react';
 import { X, Save, Plus, Trash2 } from 'lucide-react';
 import { BEAUTY_NICHES, type StudentDiscipline, type ZoomSessionRecord } from '../../types';
+import { AccessibleModal } from '../common/AccessibleModal';
+import { useModalDismiss } from '../common/useModalDismiss';
 
 interface EditStudentModalProps {
   student: StudentDiscipline | null;
@@ -23,24 +26,28 @@ export const EditStudentModal = ({
   updateEditingZoomSession,
   onDelete,
 }: EditStudentModalProps) => {
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const closeDialog = useCallback(() => { setHasUnsavedChanges(false); onClose(); }, [onClose]);
+  const requestClose = useModalDismiss(closeDialog, hasUnsavedChanges);
+
   if (!student) return null;
+  const updateEditingStudent = (updated: StudentDiscipline) => {
+    setHasUnsavedChanges(true);
+    setEditingStudent(updated);
+  };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto shadow-xl"
-        onClick={e => e.stopPropagation()}
-      >
+    <AccessibleModal title={`Профиль и созвоны: ${student.fullName}`} onClose={requestClose}>
+      <div className="bg-white rounded-2xl max-w-lg w-full p-5 border border-slate-200 space-y-4 shadow-xl sm:p-6">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <h3 className="text-base font-bold text-slate-900">Профиль и созвоны</h3>
             <p className="text-xs text-slate-500 mt-0.5">{student.fullName}</p>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
+            type="button"
+            aria-label="Закрыть профиль"
             className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -54,7 +61,7 @@ export const EditStudentModal = ({
               <input
                 type="text"
                 value={student.fullName}
-                onChange={e => setEditingStudent({ ...student, fullName: e.target.value })}
+                onChange={e => updateEditingStudent({ ...student, fullName: e.target.value })}
                 className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -62,7 +69,7 @@ export const EditStudentModal = ({
               <label className="text-xs font-semibold text-slate-600 block mb-1">Ниша (Бьюти & Стиль):</label>
               <select
                 value={student.niche}
-                onChange={e => setEditingStudent({ ...student, niche: e.target.value })}
+                onChange={e => updateEditingStudent({ ...student, niche: e.target.value })}
                 className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 bg-white"
               >
                 {BEAUTY_NICHES.map(niche => (
@@ -99,7 +106,7 @@ export const EditStudentModal = ({
             {student.telegramChatId && (
               <button
                 type="button"
-                onClick={() => setEditingStudent({ ...student, telegramChatId: undefined })}
+                onClick={() => updateEditingStudent({ ...student, telegramChatId: undefined })}
                 className="text-xs text-rose-600 hover:text-rose-700 font-medium cursor-pointer"
               >
                 Отвязать группу
@@ -113,7 +120,7 @@ export const EditStudentModal = ({
               <input
                 type="date"
                 value={student.startDate ?? ''}
-                onChange={event => setEditingStudent({ ...student, startDate: event.target.value })}
+                onChange={event => updateEditingStudent({ ...student, startDate: event.target.value })}
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
               />
             </div>
@@ -122,16 +129,16 @@ export const EditStudentModal = ({
               <input
                 type="text"
                 value={student.pauseReason ?? ''}
-                onChange={event => setEditingStudent({ ...student, pauseReason: event.target.value || undefined })}
+                onChange={event => updateEditingStudent({ ...student, pauseReason: event.target.value || undefined })}
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm"
               />
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={student.isOnPause} onChange={event => setEditingStudent({ ...student, isOnPause: event.target.checked })} />
+              <input type="checkbox" checked={student.isOnPause} onChange={event => updateEditingStudent({ ...student, isOnPause: event.target.checked })} />
               На паузе
             </label>
             <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={student.isActive ?? true} onChange={event => setEditingStudent({ ...student, isActive: event.target.checked })} />
+              <input type="checkbox" checked={student.isActive ?? true} onChange={event => updateEditingStudent({ ...student, isActive: event.target.checked })} />
               Активный профиль
             </label>
           </div>
@@ -142,7 +149,7 @@ export const EditStudentModal = ({
               <input
                 type="number"
                 value={student.initialIncome}
-                onChange={e => setEditingStudent({ ...student, initialIncome: Number(e.target.value) || 0 })}
+                onChange={e => updateEditingStudent({ ...student, initialIncome: Number(e.target.value) || 0 })}
                 className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -151,7 +158,7 @@ export const EditStudentModal = ({
               <input
                 type="number"
                 value={student.currentIncome}
-                onChange={e => setEditingStudent({ ...student, currentIncome: Number(e.target.value) || 0 })}
+                onChange={e => updateEditingStudent({ ...student, currentIncome: Number(e.target.value) || 0 })}
                 className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 font-bold text-emerald-600"
               />
             </div>
@@ -163,7 +170,7 @@ export const EditStudentModal = ({
               <input
                 type="number"
                 value={student.initialAvgTicket}
-                onChange={e => setEditingStudent({ ...student, initialAvgTicket: Number(e.target.value) || 0 })}
+                onChange={e => updateEditingStudent({ ...student, initialAvgTicket: Number(e.target.value) || 0 })}
                 className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -172,7 +179,7 @@ export const EditStudentModal = ({
               <input
                 type="number"
                 value={student.currentAvgTicket}
-                onChange={e => setEditingStudent({ ...student, currentAvgTicket: Number(e.target.value) || 0 })}
+                onChange={e => updateEditingStudent({ ...student, currentAvgTicket: Number(e.target.value) || 0 })}
                 className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 font-bold"
               />
             </div>
@@ -312,7 +319,7 @@ export const EditStudentModal = ({
               value={student.portalData?.targetIncome || 100000}
               onChange={e => {
                 const val = Number(e.target.value) || 100000;
-                setEditingStudent({
+                updateEditingStudent({
                   ...student,
                   portalData: student.portalData
                     ? { ...student.portalData, targetIncome: val }
@@ -339,7 +346,7 @@ export const EditStudentModal = ({
                 onClick={() => {
                   const id = student.id;
                   const name = student.fullName;
-                  onClose();
+                  closeDialog();
                   onDelete(id, name);
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-xl transition cursor-pointer"
@@ -352,7 +359,7 @@ export const EditStudentModal = ({
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition cursor-pointer"
             >
               Отмена
@@ -361,7 +368,7 @@ export const EditStudentModal = ({
               type="button"
               onClick={() => {
                 void onSave(student);
-                onClose();
+                closeDialog();
               }}
               className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
             >
@@ -371,6 +378,6 @@ export const EditStudentModal = ({
           </div>
         </div>
       </div>
-    </div>
+    </AccessibleModal>
   );
 };

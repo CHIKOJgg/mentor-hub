@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type React from 'react';
 import { X, Check, ExternalLink, Plus, Copy, Sparkles, Clock, ShieldCheck } from 'lucide-react';
 import type { StudentDiscipline } from '../../types';
+import { AccessibleModal } from '../common/AccessibleModal';
+import { useModalDismiss } from '../common/useModalDismiss';
 
 export interface ZoomFormState {
   title: string;
@@ -35,8 +37,6 @@ export const ZoomModal = ({
 }: ZoomModalProps) => {
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
-  if (!student) return null;
-
   const formatLinkSentAt = (value?: string) => {
     if (!value) return '';
     const date = new Date(value);
@@ -45,6 +45,12 @@ export const ZoomModal = ({
       : value;
   };
 
+  const hasUnsavedZoom = isAddingZoom && (
+    zoomForm.title.trim() !== 'Разбор оффера и чека'
+    || Boolean(zoomForm.scheduledAt.trim() || zoomForm.zoomUrl.trim() || zoomForm.meetingNotes.trim() || zoomForm.evidenceUrl?.trim() || zoomForm.linkSentAt?.trim())
+  );
+  const requestClose = useModalDismiss(onClose, hasUnsavedZoom);
+  if (!student) return null;
   const contractQuota = student.contractZoomQuota || 8;
   const sessions = student.zoomSessions || [];
   const completedCount = sessions.filter(s => s.isCompleted).length || student.completedZoomsCount || 0;
@@ -60,14 +66,8 @@ export const ZoomModal = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-150"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-2xl w-full p-6 border border-slate-200 space-y-5 my-8 shadow-2xl"
-        onClick={e => e.stopPropagation()}
-      >
+    <AccessibleModal title="Реестр консультаций и Zoom-созвонов" onClose={requestClose}>
+      <div className="bg-white rounded-2xl max-w-2xl w-full p-5 border border-slate-200 space-y-5 shadow-2xl sm:p-6">
         {/* Header */}
         <div className="flex items-start justify-between pb-3 border-b border-slate-100">
           <div>
@@ -83,7 +83,9 @@ export const ZoomModal = ({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
+            type="button"
+            aria-label="Закрыть реестр созвонов"
             className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -385,13 +387,13 @@ export const ZoomModal = ({
 
         <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer"
           >
             Готово
           </button>
         </div>
       </div>
-    </div>
+    </AccessibleModal>
   );
 };
