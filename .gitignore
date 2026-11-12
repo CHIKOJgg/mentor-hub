@@ -38,3 +38,13 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets & local test artifacts
+.env
+login.json
+cookies*.txt
+csrf.json
+sess.txt
+.playwright-mcp/
+*.local
+
