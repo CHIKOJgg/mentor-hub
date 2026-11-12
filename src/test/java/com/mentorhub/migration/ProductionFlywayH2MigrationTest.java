@@ -47,13 +47,32 @@ class ProductionFlywayH2MigrationTest {
         assertThat(count(url, "flyway_schema_history WHERE version IN ('7', '8')")).isZero();
     }
 
+    @Test
+    void productionValidationToleratesAnAlreadyAppliedRemovedFutureMigration() throws Exception {
+        String url = jdbcUrl();
+        Flyway production = productionFlyway(url);
+        production.migrate();
+        long reportsBefore = count(url, "daily_reports");
+        try (Connection connection = DriverManager.getConnection(url, "sa", "");
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    INSERT INTO flyway_schema_history
+                        (installed_rank, version, description, type, script, checksum, installed_by, installed_on, execution_time, success)
+                    VALUES (2, '11', 'removed cleanup migration', 'SQL', 'V11__remove_all_test_and_demo_data.sql', 123, 'sa', CURRENT_TIMESTAMP, 1, TRUE)
+                    """);
+        }
+
+        productionFlyway(url).validate();
+        assertThat(count(url, "daily_reports")).isEqualTo(reportsBefore);
+    }
+
     private Flyway productionFlyway(String url) {
         return Flyway.configure()
                 .dataSource(url, "sa", "")
                 .locations("classpath:db/production-migration")
                 .baselineOnMigrate(true)
                 .baselineVersion("9")
-                .ignoreMigrationPatterns("*:missing")
+                .ignoreMigrationPatterns("*:missing", "*:future")
                 .load();
     }
 

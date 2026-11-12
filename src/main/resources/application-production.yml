@@ -6,4 +6,6 @@ spring:
     validate-on-migrate: true
     # Preserve existing v1-v9 histories while ensuring production only applies
     # the clean, additive v10 schema reconciliation migration.
-    ignore-migration-patterns: "*:missing"
+    # Version 11 was already applied in production but is intentionally absent
+    # from this migration location. Ignore both missing and later applied entries.
+    ignore-migration-patterns: "*:missing,*:future"
