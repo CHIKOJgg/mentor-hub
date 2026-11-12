@@ -656,8 +656,6 @@ export default function App() {
       let unauthorized = false;
       const pending = new Set(pendingSyncDomains);
       const hasPending = (domain: LocalDataDomain) => pending.has(domain) || [...pending].some(key => key.startsWith(`${domain}:`));
-      const pendingDomainCount = (['reports', 'students', 'task-rules', 'system-settings', 'curator-scripts'] as LocalDataDomain[])
-        .filter(domain => hasPending(domain)).length;
       const results = [reportsResult, studentsResult, rulesResult, settingsResult, scriptsResult];
       results.forEach(result => {
         if (result.status === 'fulfilled') loadedCount += 1;
@@ -682,14 +680,10 @@ export default function App() {
         setApiConnectionMessage('Нет доступа к серверу. Обратитесь к администратору.');
       } else if (loadedCount === results.length) {
         setApiConnection('connected');
-        setApiConnectionMessage(pendingDomainCount > 0
-          ? `Подключено. ${pendingDomainCount} раздела ожидают синхронизации.`
-          : 'Данные синхронизированы.');
+        setApiConnectionMessage('Данные синхронизированы.');
       } else if (loadedCount > 0) {
         setApiConnection('connected');
-        setApiConnectionMessage(pendingDomainCount > 0
-          ? `Подключено. ${pendingDomainCount} раздела ожидают синхронизации.`
-          : 'Подключено частично. Некоторые данные временно недоступны.');
+        setApiConnectionMessage('Подключено частично. Некоторые данные временно недоступны.');
       } else {
         setApiConnection('offline');
         setApiConnectionMessage('Не удалось загрузить данные. Проверьте соединение и повторите попытку.');
@@ -1710,7 +1704,7 @@ export default function App() {
     }
     setApiSession(null);
     setApiConnection('needs-token');
-    setApiConnectionMessage('Введите ключ доступа, выданный администратором.');
+    setApiConnectionMessage('Введите персональный ключ доступа.');
   };
 
   if (!apiSession) {
@@ -1718,8 +1712,8 @@ export default function App() {
       <div className="app-shell min-h-screen flex items-center justify-center px-4 py-10">
         <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm" aria-labelledby="login-title">
           <div className="mb-6">
-            <h1 id="login-title" className="text-xl font-bold tracking-tight text-slate-900">Вход в панель</h1>
-            <p className="mt-1 text-sm text-slate-500">Введите ключ доступа, выданный администратором.</p>
+            <h1 id="login-title" className="text-xl font-bold tracking-tight text-slate-900">Вход в панель наставника</h1>
+            <p className="mt-1 text-sm text-slate-500">Персональный доступ для наставника (Ксения) и куратора (Катя)</p>
           </div>
           <form
             className="space-y-4"
@@ -1734,38 +1728,47 @@ export default function App() {
                 setApiSession(session);
                 setAccessKeyDraft('');
                 setApiConnection('connected');
-                setApiConnectionMessage('Вход выполнен. Загружаем данные…');
+                setApiConnectionMessage('Данные синхронизированы.');
                 setApiRefreshKey(key => key + 1);
               }).catch(error => {
                 const unauthorized = error instanceof Error && 'status' in error && error.status === 401;
                 setApiConnection(unauthorized ? 'unauthorized' : 'offline');
-                setApiConnectionMessage(unauthorized ? 'Ключ доступа не принят.' : 'Не удалось подключиться. Проверьте соединение.');
+                setApiConnectionMessage(unauthorized ? 'Ключ доступа не принят. Проверьте правильность ключа.' : 'Не удалось подключиться. Проверьте соединение.');
               }).finally(() => setIsLoginSubmitting(false));
               setApiSession(null);
             }}
           >
-            <label htmlFor="admin-access-key" className="block text-sm font-medium text-slate-700">Ключ доступа</label>
-            <input
-              id="admin-access-key"
-              type="password"
-              value={accessKeyDraft}
-              onChange={event => setAccessKeyDraft(event.target.value)}
-              autoComplete="current-password"
-              required
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
-              aria-describedby="login-status"
-            />
+            <div>
+              <label htmlFor="admin-access-key" className="block text-sm font-medium text-slate-700">Ключ доступа</label>
+              <input
+                id="admin-access-key"
+                type="password"
+                value={accessKeyDraft}
+                onChange={event => setAccessKeyDraft(event.target.value)}
+                placeholder="Вставьте персональный ключ доступа…"
+                autoComplete="current-password"
+                required
+                className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                aria-describedby="login-status"
+              />
+            </div>
             <button
               type="submit"
               disabled={!accessKeyDraft.trim() || isLoginSubmitting}
-              className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
-              {isLoginSubmitting ? 'Вход…' : 'Войти'}
+              {isLoginSubmitting ? 'Проверка ключа…' : 'Войти в панель'}
             </button>
           </form>
-          <p id="login-status" className="mt-4 text-sm text-slate-500" role="status" aria-live="polite">
-            {apiConnectionMessage}
-          </p>
+          {(isLoginSubmitting || apiConnection === 'unauthorized' || apiConnection === 'offline') && (
+            <p id="login-status" className={`mt-4 text-xs text-center rounded-xl px-3 py-2 ${
+              apiConnection === 'unauthorized' ? 'text-rose-700 bg-rose-50 border border-rose-200' :
+              apiConnection === 'offline' ? 'text-amber-800 bg-amber-50 border border-amber-200' :
+              'text-slate-500'
+            }`} role="status" aria-live="polite">
+              {apiConnectionMessage}
+            </p>
+          )}
         </section>
       </div>
     );
@@ -2275,47 +2278,16 @@ export default function App() {
                 </div>
 
                 {studentsFilter === 'attention' && (
-                  <section className="mb-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="at-risk-heading">
-                    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 pb-4">
-                      <div>
-                        <h3 id="at-risk-heading" className="text-base font-bold text-slate-900">Нуждаются во внимании</h3>
-                      </div>
-                      <div className="text-right text-xs text-slate-500">
-                        <div>{atRiskStudents.length} учениц в списке</div>
-                        <div>{activeBurnoutCount} отчетов с сигналами усталости за период</div>
-                      </div>
+                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200/80 bg-amber-50/60 px-4 py-3 text-xs text-amber-900">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" strokeWidth={2} />
+                      <span className="font-semibold">Фильтр: Ученицы в зоне риска ({atRiskStudents.length})</span>
+                      {activeBurnoutCount > 0 && (
+                        <span className="text-amber-700">· {activeBurnoutCount} отчетов с сигналами усталости</span>
+                      )}
                     </div>
-                    {atRiskStudents.length === 0 ? (
-                      <p className="py-5 text-center text-sm text-slate-500">По текущим данным учениц в зоне риска нет.</p>
-                    ) : (
-                      <div className="divide-y divide-slate-100">
-                        {atRiskStudents.map(student => {
-                          const missedCount = student.weekDays.filter(day => day.status === 'MISSED').length;
-                          const lateCount = student.weekDays.filter(day => day.status === 'COMPLETED_LATE').length;
-                          const latestReport = allReports
-                            .filter(report => report.studentId === student.id)
-                            .sort((left, right) => getReportDate(right).localeCompare(getReportDate(left)))[0];
-                          const message = `Здравствуйте, ${student.fullName}. В календаре за текущую неделю: ${missedCount} пропусков и ${lateCount} опозданий. Давайте согласуем посильный план и следующий шаг.`;
-
-                          return (
-                            <div key={student.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-                              <div className="min-w-0">
-                                <div className="font-semibold text-slate-900">{student.fullName}</div>
-                                <div className="text-xs text-slate-500">{student.niche} · дисциплина {student.disciplineRate}% · {missedCount} пропусков · {lateCount} опозданий</div>
-                                {latestReport?.reflectionSummary?.emotions && <p className="mt-1 text-xs text-slate-600">{latestReport.reflectionSummary.emotions}</p>}
-                              </div>
-                              <div className="flex shrink-0 gap-2">
-                                <button type="button" onClick={() => setEditingStudent(student)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">Открыть профиль</button>
-                                <button type="button" onClick={() => void sendStudentMessage(student, message)} disabled={!student.telegramChatId && !student.telegram} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
-                                  Отправить план
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </section>
+                    <span className="text-amber-700">Подробный график дисциплины отображён в таблице ниже</span>
+                  </div>
                 )}
 
                 {/* VIEW 1: CALENDAR VIEW */}
@@ -3678,19 +3650,6 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-
-                <section className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-3" aria-labelledby="server-connection-title">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h3 id="server-connection-title" className="text-base font-bold text-slate-900">Состояние сервера</h3>
-                      <p className="mt-1 text-xs text-slate-500">Статус подключения к рабочей базе данных.</p>
-                    </div>
-                    <span className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
-                      {apiConnection === 'connected' ? 'Подключено' : apiConnection === 'checking' ? 'Подключение…' : apiConnection === 'needs-token' || apiConnection === 'unauthorized' ? 'Нет доступа' : 'Нет соединения'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-600" role="status" aria-live="polite">{apiConnectionMessage}</p>
-                </section>
 
                 {/* Message processing and integrity controls */}
                 <div className="bg-white rounded-2xl border border-slate-200/60 p-6 space-y-4 hover:border-slate-300 transition">
