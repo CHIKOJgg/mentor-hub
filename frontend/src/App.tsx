@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { BEAUTY_NICHES, type DailyReport, type StudentDiscipline, type TabType, type ContentType, type TaskRule, type SystemSettings, type DayInfo, type ZoomSessionRecord, type CheatsheetItem } from './types';
 import type { ApiAdminSession, ApiCuratorScript, ApiDailyReport, ApiStudent, ApiSystemSettings, ApiTaskRule, ApiZoomSession } from './api/contracts';
 import { api } from './api/client';
@@ -490,6 +490,7 @@ export default function App() {
   const [isLoginSubmitting, setIsLoginSubmitting] = useState(false);
   const [apiSession, setApiSession] = useState<ApiAdminSession | null>(null);
   const [apiConnection, setApiConnection] = useState<'checking' | 'connected' | 'offline' | 'unauthorized' | 'needs-token'>('checking');
+  const [hasHydratedRemoteData, setHasHydratedRemoteData] = useState(false);
   const [apiConnectionMessage, setApiConnectionMessage] = useState('Проверяем подключение');
   const [isApiSyncing, setIsApiSyncing] = useState(false);
   const [apiRefreshKey, setApiRefreshKey] = useState(0);
@@ -553,6 +554,10 @@ export default function App() {
     writePersisted('pending-sync-domains', pendingSyncDomains);
   }, [activeTab, reports, allReports, students, replies, selectedStudentId, selectedStudent, rules, systemSettings, curatorScripts, cheatsheets, pendingSyncDomains]);
 
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeTab, analyticsCategory, promotionSubTab]);
+
   useEffect(() => {
     let isCurrent = true;
 
@@ -569,6 +574,7 @@ export default function App() {
           setApiSession(null);
           setApiConnection(unauthorized ? 'needs-token' : 'offline');
           setApiConnectionMessage(unauthorized ? 'Введите ключ доступа администратора.' : 'Не удалось подключиться. Проверьте соединение.');
+          setHasHydratedRemoteData(true);
         }
         return;
       }
@@ -577,6 +583,7 @@ export default function App() {
         setApiSession(null);
         setApiConnection('needs-token');
         setApiConnectionMessage('Введите ключ доступа администратора.');
+        setHasHydratedRemoteData(true);
         return;
       }
       setApiSession(currentSession);
@@ -627,6 +634,7 @@ export default function App() {
         setApiConnection('offline');
         setApiConnectionMessage('Не удалось загрузить данные. Проверьте соединение и повторите попытку.');
       }
+      setHasHydratedRemoteData(true);
     };
 
     void loadRemoteData();
@@ -1646,6 +1654,22 @@ export default function App() {
     setApiConnectionMessage('Введите персональный ключ доступа.');
   };
 
+  if ((!apiSession && apiConnection === 'checking') || (apiSession && !hasHydratedRemoteData)) {
+    return (
+      <div className="app-shell app-loading-state min-h-screen flex items-center justify-center px-4" role="status" aria-live="polite">
+        <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5 h-5 w-40 rounded-md bg-slate-100" />
+          <div className="space-y-3">
+            <div className="h-12 rounded-xl bg-slate-100" />
+            <div className="h-12 rounded-xl bg-slate-100" />
+            <div className="h-12 rounded-xl bg-slate-100" />
+          </div>
+          <p className="mt-5 text-center text-sm text-slate-500">{apiSession ? 'Загружаем данные панели…' : 'Проверяем доступ…'}</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!apiSession) {
     return (
       <div className="app-shell min-h-screen flex items-center justify-center px-4 py-10">
@@ -1661,6 +1685,7 @@ export default function App() {
               const accessKey = accessKeyDraft.trim();
               if (!accessKey || isLoginSubmitting) return;
               setIsLoginSubmitting(true);
+              setHasHydratedRemoteData(false);
               setApiConnection('checking');
               setApiConnectionMessage('Проверяем ключ доступа…');
               void api.login<ApiAdminSession>(accessKey).then(session => {
@@ -2979,22 +3004,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Ready-to-use Story Case Text Preview */}
-                      <div className="px-6 py-5 bg-slate-50/70">
-                        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                          Предпросмотр кейса для Instagram Stories:
-                        </div>
-                        <div className="bg-white border border-slate-200/60 rounded-xl p-4 font-mono text-xs sm:text-sm text-slate-700 whitespace-pre-line leading-relaxed">
-                          {`КЕЙС ПОТОКА: ${selectedStudent.fullName}\n` +
-                          `Ниша: ${selectedStudent.niche}\n\n` +
-                          `Точка А: ${selectedStudent.initialIncome.toLocaleString('ru-RU')} ₽ -> Точка Б: ${selectedStudent.currentIncome.toLocaleString('ru-RU')} ₽ (РОСТ x${calculateMultiplier(selectedStudent.currentIncome, selectedStudent.initialIncome)}!)\n` +
-                          `Средний чек: вырос с ${selectedStudent.initialAvgTicket.toLocaleString('ru-RU')} ₽ до ${selectedStudent.currentAvgTicket.toLocaleString('ru-RU')} ₽\n` +
-                          `Проверено: ${selectedStudent.totalReels} Reels, ${selectedStudent.totalCarousels} каруселей, ${selectedStudent.totalStorytells} сторителлов\n` +
-                          `Исходящий трафик: ${selectedStudent.totalMailings} рассылок по скрипту\n` +
-                           `Прирост новых клиентов: +${selectedStudent.totalNewClients}\n` +
-                           `Дисциплина сдачи: ${selectedStudent.disciplineRate}%`}
-                        </div>
-                      </div>
                     </div>
                   </div>
                   )
@@ -3056,7 +3065,7 @@ export default function App() {
                 </div>
 
                 {/* Subtab Segmented Bar */}
-                <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200/60 rounded-xl mb-7 overflow-x-auto">
+                <div className="promotion-subtab-switcher flex items-center gap-1.5 p-1 bg-white border border-slate-200/60 rounded-xl mb-7">
                   <button
                     onClick={() => setPromotionSubTab('scripts')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${

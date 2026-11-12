@@ -601,15 +601,42 @@
   }
 
   .analytics-view .analytics-category-switcher {
-    overflow-x: auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
     padding-bottom: 12px;
   }
 
   .analytics-view .analytics-category-button {
-    flex: 0 0 auto;
+    min-width: 0;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
     padding-right: 12px;
     padding-left: 12px;
     font-size: 12px;
+    line-height: 1.25;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .promotion-subtab-switcher {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .promotion-subtab-switcher > button {
+    min-width: 0;
+    width: 100%;
+    justify-content: flex-start;
+    padding: 8px 10px;
+    line-height: 1.25;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .promotion-subtab-switcher > button span {
+    min-width: 0;
   }
 
   .analytics-view .analytics-financial-metric {
