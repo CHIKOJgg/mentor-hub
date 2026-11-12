@@ -9,6 +9,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -72,5 +73,38 @@ class AdminAuthControllerTest {
                         .contentType("application/json")
                         .content("{\"accessKey\":\"" + TEST_ACCESS_KEY + "\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void loginThrottlesRepeatedInvalidAttemptsPerClientAddress() throws Exception {
+        MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
+                .andExpect(status().isOk())
+                .andReturn();
+        Cookie csrfCookie = csrfResult.getResponse().getCookie("XSRF-TOKEN");
+        assertThat(csrfCookie).isNotNull();
+        String csrfToken = csrfCookie.getValue();
+        RequestPostProcessor clientAddress = request -> {
+            request.setRemoteAddr("192.0.2.55");
+            return request;
+        };
+
+        for (int attempt = 0; attempt < 10; attempt++) {
+            mockMvc.perform(post("/api/auth/login")
+                            .with(clientAddress)
+                            .cookie(csrfCookie)
+                            .header("X-XSRF-TOKEN", csrfToken)
+                            .contentType("application/json")
+                            .content("{\"accessKey\":\"invalid-key-for-rate-limit-test-123\"}"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        mockMvc.perform(post("/api/auth/login")
+                        .with(clientAddress)
+                        .cookie(csrfCookie)
+                        .header("X-XSRF-TOKEN", csrfToken)
+                        .contentType("application/json")
+                        .content("{\"accessKey\":\"invalid-key-for-rate-limit-test-123\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(result -> assertThat(result.getResponse().getHeader("Retry-After")).isEqualTo("60"));
     }
 }
