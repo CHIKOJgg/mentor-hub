@@ -276,7 +276,7 @@ describe('Tier 1 - Area 2: Tab Navigation & Routing', () => {
     assert.ok(appTsxContent.includes('На проверку'), 'Tab 1 label must be "На проверку"');
     assert.ok(appTsxContent.includes('Ученицы'), 'Tab 2 label must be "Ученицы"');
     assert.ok(appTsxContent.includes('Аналитика'), 'Tab 3 label must be "Аналитика"');
-    assert.ok(appTsxContent.includes('Продвижение'), 'Tab 4 label must be "Продвижение"');
+    assert.ok(appTsxContent.includes('Материалы'), 'Tab 4 label must be "Материалы"');
     assert.ok(appTsxContent.includes('Настройки'), 'Tab 5 label must be "Настройки"');
     assert.strictEqual(appTsxContent.includes('Тарифы (320 / 475 BYN)'), false, 'Client UI must not show pricing tab');
   });
@@ -380,11 +380,12 @@ describe('Tier 1 - Area 3: Inbox Zero Tab («🔥 На проверку»)', () 
     );
   });
 
-  test('TC-1.3.7: Card approval handler evicts card, manages replies state, and shows toast feedback', () => {
-    assert.ok(appTsxContent.includes('const handleApprove = (reportId: string, name: string) => {'), 'handleApprove function must be defined');
-    assert.ok(appTsxContent.includes('setReports(prev => prev.filter(r => r.id !== reportId))'), 'handleApprove must filter out approved report');
-    assert.ok(appTsxContent.includes('Ответ отправлен'), 'Must show Telegram sent toast when reply text provided');
-    assert.ok(appTsxContent.includes('принят'), 'Must show default toast when reply text empty');
+  test('TC-1.3.7: Card approval waits for the server and reports Telegram delivery accurately', () => {
+    const approveSource = appTsxContent.slice(appTsxContent.indexOf('const handleApprove'), appTsxContent.indexOf('const handleReject'));
+    assert.ok(approveSource.includes('api.approveReport<{'), 'Approval request must reach the server');
+    assert.ok(approveSource.indexOf('setReports(prev => prev.filter(report => report.id !== reportId))') > approveSource.indexOf('.then(result =>'), 'Only confirmed reports may leave the queue');
+    assert.ok(approveSource.includes('result.tgMessageDelivered !== true'), 'Must distinguish an unconfirmed Telegram reply delivery');
+    assert.ok(approveSource.includes('Не удалось принять отчёт'), 'Must keep the report available and show a recoverable failure');
   });
 
   test('TC-1.3.8: Content drafts support Reels, Carousels, and Storytells in DailyReport', () => {
@@ -531,11 +532,11 @@ describe('Tier 1 - Area 5: Analytics & Story Generator Tab («📊 Аналит�
     assert.ok(analyticsSource.includes('Статус: На паузе') && analyticsSource.includes('Статус: Активный трек'), 'Both status labels must be visible');
   });
 
-  test('TC-1.5.5: Copy-case action is removed while the visual case preview remains', () => {
+  test('TC-1.5.5: Instagram Stories case preview and copy action are removed', () => {
     const analyticsSource = appTsxContent.split('TAB: ANALYTICS')[1]?.split('TAB: PROMOTION')[0] ?? '';
     assert.ok(!analyticsSource.includes('handleCopyCase'), 'Analytics must not expose the copy-case action');
     assert.ok(!analyticsSource.includes('Скопировать текст кейса'), 'Copy button must be removed');
-    assert.ok(analyticsSource.includes('Предпросмотр кейса для Instagram Stories'), 'Visual case preview remains available');
+    assert.ok(!analyticsSource.includes('Предпросмотр кейса для Instagram Stories'), 'Story case preview must be removed');
   });
 
   test('TC-1.5.6: 10 key metrics represented in analytics dashboard', () => {

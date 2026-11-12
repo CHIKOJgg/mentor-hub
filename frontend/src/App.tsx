@@ -69,6 +69,23 @@ const getIsoTimestamp = (): string => {
   return new Date().toISOString();
 };
 
+function AccessibleToggle({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={onChange}
+      className="app-switch-touch inline-flex min-h-11 min-w-12 items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+    >
+      <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${checked ? 'bg-indigo-600' : 'bg-slate-200'}`}>
+        <span className={`pointer-events-none absolute left-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${checked ? 'translate-x-4' : 'translate-x-0'}`} />
+      </span>
+    </button>
+  );
+}
+
 const calculateMultiplier = (current: number, initial: number): string => {
   if (!initial || initial <= 0 || !Number.isFinite(initial)) return '1.0';
   const ratio = current / initial;
@@ -422,10 +439,7 @@ const getUniqueDrafts = (drafts?: DailyReport['contentDrafts']) => {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabType>(() => {
-    const saved = readPersisted<TabType>('active-tab', 'inbox');
-    return saved === 'tasks' ? 'promotion' : saved;
-  });
+  const [activeTab, setActiveTab] = useState<TabType>('inbox');
   const [inboxView, setInboxView] = useState<'pending' | 'approved'>('pending');
   const [reports, setReports] = useState<DailyReport[]>(() => readPersisted('reports', []));
   const [allReports, setAllReports] = useState<DailyReport[]>(() => readPersisted('all-reports', []));
@@ -495,6 +509,8 @@ export default function App() {
   const [isApiSyncing, setIsApiSyncing] = useState(false);
   const [apiRefreshKey, setApiRefreshKey] = useState(0);
   const [pendingSyncDomains, setPendingSyncDomains] = useState<string[]>(() => readPersisted('pending-sync-domains', []));
+  const [processingReportIds, setProcessingReportIds] = useState<string[]>([]);
+  const [deliveryNotice, setDeliveryNotice] = useState<{ studentName: string; text: string } | null>(null);
   const [isAddingStudent, setIsAddingStudent] = useState(false);
   const [isManagingStudents, setIsManagingStudents] = useState(false);
   const [newStudent, setNewStudent] = useState<{ fullName: string; niche: string; telegram: string; telegramChatId: string; initialIncome: number; initialAvgTicket: number; tariff?: string }>(newStudentTemplate);
@@ -540,7 +556,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    writePersisted('active-tab', activeTab);
     writePersisted('reports', reports);
     writePersisted('all-reports', allReports);
     writePersisted('students', students);
@@ -552,7 +567,7 @@ export default function App() {
     writePersisted('curator-scripts', curatorScripts);
     writePersisted('cheatsheets', cheatsheets);
     writePersisted('pending-sync-domains', pendingSyncDomains);
-  }, [activeTab, reports, allReports, students, replies, selectedStudentId, selectedStudent, rules, systemSettings, curatorScripts, cheatsheets, pendingSyncDomains]);
+  }, [reports, allReports, students, replies, selectedStudentId, selectedStudent, rules, systemSettings, curatorScripts, cheatsheets, pendingSyncDomains]);
 
   useLayoutEffect(() => {
     window.scrollTo(0, 0);
@@ -820,11 +835,17 @@ export default function App() {
             showToast(`Ученица ${fullName} удалена с сервера`);
             return;
           } catch {
-            markLocalChange('students', studentId);
+            clearLocalChange('students', studentId);
+            markLocalChange('students', `deleted:${studentId}`);
             setApiConnectionMessage('Удаление ученицы ожидает синхронизации.');
           }
         } else {
-          markLocalChange('students', studentId);
+          if (studentId.startsWith('local-')) {
+            clearLocalChange('students', studentId);
+          } else {
+            clearLocalChange('students', studentId);
+            markLocalChange('students', `deleted:${studentId}`);
+          }
         }
         showToast(`Ученица ${fullName} удалена`);
       },
@@ -1210,7 +1231,13 @@ export default function App() {
     for (const key of pendingSyncDomains) {
       try {
         if (key.startsWith('students:')) {
-          const localId = getEntityKey('students', key);
+          const entityId = getEntityKey('students', key);
+          if (entityId.startsWith('deleted:')) {
+            await api.deleteStudent(entityId.slice('deleted:'.length));
+            completedKeys.push(key);
+            continue;
+          }
+          const localId = entityId;
           const localStudent = students.find(student => student.id === localId);
           if (!localStudent) {
             completedKeys.push(key);
@@ -1375,6 +1402,7 @@ export default function App() {
     try {
       const localSyncCompleted = await syncPendingChanges();
       const result = await api.syncTelegram<{ message?: string }>();
+      setApiConnection('connected');
       setApiRefreshKey(value => value + 1);
       showToast(localSyncCompleted
         ? result.message || 'Синхронизация завершена'
@@ -1418,39 +1446,48 @@ export default function App() {
 
   const handleApprove = (reportId: string, name: string) => {
     const reply = replies[reportId]?.trim() ?? '';
-    setReports(prev => prev.filter(r => r.id !== reportId));
-    setAllReports(prev => prev.map(report => report.id === reportId ? { ...report, status: 'APPROVED', mentorReply: reply || undefined } : report));
-    setReplies(prev => {
-      const next = { ...prev };
-      delete next[reportId];
-      return next;
-    });
+    if (processingReportIds.includes(reportId)) return;
+    if (apiConnection !== 'connected') {
+      setApiConnectionMessage('Нет связи с сервером. Отчёт остался в очереди; подключитесь к интернету и повторите действие.');
+      showToast('Нет связи. Отчёт не изменён и остался в очереди.');
+      return;
+    }
 
-    if (apiConnection === 'connected') {
-      api.approveReport<{ success: boolean; status: string; tgMessageDelivered?: boolean | null }>(reportId, reply || undefined)
-        .then(result => {
-          clearLocalChange('reports', reportId);
-          if (reply && !result.tgMessageDelivered) {
-            setApiConnectionMessage(`Отчет ${name} принят, но Telegram не подтвердил доставку`);
-          }
-        })
-        .catch((_error: unknown) => {
-          markLocalChange('reports', reportId);
-          setApiConnectionMessage('Отчёт принят; синхронизация ожидает подключения.');
+    setProcessingReportIds(prev => [...prev, reportId]);
+    setApiConnectionMessage('');
+    setDeliveryNotice(null);
+    void api.approveReport<{ success: boolean; status: string; tgMessageDelivered?: boolean | null }>(reportId, reply || undefined)
+      .then(result => {
+        if (!result.success) throw new Error('Сервер не подтвердил принятие отчёта');
+        clearLocalChange('reports', reportId);
+        setReports(prev => prev.filter(report => report.id !== reportId));
+        setAllReports(prev => prev.map(report => report.id === reportId ? { ...report, status: 'APPROVED', mentorReply: reply || undefined } : report));
+        setReplies(prev => {
+          const next = { ...prev };
+          delete next[reportId];
+          return next;
         });
-    } else {
-      markLocalChange('reports', reportId);
-    }
 
-    if (reply) {
-      showToast(`Отчёт принят! Ответ отправлен ${name} в Telegram.`);
-    } else {
-      showToast(`Отчёт ${name} принят без комментария.`);
-    }
+        if (reply && result.tgMessageDelivered !== true) {
+          setDeliveryNotice({ studentName: name, text: reply });
+          showToast(`Отчёт ${name} принят, но отправка ответа не подтверждена.`);
+        } else if (reply) {
+          showToast(`Отчёт ${name} принят, комментарий отправлен в Telegram.`);
+        } else {
+          showToast(`Отчёт ${name} принят без комментария.`);
+        }
+      })
+      .catch(() => {
+        setApiConnection('offline');
+        setApiConnectionMessage('Не удалось подтвердить действие. Отчёт остался в очереди. Проверьте соединение и повторите.');
+        showToast('Не удалось принять отчёт. Проверьте связь и повторите попытку.');
+      })
+      .finally(() => setProcessingReportIds(prev => prev.filter(id => id !== reportId)));
   };
 
   const handleReject = async (reportId: string, name: string) => {
     const reason = replies[reportId]?.trim() ?? '';
+    if (processingReportIds.includes(reportId)) return;
     if (!reason) {
       setRejectErrorReportId(reportId);
       const inputEl = document.getElementById(`reply-input-${reportId}`);
@@ -1460,38 +1497,40 @@ export default function App() {
       showToast('Укажите причину возврата на доработку в строке комментария');
       return;
     }
-    setRejectErrorReportId(null);
-    let messageDelivered = false;
-    if (apiConnection === 'connected') {
-      try {
-        const result = await api.rejectReport<{ success: boolean; tgMessageDelivered?: boolean | null }>(reportId, reason);
-        if (!result.success) throw new Error('Сервер не подтвердил возврат отчета');
-        messageDelivered = result.tgMessageDelivered === true;
-      } catch {
-        markLocalChange('reports', reportId);
-        setAllReports(prev => prev.map(report => report.id === reportId ? { ...report, status: 'REJECTED', mentorReply: reason } : report));
-        setReports(prev => prev.filter(report => report.id !== reportId));
-        setReplies(prev => {
-          const next = { ...prev };
-          delete next[reportId];
-          return next;
-        });
-        showToast(`Возврат отчёта ${name} ожидает синхронизации`);
-        return;
-      }
-    } else {
-      markLocalChange('reports', reportId);
+    if (apiConnection !== 'connected') {
+      setApiConnectionMessage('Нет связи с сервером. Отчёт остался в очереди; подключитесь к интернету и повторите возврат.');
+      showToast('Нет связи. Отчёт остался в очереди.');
+      return;
     }
-    setReports(prev => prev.filter(report => report.id !== reportId));
-    setAllReports(prev => prev.map(report => report.id === reportId ? { ...report, status: 'REJECTED', mentorReply: reason } : report));
-    setReplies(prev => {
-      const next = { ...prev };
-      delete next[reportId];
-      return next;
-    });
-    showToast(apiConnection === 'connected'
-      ? messageDelivered ? `Отчет возвращен ${name}; сообщение доставлено в Telegram` : `Отчет возвращен ${name}; сообщение не доставлено в Telegram`
-      : `Отчёт возвращён; сообщение ${name} не отправлено, синхронизация ожидает подключения`);
+
+    setProcessingReportIds(prev => [...prev, reportId]);
+    setRejectErrorReportId(null);
+    setApiConnectionMessage('');
+    setDeliveryNotice(null);
+    try {
+      const result = await api.rejectReport<{ success: boolean; tgMessageDelivered?: boolean | null }>(reportId, reason);
+      if (!result.success) throw new Error('Сервер не подтвердил возврат отчёта');
+      clearLocalChange('reports', reportId);
+      setReports(prev => prev.filter(report => report.id !== reportId));
+      setAllReports(prev => prev.map(report => report.id === reportId ? { ...report, status: 'REJECTED', mentorReply: reason } : report));
+      setReplies(prev => {
+        const next = { ...prev };
+        delete next[reportId];
+        return next;
+      });
+      if (result.tgMessageDelivered === true) {
+        showToast(`Отчёт возвращён ${name}; сообщение доставлено в Telegram.`);
+      } else {
+        setDeliveryNotice({ studentName: name, text: reason });
+        showToast(`Отчёт возвращён, но отправка сообщения ${name} не подтверждена.`);
+      }
+    } catch {
+      setApiConnection('offline');
+      setApiConnectionMessage('Не удалось подтвердить возврат. Отчёт остался в очереди. Проверьте соединение и повторите.');
+      showToast('Не удалось вернуть отчёт. Проверьте связь и повторите попытку.');
+    } finally {
+      setProcessingReportIds(prev => prev.filter(id => id !== reportId));
+    }
   };
 
   const toggleStudentPause = async (studentId: string) => {
@@ -1573,9 +1612,15 @@ export default function App() {
     { id: 'inbox', label: 'На проверку', icon: Inbox, count: reports.length },
     { id: 'students', label: 'Ученицы', icon: Users },
     { id: 'analytics', label: 'Аналитика', icon: BarChart3 },
-    { id: 'promotion', label: 'Продвижение', icon: BookOpen },
+    { id: 'promotion', label: 'Материалы', icon: BookOpen },
     { id: 'settings', label: 'Настройки', icon: Settings },
   ];
+
+  const syncStatusMessage = apiConnection === 'offline'
+    ? (apiConnectionMessage || 'Нет связи с сервером. Проверьте подключение и повторите синхронизацию.')
+    : pendingSyncDomains.length > 0
+      ? 'Есть изменения, которые ещё не отправлены на сервер.'
+      : null;
 
   const periodReports = getReportRange(allReports, analyticsPeriod);
   const currentIncomeTotal = students.reduce((sum, student) => sum + student.currentIncome, 0);
@@ -1745,7 +1790,7 @@ export default function App() {
       <div className="app-layout flex">
 
         {/* Sidebar */}
-        <aside className="app-sidebar hidden lg:flex flex-col w-64 min-h-screen bg-white border-r border-slate-200/60 px-4 py-8 fixed left-0 top-0 z-20">
+        <aside className="app-sidebar hidden xl:flex flex-col w-64 min-h-screen bg-white border-r border-slate-200/60 px-4 py-8 fixed left-0 top-0 z-20">
           <div className="px-3 mb-6">
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Панель наставника</h1>
           </div>
@@ -1794,7 +1839,7 @@ export default function App() {
         </aside>
 
         {/* Mobile top bar */}
-        <div className="lg:hidden fixed top-0 left-0 right-0 z-20 bg-white border-b border-slate-200/60 px-4 py-3.5">
+        <div className="xl:hidden fixed top-0 left-0 right-0 z-20 bg-white border-b border-slate-200/60 px-4 py-3.5">
           <div className="flex items-center justify-between mb-2.5">
             <div>
               <h1 className="text-base font-bold text-slate-900 tracking-tight">Панель наставника</h1>
@@ -1816,7 +1861,7 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="mobile-bottom-nav lg:hidden" aria-label="Основные разделы">
+        <nav className="mobile-bottom-nav xl:hidden" aria-label="Основные разделы">
           {tabs.map(t => (
             <button
               key={t.id}
@@ -1832,15 +1877,48 @@ export default function App() {
                 )}
               </span>
               <span className="mobile-bottom-nav__label">
-                {t.label === 'На проверку' ? 'Проверка' : t.label === 'Продвижение' ? 'Материалы' : t.label}
+                {t.label === 'На проверку' ? 'Проверка' : t.label}
               </span>
             </button>
           ))}
         </nav>
 
         {/* Main content */}
-        <main className="app-main flex-1 lg:ml-64 pt-28 lg:pt-0">
+        <main className="app-main flex-1 xl:ml-64 pt-28 xl:pt-0">
           <div className="app-content max-w-5xl mx-auto px-3.5 sm:px-6 md:px-10 py-6 sm:py-10">
+
+            {(syncStatusMessage || deliveryNotice) && (
+              <div className="mb-5 space-y-3" aria-live="polite">
+                {syncStatusMessage && (
+                  <div role="status" className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+                    <span>{syncStatusMessage}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleApiSync()}
+                      disabled={isApiSyncing}
+                      className="min-h-11 shrink-0 rounded-lg bg-white px-4 py-2 font-semibold text-amber-950 shadow-sm disabled:opacity-60"
+                    >
+                      {isApiSyncing ? 'Проверяем соединение…' : 'Повторить синхронизацию'}
+                    </button>
+                  </div>
+                )}
+                {deliveryNotice && (
+                  <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="min-w-0 flex-1"><b>Ответ для {deliveryNotice.studentName} не доставлен.</b> Скопируйте его и отправьте в Telegram вручную: «{deliveryNotice.text}»</p>
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void navigator.clipboard?.writeText(deliveryNotice.text).then(() => showToast('Ответ скопирован. Откройте Telegram и отправьте его ученице.')).catch(() => showToast('Не удалось скопировать. Выделите текст ответа вручную.'))}
+                        className="min-h-11 rounded-lg bg-white px-4 py-2 font-semibold text-amber-950 shadow-sm"
+                      >
+                        Скопировать ответ
+                      </button>
+                      <button type="button" onClick={() => setDeliveryNotice(null)} className="min-h-11 rounded-lg px-3 py-2 font-medium text-amber-900" aria-label="Закрыть сообщение о недоставленном ответе">Закрыть</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ════════════ TAB: INBOX ════════════ */}
                 {activeTab === 'inbox' && (
@@ -1906,7 +1984,7 @@ export default function App() {
                             <div>
                               <div className="text-base sm:text-lg font-bold text-slate-900">{r.studentName}</div>
                               <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                                <span className="text-xs sm:text-sm text-slate-500">@{r.tgUsername}</span>
+                                <span className="text-xs sm:text-sm text-slate-500">{r.tgUsername ? `@${r.tgUsername.replace(/^@/, '')}` : 'Telegram не привязан'}</span>
                                 <span className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md font-mono flex items-center gap-1">
                                   <Clock className="w-3 h-3 text-slate-400" />
                                   {r.submittedAt.replace(/\s*\(опоздание.*?\)/i, '')}
@@ -1922,15 +2000,17 @@ export default function App() {
                             </div>
                           </div>
 
-                          <a
-                            href={`https://t.me/${r.tgUsername}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200/60 px-3.5 py-1.5 rounded-xl transition self-start sm:self-auto shrink-0"
-                          >
-                            <span>В Telegram</span>
-                            <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.8} />
-                          </a>
+                          {r.tgUsername && (
+                            <a
+                              href={`https://t.me/${r.tgUsername.replace(/^@/, '')}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200/60 px-3.5 py-1.5 rounded-xl transition self-start sm:self-auto shrink-0"
+                            >
+                              <span>В Telegram</span>
+                              <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.8} />
+                            </a>
+                          )}
                         </div>
 
                         {/* Content */}
@@ -1998,15 +2078,17 @@ export default function App() {
                                   <FileText className="w-4 h-4 text-indigo-600" strokeWidth={1.8} />
                                   <span>Краткая сводка рефлексии</span>
                                 </span>
-                                <a
-                                  href={`https://t.me/${r.tgUsername}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-xs text-indigo-600 font-medium hover:text-indigo-800 transition inline-flex items-center gap-1"
-                                >
-                                  <span>Перейти к аудио в TG</span>
-                                  <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={1.8} />
-                                </a>
+                                {r.tgUsername && (
+                                  <a
+                                    href={`https://t.me/${r.tgUsername.replace(/^@/, '')}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-xs text-indigo-600 font-medium hover:text-indigo-800 transition inline-flex items-center gap-1"
+                                  >
+                                    <span>Перейти к аудио в TG</span>
+                                    <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={1.8} />
+                                  </a>
+                                )}
                               </div>
                               <div className="space-y-1.5 text-slate-700 leading-relaxed">
                                 <div className="flex items-start gap-2.5">
@@ -2052,12 +2134,8 @@ export default function App() {
                                 if (rejectErrorReportId === r.id) setRejectErrorReportId(null);
                                 setReplies({ ...replies, [r.id]: e.target.value });
                               }}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                  void handleApprove(r.id, r.studentName);
-                                }
-                              }}
-                              placeholder="Написать правки или подтверждение ученице (Enter чтобы одобрить)..."
+                              placeholder="Напишите ответ или правки для ученицы"
+                              disabled={processingReportIds.includes(r.id)}
                               className={`w-full flex-1 text-sm px-4 py-2.5 rounded-xl border bg-white focus:outline-none transition placeholder:text-slate-400 ${
                                 rejectErrorReportId === r.id
                                   ? 'border-rose-400 ring-2 ring-rose-100 bg-rose-50/20'
@@ -2066,20 +2144,31 @@ export default function App() {
                             />
                             <div className="flex items-center gap-2 sm:shrink-0">
                               <button
-                                onClick={() => void handleApprove(r.id, r.studentName)}
-                                title="Одобрить отчёт (нажмите Enter в строке ввода)"
-                                className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-xs"
+                                type="button"
+                                disabled={processingReportIds.includes(r.id)}
+                                onClick={() => requestConfirm({
+                                  title: `Одобрить отчёт ${r.studentName}?`,
+                                  message: (replies[r.id]?.trim())
+                                    ? `Отчёт будет принят. Комментарий «${replies[r.id].trim()}» отправится ученице в Telegram.`
+                                    : 'Отчёт будет принят без комментария ученице.',
+                                  confirmLabel: 'Одобрить отчёт',
+                                  cancelLabel: 'Вернуться к проверке',
+                                  isDanger: false,
+                                  onConfirm: () => handleApprove(r.id, r.studentName),
+                                })}
+                                className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-xs disabled:cursor-wait disabled:opacity-60"
                               >
                                 <CheckCheck className="w-4 h-4" strokeWidth={1.8} />
-                                <span>Одобрить</span>
+                                <span>{processingReportIds.includes(r.id) ? 'Принимаем…' : 'Одобрить'}</span>
                               </button>
                               <button
                                 type="button"
+                                disabled={processingReportIds.includes(r.id)}
                                 onClick={() => void handleReject(r.id, r.studentName)}
                                 title="Вернуть отчёт на доработку с указанием правок"
-                                className="flex-1 sm:flex-initial rounded-xl border border-rose-300 text-rose-700 bg-rose-50/50 hover:bg-rose-100 px-4 py-2.5 text-sm font-semibold transition shrink-0 cursor-pointer text-center"
+                                className="flex-1 sm:flex-initial rounded-xl border border-rose-300 text-rose-700 bg-rose-50/50 hover:bg-rose-100 px-4 py-2.5 text-sm font-semibold transition shrink-0 cursor-pointer text-center disabled:cursor-wait disabled:opacity-60"
                               >
-                                На доработку
+                                {processingReportIds.includes(r.id) ? 'Возвращаем…' : 'На доработку'}
                               </button>
                             </div>
                           </div>
@@ -2272,9 +2361,16 @@ export default function App() {
 
                     <div className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
                       {filtered.length === 0 ? (
-                        <p className="px-6 py-10 text-center text-sm text-slate-500">
-                          {students.length === 0 ? 'Добавьте учениц, чтобы увидеть календарь дисциплины.' : 'По выбранным условиям ученицы не найдены.'}
-                        </p>
+                        students.length === 0 ? (
+                          <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+                            <p className="text-sm text-slate-600">В потоке пока нет учениц. Добавьте первую, чтобы вести отчёты, календарь и созвоны в одном месте.</p>
+                            <button type="button" onClick={() => setIsAddingStudent(true)} className="min-h-11 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm">
+                              Добавить первую ученицу
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="px-6 py-10 text-center text-sm text-slate-500">По выбранным условиям ученицы не найдены. Сбросьте фильтр или измените поиск.</p>
+                        )
                       ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-left">
@@ -3017,7 +3113,7 @@ export default function App() {
                 {/* Header: Title & Actions */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                   <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Продвижение и база знаний</h2>
+                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Материалы для работы</h2>
                   </div>
 
                   <div className="flex items-center gap-2.5 self-start sm:self-auto">
@@ -3321,18 +3417,11 @@ export default function App() {
                                 </button>
                               </div>
 
-                              <button
-                                onClick={() => void toggleRuleEnabled(rule.id)}
-                                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                  rule.enabled !== false ? 'bg-indigo-600' : 'bg-slate-200'
-                                }`}
-                              >
-                                <span
-                                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                                    rule.enabled !== false ? 'translate-x-4' : 'translate-x-0'
-                                  }`}
-                                />
-                              </button>
+                              <AccessibleToggle
+                                checked={rule.enabled !== false}
+                                label={`Приём отчётов по ${rule.hashtag}`}
+                                onChange={() => void toggleRuleEnabled(rule.id)}
+                              />
                             </div>
                           </div>
 
@@ -3437,16 +3526,7 @@ export default function App() {
                           <span>{systemSettings.morningPushTime}</span>
                           <Pencil className="w-2.5 h-2.5 text-slate-400" />
                         </button>
-                        <button
-                          onClick={() => toggleSystemSetting('morningPushEnabled', `Утренний пуш в ${systemSettings.morningPushTime}`)}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                            systemSettings.morningPushEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                          }`}
-                        >
-                          <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
-                            systemSettings.morningPushEnabled ? 'translate-x-4' : 'translate-x-0'
-                          }`} />
-                        </button>
+                        <AccessibleToggle checked={systemSettings.morningPushEnabled} label="Утреннее напоминание" onChange={() => toggleSystemSetting('morningPushEnabled', `Утренний пуш в ${systemSettings.morningPushTime}`)} />
                       </div>
                     </div>
 
@@ -3466,16 +3546,7 @@ export default function App() {
                           <span>{systemSettings.eveningReminderTime}</span>
                           <Pencil className="w-2.5 h-2.5 text-slate-400" />
                         </button>
-                        <button
-                          onClick={() => toggleSystemSetting('eveningReminderEnabled', `Вечернее напоминание в ${systemSettings.eveningReminderTime}`)}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                            systemSettings.eveningReminderEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                          }`}
-                        >
-                          <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
-                            systemSettings.eveningReminderEnabled ? 'translate-x-4' : 'translate-x-0'
-                          }`} />
-                        </button>
+                        <AccessibleToggle checked={systemSettings.eveningReminderEnabled} label="Вечернее напоминание" onChange={() => toggleSystemSetting('eveningReminderEnabled', `Вечернее напоминание в ${systemSettings.eveningReminderTime}`)} />
                       </div>
                     </div>
 
@@ -3495,16 +3566,7 @@ export default function App() {
                           <span>{systemSettings.dailyDeadlineTime}</span>
                           <Pencil className="w-2.5 h-2.5 text-slate-400" />
                         </button>
-                        <button
-                          onClick={() => toggleSystemSetting('strictDeadlineEnabled', 'Режим строгого дедлайна')}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                            systemSettings.strictDeadlineEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                          }`}
-                        >
-                          <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
-                            systemSettings.strictDeadlineEnabled ? 'translate-x-4' : 'translate-x-0'
-                          }`} />
-                        </button>
+                        <AccessibleToggle checked={systemSettings.strictDeadlineEnabled} label="Фиксировать опоздания и пропуски после дедлайна" onChange={() => toggleSystemSetting('strictDeadlineEnabled', 'Режим строгого дедлайна')} />
                       </div>
                     </div>
 
@@ -3524,16 +3586,7 @@ export default function App() {
                           <span>{systemSettings.saturdayPollTime}</span>
                           <Pencil className="w-2.5 h-2.5 text-slate-400" />
                         </button>
-                        <button
-                          onClick={() => toggleSystemSetting('saturdayPollEnabled', `Субботний срез в ${systemSettings.saturdayPollTime}`)}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                            systemSettings.saturdayPollEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                          }`}
-                        >
-                          <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
-                            systemSettings.saturdayPollEnabled ? 'translate-x-4' : 'translate-x-0'
-                          }`} />
-                        </button>
+                        <AccessibleToggle checked={systemSettings.saturdayPollEnabled} label="Субботний опрос о продажах и рассылках" onChange={() => toggleSystemSetting('saturdayPollEnabled', `Субботний срез в ${systemSettings.saturdayPollTime}`)} />
                       </div>
                     </div>
 
@@ -3543,16 +3596,7 @@ export default function App() {
                         <div className="text-sm font-semibold text-slate-900">Воскресенье — выходной (стрики не сгорают)</div>
                         <div className="text-xs text-slate-500">Бот отключает дедлайны в воскресенье и напоминает ученицам восстановить силы</div>
                       </div>
-                      <button
-                        onClick={() => toggleSystemSetting('sundayRestEnabled', 'Режим отдыха в воскресенье')}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          systemSettings.sundayRestEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                        }`}
-                      >
-                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
-                          systemSettings.sundayRestEnabled ? 'translate-x-4' : 'translate-x-0'
-                        }`} />
-                      </button>
+                      <AccessibleToggle checked={systemSettings.sundayRestEnabled} label="Выходной в воскресенье без потери серии отчётов" onChange={() => toggleSystemSetting('sundayRestEnabled', 'Режим отдыха в воскресенье')} />
                     </div>
                   </div>
                 </div>
@@ -3619,16 +3663,7 @@ export default function App() {
                         <div className="text-sm font-semibold text-slate-900">Расшифровка голосовых сообщений</div>
                         <div className="text-xs text-slate-500">Автоматический перевод аудиоотчётов в текст</div>
                       </div>
-                      <button
-                        onClick={() => toggleSystemSetting('aiWhisperEnabled', 'Расшифровка голосовых')}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          systemSettings.aiWhisperEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                        }`}
-                      >
-                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
-                          systemSettings.aiWhisperEnabled ? 'translate-x-4' : 'translate-x-0'
-                        }`} />
-                      </button>
+                      <AccessibleToggle checked={systemSettings.aiWhisperEnabled} label="Расшифровка голосовых сообщений" onChange={() => toggleSystemSetting('aiWhisperEnabled', 'Расшифровка голосовых')} />
                     </div>
 
                     {/* Setting 7: Reflection summary */}
@@ -3637,16 +3672,7 @@ export default function App() {
                         <div className="text-sm font-semibold text-slate-900">Сводка рефлексии (эмоции, действия, вопрос наставнику)</div>
                         <div className="text-xs text-slate-500">Формирует 3 главных тезиса из длинных сообщений учениц в ленту «На проверку»</div>
                       </div>
-                      <button
-                        onClick={() => toggleSystemSetting('aiSummaryEnabled', 'Сводка рефлексии')}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          systemSettings.aiSummaryEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                        }`}
-                      >
-                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
-                          systemSettings.aiSummaryEnabled ? 'translate-x-4' : 'translate-x-0'
-                        }`} />
-                      </button>
+                      <AccessibleToggle checked={systemSettings.aiSummaryEnabled} label="Краткая сводка текста отчёта" onChange={() => toggleSystemSetting('aiSummaryEnabled', 'Сводка рефлексии')} />
                     </div>
 
                     {/* Setting 8: Anti-Fraud Reels Deduplication */}
@@ -3655,16 +3681,7 @@ export default function App() {
                         <div className="text-sm font-semibold text-slate-900">Защита от повторной сдачи старых Reels (Анти-фрод)</div>
                         <div className="text-xs text-slate-500">Автоматическая проверка ссылок на Instagram Reels по базе за 60 дней и подсветка дубликатов</div>
                       </div>
-                      <button
-                        onClick={() => toggleSystemSetting('antiFraudDedupEnabled', 'Анти-фрод дедупликация Reels')}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          systemSettings.antiFraudDedupEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                        }`}
-                      >
-                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
-                          systemSettings.antiFraudDedupEnabled ? 'translate-x-4' : 'translate-x-0'
-                        }`} />
-                      </button>
+                      <AccessibleToggle checked={systemSettings.antiFraudDedupEnabled} label="Проверка повторных ссылок на Reels" onChange={() => toggleSystemSetting('antiFraudDedupEnabled', 'Анти-фрод дедупликация Reels')} />
                     </div>
 
                     {/* Setting 9: Video Meeting Link Auto Detect */}
@@ -3673,16 +3690,7 @@ export default function App() {
                         <div className="text-sm font-semibold text-slate-900">Сохранять ссылки на Zoom, Meet и Телемост из Telegram</div>
                         <div className="text-xs text-slate-500">Записывает ссылку, время отправки и сообщение-источник; приглашение не засчитывается как проведённый созвон</div>
                       </div>
-                      <button
-                        onClick={() => toggleSystemSetting('zoomAutoDetectEnabled', 'Авто-определение Zoom-созвонов')}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          systemSettings.zoomAutoDetectEnabled ? 'bg-indigo-600' : 'bg-slate-200'
-                        }`}
-                      >
-                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
-                          systemSettings.zoomAutoDetectEnabled ? 'translate-x-4' : 'translate-x-0'
-                        }`} />
-                      </button>
+                      <AccessibleToggle checked={systemSettings.zoomAutoDetectEnabled} label="Автоматически находить ссылки на созвоны" onChange={() => toggleSystemSetting('zoomAutoDetectEnabled', 'Авто-определение Zoom-созвонов')} />
                     </div>
                   </div>
                 </div>

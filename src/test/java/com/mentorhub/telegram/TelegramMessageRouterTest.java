@@ -267,4 +267,24 @@ class TelegramMessageRouterTest {
         assertThat(recordedStudent).isNotNull();
         assertThat(recordedFocusText).isEqualTo("/task Выложить сторителлинг с прогревом");
     }
+
+    @Test
+    @DisplayName("Repeated /bind by Telegram username is safe and idempotent")
+    void routeIncomingMessage_repeatedBindByUsername() {
+        long groupId = -10071010101L;
+        User studentUser = User.builder().id(71010101L).firstName("Мирослав").isBot(false).userName("yxxtg").build();
+        Chat chat = Chat.builder().id(groupId).type("supergroup").build();
+        Student student = Student.builder().id(1L).fullName("Милана Горохова").tgUsername("yxxtg").build();
+        when(studentRepository.findAll()).thenReturn(List.of(student));
+
+        Message firstBind = Message.builder().messageId(19).from(studentUser).chat(chat).text("/bind yxxtg").build();
+        Message repeatedBind = Message.builder().messageId(20).from(studentUser).chat(chat).text("/bind @yxxtg").build();
+
+        router.routeIncomingMessage(firstBind, 107L, "MINI_GROUP");
+        router.routeIncomingMessage(repeatedBind, 108L, "MINI_GROUP");
+
+        assertThat(student.getTgChatId()).isEqualTo(groupId);
+        assertThat(student.getTgUsername()).isEqualTo("yxxtg");
+        verify(studentRepository, times(2)).save(student);
+    }
 }

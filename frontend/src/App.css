@@ -155,11 +155,17 @@
 }
 
 .app-sidebar .app-nav-link {
-  min-height: 42px;
+  min-height: 48px;
   padding: 9px 12px;
   border-radius: 10px;
   color: #555;
   font-size: 13px;
+}
+
+.app-switch-touch {
+  min-width: 48px;
+  flex: 0 0 48px;
+  padding: 0 6px;
 }
 
 .app-sidebar .app-nav-link.is-active,
@@ -645,7 +651,7 @@
   }
 }
 
-@media (min-width: 64rem) {
+@media (min-width: 80rem) {
   .mobile-bottom-nav {
     display: none;
   }
