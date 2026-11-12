@@ -153,9 +153,13 @@ public class AdminTokenProvisioner implements ApplicationRunner {
                     .mentorName("Ксения")
                     .build());
         } else {
-            for (MentorSetting setting : candidates) {
-                setting.setMentorTgId(mentorTgId);
-                mentorSettingRepository.save(setting);
+            MentorSetting primary = candidates.get(0);
+            primary.setMentorTgId(mentorTgId);
+            mentorSettingRepository.save(primary);
+
+            // Clean up any extraneous duplicate rows in mentor_settings
+            for (int i = 1; i < candidates.size(); i++) {
+                mentorSettingRepository.delete(candidates.get(i));
             }
         }
     }
