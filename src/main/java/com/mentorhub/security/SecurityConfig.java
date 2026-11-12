@@ -21,6 +21,9 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.beans.factory.annotation.Value;
 
+import com.mentorhub.repository.AdminTokenRepository;
+import com.mentorhub.security.AdminTokenHasher;
+import org.springframework.util.StringUtils;
 import java.util.List;
 
 @Configuration
@@ -30,6 +33,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final AdminTokenAuthenticationFilter adminTokenAuthenticationFilter;
+    private final AdminTokenRepository adminTokenRepository;
 
     @Value("${app.cors.allowed-origins:}")
     private String allowedOrigins;
@@ -52,8 +56,18 @@ public class SecurityConfig {
                         .csrfTokenRepository(csrfTokenRepository())
                         .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
                         .ignoringRequestMatchers(
-                                new RequestHeaderRequestMatcher("X-Admin-Token"),
-                                new RequestHeaderRequestMatcher("Authorization")
+                                new RequestHeaderRequestMatcher("Authorization"),
+                                request -> {
+                                    String token = request.getHeader("X-Admin-Token");
+                                    if (!StringUtils.hasText(token)) return false;
+                                    try {
+                                        return adminTokenRepository
+                                                .findByTokenAndIsActiveTrue(AdminTokenHasher.hash(token.trim()))
+                                                .isPresent();
+                                    } catch (Exception e) {
+                                        return false;
+                                    }
+                                }
                         )
                         .ignoringRequestMatchers("/api/telegram/**"))
                 .formLogin(AbstractHttpConfigurer::disable)
@@ -92,6 +106,12 @@ public class SecurityConfig {
                                     "{\"status\":401,\"error\":\"Unauthorized\",\"message\":\"Authentication required. Provide a valid X-Admin-Token header or Bearer token.\"}"
                             );
                         })
+                )
+                .headers(headers -> headers
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                                        + "img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; "
+                                        + "object-src 'none'; frame-ancestors 'none'; base-uri 'self'"))
                 )
                 .addFilterBefore(adminTokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

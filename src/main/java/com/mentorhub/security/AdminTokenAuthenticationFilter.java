@@ -73,7 +73,7 @@ public class AdminTokenAuthenticationFilter extends OncePerRequestFilter {
                     log.debug("Authenticated admin '{}' with role '{}'", adminToken.getAdminName(), role);
                 }
             } else {
-                log.debug("Invalid or inactive admin token presented: {}", token);
+                log.debug("Invalid or inactive admin token presented (length={})", token.length());
             }
         }
 

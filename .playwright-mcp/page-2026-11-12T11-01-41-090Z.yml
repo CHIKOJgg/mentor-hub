@@ -1,0 +1,42 @@
+- generic [ref=e13]:
+  - complementary [ref=e14]:
+    - heading "Панель наставника" [level=1] [ref=e16]
+    - navigation [ref=e17]:
+      - button "На проверку 1" [ref=e72] [cursor=pointer]:
+        - generic [ref=e22]: На проверку
+        - generic [ref=e73]: "1"
+      - button "Ученицы" [ref=e23] [cursor=pointer]
+      - button "Аналитика" [ref=e30] [cursor=pointer]
+      - button "Продвижение" [ref=e34] [cursor=pointer]
+      - button "Настройки" [ref=e38] [cursor=pointer]
+    - generic [ref=e43]:
+      - generic [ref=e44]: Аккаунт
+      - generic [ref=e45]:
+        - generic [ref=e46]: КсенияНаставник
+        - button "Выйти" [ref=e47]
+  - main [ref=e48]:
+    - generic [ref=e805]:
+      - generic [ref=e806]:
+        - generic [ref=e807]:
+          - heading "Ученицы" [level=2] [ref=e808]
+          - button "Настройки" [ref=e809] [cursor=pointer]
+        - generic [ref=e814]:
+          - button "Календарь дисциплины" [ref=e815] [cursor=pointer]
+          - button "Созвоны потока" [ref=e816] [cursor=pointer]
+      - generic [ref=e821]:
+        - textbox "Поиск учениц" [active] [ref=e826]:
+          - /placeholder: Поиск по имени или нише...
+        - generic [ref=e827]:
+          - button "Все (0)" [ref=e828] [cursor=pointer]
+          - button "Дисциплина 95%+" [ref=e830] [cursor=pointer]
+          - button "Требуют внимания" [ref=e834] [cursor=pointer]
+          - button "На паузе" [ref=e838] [cursor=pointer]
+          - button "Есть созвон" [ref=e842] [cursor=pointer]
+      - generic [ref=e847]:
+        - generic [ref=e848]:
+          - generic [ref=e849]: в срок (до 21:00)
+          - generic [ref=e851]: опоздание
+          - generic [ref=e853]: пропуск
+          - generic [ref=e855]: пауза / болезнь
+          - generic [ref=e857]: выходной
+        - paragraph [ref=e860]: Добавьте учениц, чтобы увидеть календарь дисциплины.

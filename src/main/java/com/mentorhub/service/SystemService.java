@@ -107,21 +107,23 @@ public class SystemService {
         MentorSetting setting = mentorSettingRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Настройки наставника не найдены"));
         setting.setMorningPushEnabled(request.morningPushEnabled());
-        setting.setMorningPushTime(request.morningPushTime());
+        if (request.morningPushTime() != null) setting.setMorningPushTime(request.morningPushTime());
         setting.setEveningReminderEnabled(request.eveningReminderEnabled());
-        setting.setEveningReminderTime(request.eveningReminderTime());
-        setting.setDeadlineTime(request.dailyDeadlineTime());
+        if (request.eveningReminderTime() != null) setting.setEveningReminderTime(request.eveningReminderTime());
+        if (request.dailyDeadlineTime() != null) setting.setDeadlineTime(request.dailyDeadlineTime());
         setting.setStrictDeadlineEnabled(request.strictDeadlineEnabled());
         setting.setSaturdayPollEnabled(request.saturdayPollEnabled());
-        setting.setSaturdayPollTime(request.saturdayPollTime());
+        if (request.saturdayPollTime() != null) setting.setSaturdayPollTime(request.saturdayPollTime());
         setting.setSundayRestEnabled(request.sundayRestEnabled());
         setting.setAiWhisperEnabled(request.aiWhisperEnabled());
         setting.setAiSummaryEnabled(request.aiSummaryEnabled());
         setting.setAntiFraudDedupEnabled(request.antiFraudDedupEnabled());
         setting.setZoomAutoDetectEnabled(request.zoomAutoDetectEnabled());
         setting.setAutoRemindersEnabled(request.eveningReminderEnabled());
-        setting.setReminderCron("0 " + request.eveningReminderTime().getMinute() + " " + request.eveningReminderTime().getHour() + " * * MON-SAT");
-        setting.setSaturdayPollCron("0 " + request.saturdayPollTime().getMinute() + " " + request.saturdayPollTime().getHour() + " * * SAT");
+        java.time.LocalTime eveningTime = request.eveningReminderTime() != null ? request.eveningReminderTime() : setting.getEveningReminderTime();
+        if (eveningTime != null) setting.setReminderCron("0 " + eveningTime.getMinute() + " " + eveningTime.getHour() + " * * MON-SAT");
+        java.time.LocalTime saturdayTime = request.saturdayPollTime() != null ? request.saturdayPollTime() : setting.getSaturdayPollTime();
+        if (saturdayTime != null) setting.setSaturdayPollCron("0 " + saturdayTime.getMinute() + " " + saturdayTime.getHour() + " * * SAT");
         return mapSettings(mentorSettingRepository.save(setting));
     }
 

@@ -1,0 +1,10 @@
+- region "Вход в панель наставника" [ref=e938]:
+  - generic [ref=e939]:
+    - heading "Вход в панель наставника" [level=1] [ref=e940]
+    - paragraph [ref=e941]: Персональный доступ для наставника (Ксения) и куратора (Катя)
+  - generic [ref=e942]:
+    - generic [ref=e943]:
+      - generic [ref=e944]: Ключ доступа
+      - textbox "Ключ доступа" [ref=e945]:
+        - /placeholder: Вставьте персональный ключ доступа…
+    - button "Войти в панель" [disabled] [ref=e946]

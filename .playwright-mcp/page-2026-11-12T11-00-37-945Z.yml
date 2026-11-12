@@ -1,0 +1,26 @@
+- generic [ref=e13]:
+  - complementary [ref=e14]:
+    - heading "Панель наставника" [level=1] [ref=e16]
+    - navigation [ref=e17]:
+      - button "На проверку" [ref=e18] [cursor=pointer]
+      - button "Ученицы" [ref=e23] [cursor=pointer]
+      - button "Аналитика" [ref=e30] [cursor=pointer]
+      - button "Продвижение" [ref=e34] [cursor=pointer]
+      - button "Настройки" [ref=e38] [cursor=pointer]
+    - generic [ref=e43]:
+      - generic [ref=e44]: Аккаунт
+      - generic [ref=e45]:
+        - generic [ref=e46]: КсенияНаставник
+        - button "Выйти" [ref=e47]
+  - main [ref=e48]:
+    - generic [ref=e50]:
+      - generic [ref=e51]:
+        - generic [ref=e52]:
+          - heading "Проверка отчётов" [level=2] [ref=e53]
+          - paragraph [ref=e54]: Все отчёты проверены
+        - generic [ref=e55]:
+          - button "На проверку (0)" [ref=e56] [cursor=pointer]
+          - button "Проверенные (0)" [ref=e61] [cursor=pointer]
+      - generic [ref=e66]:
+        - paragraph [ref=e70]: Нет отчётов для проверки
+        - paragraph [ref=e71]: Новые отчёты появятся здесь.

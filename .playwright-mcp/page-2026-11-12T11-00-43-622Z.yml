@@ -1,0 +1,58 @@
+- generic [ref=e13]:
+  - complementary [ref=e14]:
+    - heading "Панель наставника" [level=1] [ref=e16]
+    - navigation [ref=e17]:
+      - button "На проверку 1" [active] [ref=e72] [cursor=pointer]:
+        - generic [ref=e22]: На проверку
+        - generic [ref=e73]: "1"
+      - button "Ученицы" [ref=e23] [cursor=pointer]
+      - button "Аналитика" [ref=e30] [cursor=pointer]
+      - button "Продвижение" [ref=e34] [cursor=pointer]
+      - button "Настройки" [ref=e38] [cursor=pointer]
+    - generic [ref=e43]:
+      - generic [ref=e44]: Аккаунт
+      - generic [ref=e45]:
+        - generic [ref=e46]: КсенияНаставник
+        - button "Выйти" [ref=e47]
+  - main [ref=e48]:
+    - generic [ref=e130]:
+      - generic [ref=e131]:
+        - generic [ref=e132]:
+          - heading "Проверка отчётов" [level=2] [ref=e133]
+          - paragraph [ref=e134]: 1 черновик ожидает проверки
+        - generic [ref=e135]:
+          - button "На проверку (1)" [ref=e136] [cursor=pointer]
+          - button "Проверенные (0)" [ref=e141] [cursor=pointer]
+      - generic [ref=e147]:
+        - generic [ref=e148]:
+          - generic [ref=e149]:
+            - generic [ref=e150]: М
+            - generic [ref=e151]:
+              - generic [ref=e152]: Мирослав
+              - generic [ref=e153]:
+                - generic [ref=e154]: "@yxxtg"
+                - generic [ref=e155]: 13:26 (сегодня)
+                - generic [ref=e159]: в срок · до 21:00
+          - link "В Telegram" [ref=e160] [cursor=pointer]:
+            - /url: https://t.me/yxxtg
+        - generic [ref=e166]:
+          - generic [ref=e168]:
+            - generic [ref=e169]: "Рассылки:"
+            - generic [ref=e170]: 0 шт
+          - generic [ref=e171]:
+            - generic [ref=e172]:
+              - generic [ref=e173]: Краткая сводка рефлексии
+              - link "Перейти к аудио в TG" [ref=e178] [cursor=pointer]:
+                - /url: https://t.me/yxxtg
+            - generic [ref=e183]:
+              - generic [ref=e186]:
+                - strong [ref=e187]: "Эмоции / состояние:"
+                - text: Состояние не определено.
+              - generic [ref=e190]:
+                - strong [ref=e191]: "Действия:"
+                - text: Действия не зафиксированы из-за отсутствия текста.
+          - generic [ref=e192]:
+            - textbox "Написать правки или подтверждение ученице (Enter чтобы одобрить)..." [ref=e193]
+            - generic [ref=e194]:
+              - button "Одобрить" [ref=e195] [cursor=pointer]
+              - button "На доработку" [ref=e200] [cursor=pointer]

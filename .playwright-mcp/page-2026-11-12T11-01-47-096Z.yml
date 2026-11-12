@@ -1,0 +1,52 @@
+- generic [ref=e13]:
+  - complementary [ref=e14]:
+    - heading "Панель наставника" [level=1] [ref=e16]
+    - navigation [ref=e17]:
+      - button "На проверку 1" [ref=e72] [cursor=pointer]:
+        - generic [ref=e22]: На проверку
+        - generic [ref=e73]: "1"
+      - button "Ученицы" [ref=e23] [cursor=pointer]
+      - button "Аналитика" [ref=e30] [cursor=pointer]
+      - button "Продвижение" [ref=e34] [cursor=pointer]
+      - button "Настройки" [ref=e38] [cursor=pointer]
+    - generic [ref=e43]:
+      - generic [ref=e44]: Аккаунт
+      - generic [ref=e45]:
+        - generic [ref=e46]: КсенияНаставник
+        - button "Выйти" [ref=e47]
+  - main [ref=e48]:
+    - generic [ref=e805]:
+      - generic [ref=e806]:
+        - generic [ref=e807]:
+          - heading "Ученицы" [level=2] [ref=e808]
+          - button "Настройки" [ref=e809] [cursor=pointer]
+        - generic [ref=e814]:
+          - button "Календарь дисциплины" [ref=e815] [cursor=pointer]
+          - button "Созвоны потока" [ref=e816] [cursor=pointer]
+      - generic [ref=e821]:
+        - textbox "Поиск учениц" [ref=e826]:
+          - /placeholder: Поиск по имени или нише...
+          - text: zzzzzzzzzzzzzzzzzz
+        - generic [ref=e827]:
+          - button "Все (0)" [ref=e828] [cursor=pointer]
+          - button "Дисциплина 95%+" [ref=e830] [cursor=pointer]
+          - button "Требуют внимания" [ref=e834] [cursor=pointer]
+          - button "На паузе" [ref=e838] [cursor=pointer]
+          - button "Есть созвон" [ref=e842] [cursor=pointer]
+      - region "Календарь созвонов Ксении" [ref=e915]:
+        - generic [ref=e916]:
+          - generic [ref=e917]:
+            - heading "Календарь созвонов Ксении" [level=3] [ref=e918]
+            - paragraph [ref=e919]: Общее расписание консультаций со всеми ученицами потока
+          - generic [ref=e920]:
+            - button "Предыдущая неделя" [ref=e921]
+            - generic [ref=e924]: 23 ноября — 29 ноября 2026 г.
+            - button "Следующая неделя" [active] [ref=e925]
+            - button "Эта неделя" [ref=e928]
+        - generic [ref=e929]:
+          - generic [ref=e930]: "На неделе: 0 созвонов"
+          - generic [ref=e931]: "Проведено: 0"
+          - generic [ref=e932]: "Без даты: 0"
+        - generic [ref=e933]:
+          - paragraph [ref=e936]: На этой неделе созвонов нет
+          - paragraph [ref=e937]: Переключите неделю или назначьте дату встречи в профиле ученицы.
