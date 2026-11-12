@@ -1,6 +1,7 @@
 import { X, Save } from 'lucide-react';
 import { BEAUTY_NICHES } from '../../types';
 import { AccessibleModal } from '../common/AccessibleModal';
+import { StudentCategoryField } from '../common/StudentCategoryField';
 import { useModalDismiss } from '../common/useModalDismiss';
 
 export interface NewStudentForm {
@@ -16,6 +17,7 @@ export interface NewStudentForm {
 export interface AddStudentModalProps {
   isOpen: boolean;
   newStudent: NewStudentForm;
+  categories: string[];
   onClose: () => void;
   onUpdate: (updater: (prev: NewStudentForm) => NewStudentForm) => void;
   onSubmit: () => void | Promise<void>;
@@ -24,6 +26,7 @@ export interface AddStudentModalProps {
 export function AddStudentModal({
   isOpen,
   newStudent,
+  categories,
   onClose,
   onUpdate,
   onSubmit,
@@ -62,18 +65,15 @@ export function AddStudentModal({
             />
           </label>
 
-          <label className="text-xs font-semibold text-slate-600 sm:col-span-2">
-            Ниша (Бьюти & Стиль)
-            <select
+          <div className="text-xs font-semibold text-slate-600 sm:col-span-2">
+            <label htmlFor="new-student-category" className="mb-1 block">Категория ученицы</label>
+            <StudentCategoryField
+              id="new-student-category"
               value={newStudent.niche}
-              onChange={event => onUpdate(prev => ({ ...prev, niche: event.target.value }))}
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500 bg-white"
-            >
-              {BEAUTY_NICHES.map(niche => (
-                <option key={niche} value={niche}>{niche}</option>
-              ))}
-            </select>
-          </label>
+              categories={categories}
+              onChange={niche => onUpdate(prev => ({ ...prev, niche }))}
+            />
+          </div>
 
           <label className="text-xs font-semibold text-slate-600">
             Доход на старте (Точка А), ₽

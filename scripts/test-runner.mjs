@@ -490,6 +490,26 @@ describe('Tier 1 - Area 4: Discipline Calendar Tab («👩‍🎓 Ученицы
     assert.ok(appTsxContent.includes('zoomCalendarEvents'), 'Calendar events aggregate sessions from the student roster');
     assert.ok(appTsxContent.includes('setZoomCalendarWeekOffset'), 'Calendar supports previous/next week navigation');
   });
+
+  test('TC-1.4.11: Student categories can be changed directly from the roster with explicit save and cancel', () => {
+    assert.ok(appTsxContent.includes('onSaveCategory'), 'Roster exposes a category save action');
+    assert.ok(appTsxContent.includes('Сохранить категорию'), 'Category edits have an explicit save button');
+    assert.ok(appTsxContent.includes('Отмена'), 'Category edits can be canceled');
+    assert.ok(appTsxContent.includes('Закрыть без сохранения'), 'Closing with an unsaved category asks before discarding');
+  });
+
+  test('TC-1.4.12: Custom student categories are suggested across profile and add-student flows', () => {
+    assert.ok(appTsxContent.includes('＋ Добавить свою категорию'), 'Category picker offers a custom category');
+    assert.ok(appTsxContent.includes('studentCategoryOptions'), 'Options include current student categories');
+    assert.ok(appTsxContent.includes('Название новой категории ученицы'), 'Custom category input has an accessible name');
+  });
+
+  test('TC-1.4.13: Quick category saves only the category field and does not replace Zoom sessions', () => {
+    const categorySaveHandler = appTsxContent.match(/const saveStudentCategory = async[\s\S]*?\n  };/)?.[0];
+    assert.ok(categorySaveHandler, 'Quick category save handler exists');
+    assert.ok(categorySaveHandler.includes('api.updateStudent<ApiStudent>(studentId, { niche: normalizedCategory })'), 'Only niche/category is sent to the API');
+    assert.strictEqual(categorySaveHandler.includes('replaceStudentZoomSessions'), false, 'Category saves do not rewrite Zoom records');
+  });
 });
 
 describe('Tier 1 - Area 5: Analytics & Story Generator Tab («📊 Аналитика & Кейсы»)', () => {

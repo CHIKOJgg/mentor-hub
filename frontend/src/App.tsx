@@ -457,6 +457,10 @@ export default function App() {
     () => students.find(student => student.id === selectedStudentId) ?? students[0] ?? emptyStudent,
     [students, selectedStudentId],
   );
+  const studentCategoryOptions = useMemo(() => {
+    const categories = [...BEAUTY_NICHES, ...students.map(student => student.niche.trim()).filter(Boolean)];
+    return Array.from(new Map(categories.map(category => [category.toLocaleLowerCase('ru-RU'), category])).values());
+  }, [students]);
   const setSelectedStudent = (student: StudentDiscipline) => {
     setSelectedStudentId(student.id);
   };
@@ -737,6 +741,30 @@ export default function App() {
       markLocalChange('students', localKey);
     }
     showToast(`Профиль ${normalized.fullName} обновлен; ожидает синхронизации`);
+  };
+
+  const saveStudentCategory = async (studentId: string, category: string) => {
+    const student = students.find(item => item.id === studentId);
+    const normalizedCategory = category.trim();
+    if (!student || !normalizedCategory || normalizedCategory.length > 100) return;
+
+    const updatedStudent = { ...student, niche: normalizedCategory };
+    setStudents(previous => previous.map(item => item.id === studentId ? updatedStudent : item));
+    if (selectedStudent.id === studentId) setSelectedStudent(updatedStudent);
+
+    if (apiConnection === 'connected' && !studentId.startsWith('local-')) {
+      try {
+        await api.updateStudent<ApiStudent>(studentId, { niche: normalizedCategory });
+        showToast(`Категория ${student.fullName} сохранена`);
+        return;
+      } catch {
+        markLocalChange('students', studentId);
+        setApiConnectionMessage('Категория сохранена на устройстве и ожидает синхронизации.');
+      }
+    } else {
+      markLocalChange('students', studentId);
+    }
+    showToast(`Категория ${student.fullName} сохранена и ожидает синхронизации`);
   };
 
   const addStudent = async () => {
@@ -3732,6 +3760,7 @@ export default function App() {
       <AddStudentModal
         isOpen={isAddingStudent}
         newStudent={newStudent}
+        categories={studentCategoryOptions}
         onClose={() => {
           setIsAddingStudent(false);
           setNewStudent(newStudentTemplate);
@@ -3745,13 +3774,16 @@ export default function App() {
         isOpen={isManagingStudents}
         onClose={() => setIsManagingStudents(false)}
         students={students}
+        categories={studentCategoryOptions}
         onEditStudent={s => setEditingStudent(s)}
+        onSaveCategory={saveStudentCategory}
         onAddStudent={() => setIsAddingStudent(true)}
       />
 
       {/* ─── MODAL 2B: STUDENT PROFILE & FINANCIALS EDITOR ─── */}
       <EditStudentModal
         student={editingStudent}
+        categories={studentCategoryOptions}
         setEditingStudent={setEditingStudent}
         onClose={() => setEditingStudent(null)}
         onSave={saveStudentProfile}

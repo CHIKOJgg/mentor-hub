@@ -1,12 +1,14 @@
 import { useCallback, useState } from 'react';
 import type React from 'react';
 import { X, Save, Plus, Trash2 } from 'lucide-react';
-import { BEAUTY_NICHES, type StudentDiscipline, type ZoomSessionRecord } from '../../types';
+import type { StudentDiscipline, ZoomSessionRecord } from '../../types';
 import { AccessibleModal } from '../common/AccessibleModal';
+import { StudentCategoryField } from '../common/StudentCategoryField';
 import { useModalDismiss } from '../common/useModalDismiss';
 
 interface EditStudentModalProps {
   student: StudentDiscipline | null;
+  categories: string[];
   setEditingStudent: React.Dispatch<React.SetStateAction<StudentDiscipline | null>>;
   onClose: () => void;
   onSave: (student: StudentDiscipline) => Promise<void> | void;
@@ -18,6 +20,7 @@ interface EditStudentModalProps {
 
 export const EditStudentModal = ({
   student,
+  categories,
   setEditingStudent,
   onClose,
   onSave,
@@ -66,19 +69,13 @@ export const EditStudentModal = ({
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Ниша (Бьюти & Стиль):</label>
-              <select
+              <label htmlFor={`student-category-${student.id}`} className="text-xs font-semibold text-slate-600 block mb-1">Категория ученицы:</label>
+              <StudentCategoryField
+                id={`student-category-${student.id}`}
                 value={student.niche}
-                onChange={e => updateEditingStudent({ ...student, niche: e.target.value })}
-                className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 bg-white"
-              >
-                {BEAUTY_NICHES.map(niche => (
-                  <option key={niche} value={niche}>{niche}</option>
-                ))}
-                {!BEAUTY_NICHES.includes(student.niche as (typeof BEAUTY_NICHES)[number]) && (
-                  <option value={student.niche}>{student.niche}</option>
-                )}
-              </select>
+                categories={categories}
+                onChange={niche => updateEditingStudent({ ...student, niche })}
+              />
             </div>
           </div>
 
