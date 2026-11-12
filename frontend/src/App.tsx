@@ -1720,7 +1720,7 @@ export default function App() {
       <div className="app-layout flex">
 
         {/* Sidebar */}
-        <aside className="app-sidebar hidden md:flex flex-col w-64 min-h-screen bg-white border-r border-slate-200/60 px-4 py-8 fixed left-0 top-0 z-20">
+        <aside className="app-sidebar hidden lg:flex flex-col w-64 min-h-screen bg-white border-r border-slate-200/60 px-4 py-8 fixed left-0 top-0 z-20">
           <div className="px-3 mb-6">
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Панель наставника</h1>
           </div>
@@ -1769,7 +1769,7 @@ export default function App() {
         </aside>
 
         {/* Mobile top bar */}
-        <div className="md:hidden fixed top-0 left-0 right-0 z-20 bg-white border-b border-slate-200/60 px-4 py-3.5">
+        <div className="lg:hidden fixed top-0 left-0 right-0 z-20 bg-white border-b border-slate-200/60 px-4 py-3.5">
           <div className="flex items-center justify-between mb-2.5">
             <div>
               <h1 className="text-base font-bold text-slate-900 tracking-tight">Панель наставника</h1>
@@ -1791,7 +1791,7 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="mobile-bottom-nav md:hidden" aria-label="Основные разделы">
+        <nav className="mobile-bottom-nav lg:hidden" aria-label="Основные разделы">
           {tabs.map(t => (
             <button
               key={t.id}
@@ -1812,7 +1812,7 @@ export default function App() {
         </nav>
 
         {/* Main content */}
-        <main className="app-main flex-1 md:ml-64 pt-28 md:pt-0">
+        <main className="app-main flex-1 lg:ml-64 pt-28 lg:pt-0">
           <div className="app-content max-w-5xl mx-auto px-3.5 sm:px-6 md:px-10 py-6 sm:py-10">
 
             {/* ════════════ TAB: INBOX ════════════ */}

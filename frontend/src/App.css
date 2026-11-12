@@ -567,7 +567,7 @@
   border-left-color: #47a58b !important;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .app-content {
     padding: 28px 20px 56px;
   }
@@ -615,6 +615,12 @@
   .analytics-view .analytics-financial-metric {
     padding-right: 14px;
     padding-left: 14px;
+  }
+}
+
+@media (min-width: 64rem) {
+  .mobile-bottom-nav {
+    display: none;
   }
 }
 
