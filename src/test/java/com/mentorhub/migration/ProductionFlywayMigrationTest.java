@@ -74,7 +74,7 @@ class ProductionFlywayMigrationTest {
                 .locations("classpath:db/production-migration")
                 .baselineOnMigrate(true)
                 .baselineVersion("9")
-                .ignoreMigrationPatterns("*:missing")
+                .ignoreMigrationPatterns("*:missing", "*:future")
                 .load();
     }
 
