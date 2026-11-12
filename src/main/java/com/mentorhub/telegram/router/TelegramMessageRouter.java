@@ -215,18 +215,23 @@ public class TelegramMessageRouter {
             }
         }
 
+        // Allow binding group to student via command
+        if (rawText != null) {
+            String lower = rawText.trim().toLowerCase(Locale.ROOT);
+            if (lower.startsWith("/bind") || lower.startsWith("/link")) {
+                handleBindCommand(chatId, message, rawText, from.getUserName() != null ? "@" + from.getUserName() : "User " + fromId);
+                return;
+            }
+        }
+
         boolean isMentor = isMentorEcho(fromId);
         boolean isCurator = isCuratorEcho(fromId);
 
-        // Allow Mentor or Curator to set a task or bind a student via command
+        // Allow Mentor or Curator to set a task via command
         if ((isMentor || isCurator) && rawText != null) {
             String lower = rawText.trim().toLowerCase(Locale.ROOT);
             if (lower.startsWith("/задание") || lower.startsWith("/task") || lower.startsWith("/цель") || lower.startsWith("/фокус")) {
                 handleMentorSetTask(chatId, message, rawText, isMentor ? "Ксения" : "Катя");
-                return;
-            }
-            if (lower.startsWith("/bind") || lower.startsWith("/link")) {
-                handleBindCommand(chatId, message, rawText, isMentor ? "Ксения" : "Катя");
                 return;
             }
             if (telegramReportHandler.containsVideoMeetingLink(message)) {
@@ -268,14 +273,15 @@ public class TelegramMessageRouter {
                     .build());
 
             if (telegramSenderService != null && chatId != null) {
-                boolean isGroup = message.getChat() != null && (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat());
-                boolean hasExplicitTrigger = rawText != null && (rawText.startsWith("/") || rawText.contains("#"));
-                if (!isGroup || hasExplicitTrigger) {
+                boolean hasExplicitTrigger = rawText != null && (rawText.contains("#") || rawText.startsWith("/"));
+                boolean hasMedia = message.getVoice() != null || message.getVideoNote() != null;
+                if (hasExplicitTrigger || hasMedia) {
+                    boolean isGroup = message.getChat() != null && (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat());
                     String guidance;
                     if (isGroup) {
                         guidance = "Здравствуйте! Я бот-ассистент платформы Mentor Hub для Ксении и Кати 🌸\n\n" +
                                 "Чтобы связать эту группу с ученицей, укажите имя ученицы в названии группы (например: «VIP — Милана») или отправьте команду:\n" +
-                                "/bind [Имя ученицы] (например: /bind Милана)";
+                                "/bind [Имя или ник ученицы] (например: /bind Милана или /bind yxxtg)";
                     } else {
                         String uName = from.getUserName() != null ? "@" + from.getUserName() : "ID: " + fromId;
                         guidance = "Здравствуйте! Ваш Telegram (" + uName + ") пока не привязан к списку учениц в системе.\n\n" +
@@ -468,21 +474,18 @@ public class TelegramMessageRouter {
         if (StringUtils.hasText(rawText)) {
             String trimmed = rawText.trim();
             if (trimmed.startsWith("/bind") || trimmed.startsWith("/link")) {
-                String target = trimmed.replaceFirst("^/(bind|link)", "").trim().toLowerCase();
-                if (StringUtils.hasText(target)) {
-                    List<Student> allStudents = studentRepository.findAll();
-                    for (Student st : allStudents) {
-                        if (st.getFullName() != null && st.getFullName().toLowerCase().contains(target)) {
-                            st.setTgChatId(chatId);
-                            studentRepository.save(st);
-                            log.info("Bound student '{}' to chat {} via /bind command", st.getFullName(), chatId);
-                            if (telegramSenderService != null && chatId != null) {
-                                telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
-                                        "✅ Группа успешно привязана к ученице " + st.getFullName() + "! Теперь все отчёты с хэштегами будут автоматически попадать на проверку Ксении и Кате.");
-                            }
-                            return Optional.of(st);
-                        }
+                String target = trimmed.replaceFirst("^/(bind|link)(@[a-zA-Z0-9_]+)?", "").trim();
+                Optional<Student> matched = findStudentByQuery(target);
+                if (matched.isPresent()) {
+                    Student st = matched.get();
+                    st.setTgChatId(chatId);
+                    studentRepository.save(st);
+                    log.info("Bound student '{}' to chat {} via /bind command", st.getFullName(), chatId);
+                    if (telegramSenderService != null && chatId != null) {
+                        telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
+                                "✅ Группа успешно привязана к ученице " + st.getFullName() + "! Теперь все отчёты с хэштегами будут автоматически попадать на проверку Ксении и Кате 🌸");
                     }
+                    return Optional.of(st);
                 }
             }
         }
@@ -603,27 +606,59 @@ public class TelegramMessageRouter {
         }
     }
 
+    public Optional<Student> findStudentByQuery(String query) {
+        if (!StringUtils.hasText(query)) return Optional.empty();
+        String clean = query.trim().toLowerCase(Locale.ROOT).replace("@", "");
+        List<Student> students = studentRepository.findAll();
+
+        // 1. Numeric ID match (e.g. "1" or "st-1")
+        String numeric = clean.replace("st-", "");
+        if (numeric.matches("\\d+")) {
+            try {
+                long targetId = Long.parseLong(numeric);
+                Optional<Student> byId = students.stream().filter(s -> java.util.Objects.equals(s.getId(), targetId)).findFirst();
+                if (byId.isPresent()) return byId;
+            } catch (NumberFormatException ignored) {}
+        }
+
+        // 2. Match tg_username
+        Optional<Student> byUsername = students.stream()
+                .filter(s -> s.getTgUsername() != null && s.getTgUsername().toLowerCase(Locale.ROOT).contains(clean))
+                .findFirst();
+        if (byUsername.isPresent()) return byUsername;
+
+        // 3. Match full name or first name
+        Optional<Student> byName = students.stream()
+                .filter(s -> s.getFullName() != null && s.getFullName().toLowerCase(Locale.ROOT).contains(clean))
+                .findFirst();
+        if (byName.isPresent()) return byName;
+
+        return Optional.empty();
+    }
+
     private void handleBindCommand(Long chatId, Message message, String rawText, String actorName) {
         if (chatId == null || !StringUtils.hasText(rawText)) return;
-        String targetName = rawText.replaceFirst("^/(bind|link)(@[a-zA-Z0-9_]+)?", "").trim().toLowerCase(Locale.ROOT);
-        if (!StringUtils.hasText(targetName)) {
+        String query = rawText.replaceFirst("^/(bind|link)(@[a-zA-Z0-9_]+)?", "").trim();
+        if (!StringUtils.hasText(query)) {
             if (telegramSenderService != null) {
                 telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
-                        "Укажите имя ученицы для привязки:\n/bind [Имя ученицы] (например: /bind Милана)");
+                        "Укажите имя или ник ученицы для привязки:\n/bind [Имя или ник] (например: /bind Милана или /bind yxxtg)");
             }
             return;
         }
 
-        List<Student> students = studentRepository.findAll();
-        Optional<Student> matched = students.stream()
-                .filter(s -> s.getFullName().toLowerCase(Locale.ROOT).contains(targetName))
-                .findFirst();
+        Optional<Student> matched = findStudentByQuery(query);
 
         if (matched.isPresent()) {
             Student st = matched.get();
             st.setTgChatId(chatId);
+            if (message.getFrom() != null && StringUtils.hasText(message.getFrom().getUserName())) {
+                if (!StringUtils.hasText(st.getTgUsername())) {
+                    st.setTgUsername(message.getFrom().getUserName().replace("@", "").trim());
+                }
+            }
             studentRepository.save(st);
-            log.info("Actor {} bound student '{}' to chat {} via /bind command", actorName, st.getFullName(), chatId);
+            log.info("Actor {} bound student '{}' (#{}) to chat {} via /bind command", actorName, st.getFullName(), st.getId(), chatId);
             if (telegramSenderService != null) {
                 telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
                         "✅ Группа успешно привязана к ученице " + st.getFullName() + "!\n" +
@@ -631,7 +666,7 @@ public class TelegramMessageRouter {
             }
         } else if (telegramSenderService != null) {
             telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
-                    "Ученица «" + targetName + "» не найдена в списке потока. Проверьте имя в панели наставника.");
+                    "Ученица «" + query + "» не найдена в списке потока. Проверьте имя или Telegram-ник в панели наставника.");
         }
     }
 }

@@ -57,12 +57,23 @@ public class AdminTokenProvisioner implements ApplicationRunner {
             throw new IllegalStateException("ADMIN_MENTOR_TOKEN and ADMIN_CURATOR_TOKEN must be different");
         }
 
-        Long mentorTgId = telegramEnabled
-                ? requireTelegramUserId(mentorTelegramUserId, "ADMIN_MENTOR_TELEGRAM_USER_ID")
-                : parseOptionalTelegramUserId(mentorTelegramUserId, "ADMIN_MENTOR_TELEGRAM_USER_ID");
-        Long curatorTgId = telegramEnabled
-                ? requireTelegramUserId(curatorTelegramUserId, "ADMIN_CURATOR_TELEGRAM_USER_ID")
-                : parseOptionalTelegramUserId(curatorTelegramUserId, "ADMIN_CURATOR_TELEGRAM_USER_ID");
+        Long mentorTgId = parseOptionalTelegramUserId(mentorTelegramUserId, "ADMIN_MENTOR_TELEGRAM_USER_ID");
+        Long curatorTgId = parseOptionalTelegramUserId(curatorTelegramUserId, "ADMIN_CURATOR_TELEGRAM_USER_ID");
+
+        if (mentorTgId == null) {
+            mentorTgId = mentorSettingRepository.findFirstByOrderByIdAsc()
+                    .map(MentorSetting::getMentorTgId)
+                    .orElse(11223344L);
+        }
+
+        if (telegramEnabled) {
+            if (mentorTelegramUserId == null || mentorTelegramUserId.isBlank()) {
+                log.warn("ADMIN_MENTOR_TELEGRAM_USER_ID is not configured. Defaulting to {} for echo filtering.", mentorTgId);
+            }
+            if (curatorTelegramUserId == null || curatorTelegramUserId.isBlank()) {
+                log.warn("ADMIN_CURATOR_TELEGRAM_USER_ID is not configured. Curator echo filtering will use configured admin tokens.");
+            }
+        }
         if (telegramEnabled && (!org.springframework.util.StringUtils.hasText(telegramBotToken)
                 || telegramBotToken.startsWith("mock"))) {
             throw new IllegalStateException("TELEGRAM_BOT_TOKEN must be configured when TELEGRAM_BOT_ENABLED=true");
