@@ -41,7 +41,7 @@ export const EditStudentModal = ({
 
   return (
     <AccessibleModal title={`Профиль и созвоны: ${student.fullName}`} onClose={requestClose}>
-      <div className="bg-white rounded-2xl max-w-lg w-full p-5 border border-slate-200 space-y-4 shadow-xl sm:p-6">
+      <div className="student-edit-modal bg-white rounded-2xl max-w-lg w-full p-5 border border-slate-200 space-y-4 shadow-xl sm:p-6">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <h3 className="text-base font-bold text-slate-900">Профиль и созвоны</h3>

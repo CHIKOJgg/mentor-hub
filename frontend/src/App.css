@@ -37,6 +37,20 @@
   min-height: 96px;
 }
 
+.student-edit-modal input:not([type="checkbox"]),
+.student-edit-modal select,
+.student-edit-modal textarea {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.student-edit-modal input:not([type="checkbox"]):focus,
+.student-edit-modal select:focus,
+.student-edit-modal textarea:focus {
+  background-color: #fff;
+  border-color: #6366f1;
+}
+
 .app-shell button:focus-visible,
 .app-shell a:focus-visible,
 .app-shell input:focus-visible,
