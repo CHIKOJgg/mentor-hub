@@ -89,6 +89,7 @@ public class SecurityConfig {
                                 "/*.ico",
                                 "/api/auth/csrf",
                                 "/api/auth/login",
+                                "/api/auth/logout",
                                 "/api/auth/session",
                                 "/api/telegram/**",
                                 "/actuator/health",
