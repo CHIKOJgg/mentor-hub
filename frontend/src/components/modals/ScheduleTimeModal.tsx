@@ -1,4 +1,5 @@
 import type React from 'react';
+import { useState } from 'react';
 import { X, Save } from 'lucide-react';
 import type { SystemSettings } from '../../types';
 
@@ -21,7 +22,11 @@ export const ScheduleTimeModal = ({
   onClose,
   onSave,
 }: ScheduleTimeModalProps) => {
+  const [error, setError] = useState('');
+
   if (!editingScheduleTime) return null;
+
+  const isValidTime = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 
   return (
     <div
@@ -50,9 +55,10 @@ export const ScheduleTimeModal = ({
           <input
             type="text"
             value={editingScheduleTime.value}
-            onChange={e => setEditingScheduleTime({ ...editingScheduleTime, value: e.target.value })}
+            onChange={e => { setEditingScheduleTime({ ...editingScheduleTime, value: e.target.value }); setError(''); }}
             onKeyDown={e => {
               if (e.key === 'Enter') {
+                if (!isValidTime(editingScheduleTime.value)) { setError('Формат ЧЧ:ММ, например 09:00'); return; }
                 onSave(editingScheduleTime.key, editingScheduleTime.value, editingScheduleTime.label);
                 onClose();
               }
@@ -60,6 +66,7 @@ export const ScheduleTimeModal = ({
             placeholder="09:00"
             className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-center font-bold focus:outline-none focus:border-indigo-500"
           />
+          {error && <p className="text-xs text-rose-600 mt-1">{error}</p>}
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -73,6 +80,7 @@ export const ScheduleTimeModal = ({
           <button
             type="button"
             onClick={() => {
+              if (!isValidTime(editingScheduleTime.value)) { setError('Формат ЧЧ:ММ, например 09:00'); return; }
               onSave(editingScheduleTime.key, editingScheduleTime.value, editingScheduleTime.label);
               onClose();
             }}

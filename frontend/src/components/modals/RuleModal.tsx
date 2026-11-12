@@ -1,5 +1,5 @@
 import type React from 'react';
-import { X, Save } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { TaskRule } from '../../types';
 
 export type NewRuleForm = Omit<TaskRule, 'id'>;
@@ -155,7 +155,7 @@ export const RuleModal = ({
                   : 'bg-slate-100 text-slate-600 border-slate-200'
               }`}
             >
-              {isReelsRule || (isAddingRule ? newRule.required : editingRule?.required) ? 'обязательно' : 'по факту'}
+              {isReelsRule || (isAddingRule ? newRule.required : editingRule?.required) ? 'обязательно' : 'необязательно'}
             </button>
           </div>
         </div>
@@ -186,7 +186,6 @@ export const RuleModal = ({
             }}
             className="px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
           >
-            <Save className="w-3.5 h-3.5" />
             <span>{isAddingRule ? 'Добавить правило' : 'Сохранить правило'}</span>
           </button>
         </div>

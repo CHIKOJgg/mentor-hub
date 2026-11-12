@@ -1731,7 +1731,7 @@ export default function App() {
                 setApiConnectionMessage('Данные синхронизированы.');
                 setApiRefreshKey(key => key + 1);
               }).catch(error => {
-                const unauthorized = error instanceof Error && 'status' in error && error.status === 401;
+                const unauthorized = error instanceof Error && 'status' in error && (error.status === 401 || error.status === 400);
                 setApiConnection(unauthorized ? 'unauthorized' : 'offline');
                 setApiConnectionMessage(unauthorized ? 'Ключ доступа не принят. Проверьте правильность ключа.' : 'Не удалось подключиться. Проверьте соединение.');
               }).finally(() => setIsLoginSubmitting(false));
@@ -3395,7 +3395,7 @@ export default function App() {
                                   rule.required ? 'bg-rose-50 text-rose-700 hover:bg-rose-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                 }`}
                               >
-                                {rule.required ? 'Обязательный' : 'Опциональный'}
+                                {rule.required ? 'Обязательный' : 'Необязательный'}
                               </button>
                             </div>
                             <p className="text-xs text-slate-500">{rule.description}</p>

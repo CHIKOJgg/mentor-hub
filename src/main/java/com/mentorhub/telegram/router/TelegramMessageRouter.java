@@ -530,7 +530,7 @@ public class TelegramMessageRouter {
                     .toList();
             if (!rules.isEmpty()) {
                 for (TaskRule rule : rules) {
-                    String badge = Boolean.TRUE.equals(rule.getIsRequired()) ? " (Обязательно)" : " (По факту)";
+                    String badge = Boolean.TRUE.equals(rule.getIsRequired()) ? " (Обязательно)" : " (Необязательно)";
                     sb.append("• ").append(rule.getHashtag()).append(" — ").append(rule.getTitle()).append(badge).append("\n");
                     if (StringUtils.hasText(rule.getDescription())) {
                         sb.append("  ").append(rule.getDescription()).append("\n");
