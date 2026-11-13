@@ -5,11 +5,12 @@ server:
   servlet:
     session:
       tracking-modes: cookie
-      timeout: 8h
+      timeout: 3650d
       cookie:
         http-only: true
         secure: ${SESSION_COOKIE_SECURE:true}
         same-site: strict
+        max-age: 315360000
 
 app:
   cors:
@@ -25,6 +26,10 @@ spring:
     default: production
   application:
     name: mentor-tracker-backend
+  session:
+    store-type: jdbc
+    jdbc:
+      initialize-schema: always
   threads:
     virtual:
       enabled: true
