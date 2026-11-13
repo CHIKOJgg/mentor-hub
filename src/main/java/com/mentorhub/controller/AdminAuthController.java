@@ -6,6 +6,7 @@ import com.mentorhub.dto.CsrfTokenResponse;
 import com.mentorhub.entity.AdminToken;
 import com.mentorhub.repository.AdminTokenRepository;
 import com.mentorhub.security.AdminTokenHasher;
+import com.mentorhub.security.AdminLoginRateLimiter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -42,6 +43,7 @@ public class AdminAuthController {
 
     private final AdminTokenRepository adminTokenRepository;
     private final SecurityContextRepository securityContextRepository;
+    private final AdminLoginRateLimiter loginRateLimiter;
 
     @GetMapping("/csrf")
     public CsrfTokenResponse getCsrfToken(CsrfToken csrfToken) {
@@ -68,6 +70,12 @@ public class AdminAuthController {
             HttpServletRequest request,
             HttpServletResponse response
     ) {
+        if (!loginRateLimiter.tryAcquire(request.getRemoteAddr())) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .cacheControl(CacheControl.noStore())
+                    .header("Retry-After", "60")
+                    .body(Map.of("status", 429, "error", "Too Many Requests", "message", "Слишком много попыток. Попробуйте через минуту."));
+        }
         String key = requestBody.accessKey().trim();
         if (key.length() > 512) return unauthorized();
 

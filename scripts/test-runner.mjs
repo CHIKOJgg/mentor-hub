@@ -531,11 +531,11 @@ describe('Tier 1 - Area 5: Analytics & Story Generator Tab («📊 Аналит�
     assert.ok(analyticsSource.includes('Статус: На паузе') && analyticsSource.includes('Статус: Активный трек'), 'Both status labels must be visible');
   });
 
-  test('TC-1.5.5: Copy-case action is removed while the visual case preview remains', () => {
+  test('TC-1.5.5: Instagram case preview and copy action are both removed', () => {
     const analyticsSource = appTsxContent.split('TAB: ANALYTICS')[1]?.split('TAB: PROMOTION')[0] ?? '';
     assert.ok(!analyticsSource.includes('handleCopyCase'), 'Analytics must not expose the copy-case action');
     assert.ok(!analyticsSource.includes('Скопировать текст кейса'), 'Copy button must be removed');
-    assert.ok(analyticsSource.includes('Предпросмотр кейса для Instagram Stories'), 'Visual case preview remains available');
+    assert.ok(!analyticsSource.includes('Предпросмотр кейса для Instagram Stories'), 'Requested Instagram case preview must stay removed');
   });
 
   test('TC-1.5.6: 10 key metrics represented in analytics dashboard', () => {

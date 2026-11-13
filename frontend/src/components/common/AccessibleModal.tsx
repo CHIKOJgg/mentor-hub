@@ -88,7 +88,7 @@ export function AccessibleModal({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className="max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto overscroll-contain rounded-2xl outline-none sm:max-h-[calc(100dvh-2.5rem)]"
+        className="max-h-[calc(100dvh-1.5rem)] w-full flex justify-center overflow-y-auto overscroll-contain rounded-2xl outline-none sm:max-h-[calc(100dvh-2.5rem)]"
       >
         {children}
       </section>
