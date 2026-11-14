@@ -34,6 +34,9 @@ public class ContentDraft {
     @Column(name = "file_tg_id")
     private String fileTgId;
 
+    @Column(name = "file_unique_id", length = 255)
+    private String fileUniqueId;
+
     @Column(name = "is_duplicate")
     @Builder.Default
     private Boolean isDuplicate = false;

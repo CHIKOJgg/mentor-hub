@@ -1,12 +1,12 @@
-# TEST READY REPORT — 2026-11-12T18:13:39.045Z
+# TEST READY REPORT — 2026-11-14T18:33:33.866Z
 
 ## 1. Executive Summary
 - **Overall Status:** PASSED (Exit Code 0)
 - **Total Test Suites:** 12
-- **Total Assertions Executed:** 76
-- **Passed:** 76 (100%)
+- **Total Assertions Executed:** 81
+- **Passed:** 81 (100%)
 - **Failed:** 0
-- **Total Execution Duration:** 4436ms
+- **Total Execution Duration:** 8300ms
 - **Runtime Environment:** Node.js v24.20.0, Windows 11, Vite 8.3.6, TypeScript 7.0.2, Oxlint 1.90.0
 
 ---
@@ -80,7 +80,7 @@
 
 ---
 
-### Tier 2: Boundary & Corner Cases (11 Test Cases)
+### Tier 2: Boundary & Corner Cases (13 Test Cases)
 - [x] **TC-2.1:** Empty inbox has a concise production empty state without demo controls.
 - [x] **TC-2.2:** Production state starts without fixture records.
 - [x] **TC-2.3:** Zero sales amount renders formatted "0 ₽" without NaN or blank block.
@@ -92,6 +92,8 @@
 - [x] **TC-2.9:** Extreme text length protection via CSS truncation and max-width.
 - [x] **TC-2.10:** Responsive classes support iPad portrait (768px, 820px) and landscape (1024px).
 - [x] **TC-2.11:** Clipboard write error fallback handler protects from headless browser crash.
+- [x] **TC-2.12:** Timezone boundary test — getTodayIsoDate returns Minsk calendar date (UTC+3) across midnight.
+- [x] **TC-2.13:** Modal dirty protection — AccessibleModal protects uncommitted form inputs on Escape and backdrop click.
 
 ---
 
@@ -123,4 +125,4 @@ node scripts/test-runner.mjs
 npm --prefix frontend test
 ```
 
-All 76 test cases passed with 100% success rate.
+All 81 test cases passed with 100% success rate.

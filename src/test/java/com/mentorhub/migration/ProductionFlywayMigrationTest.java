@@ -35,13 +35,15 @@ class ProductionFlywayMigrationTest {
         Flyway production = productionFlyway();
         production.migrate();
 
-        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("12");
+        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("13");
         assertThat(count("students")).isZero();
         assertThat(count("daily_reports")).isZero();
         assertThat(count("task_rules")).isZero();
         assertThat(count("curator_scripts")).isZero();
         assertThat(count("mentor_settings")).isEqualTo(1);
         assertThat(count("admin_tokens")).isZero();
+        assertThat(count("information_schema.columns WHERE lower(table_name) = 'content_drafts' AND lower(column_name) = 'file_unique_id'"))
+                .isEqualTo(1);
 
         production.migrate();
         assertThat(count("students")).isZero();
@@ -61,8 +63,10 @@ class ProductionFlywayMigrationTest {
         Flyway production = productionFlyway();
         production.migrate();
 
-        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("12");
+        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("13");
         assertThat(count("daily_reports")).isEqualTo(seededReports);
+        assertThat(count("information_schema.columns WHERE lower(table_name) = 'content_drafts' AND lower(column_name) = 'file_unique_id'"))
+                .isEqualTo(1);
         assertThat(appliedLegacyDataFixes()).isZero();
         assertThat(count("admin_tokens WHERE is_active = TRUE AND token IN ('magic-ksenia-mentor-token-998877', 'magic-katya-curator-token-112233')"))
                 .isZero();

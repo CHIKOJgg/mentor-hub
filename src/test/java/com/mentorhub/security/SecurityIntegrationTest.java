@@ -155,4 +155,39 @@ class SecurityIntegrationTest {
                         .header("X-Admin-Token", "magic-ksenia-mentor-token-998877"))
                 .andExpect(status().isNoContent());
     }
+
+    @Test
+    @DisplayName("Actuator root endpoint requires authentication")
+    void testActuatorRootRequiresAuthentication() throws Exception {
+        mockMvc.perform(get("/actuator"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Arbitrary non-API unmapped routes require authentication")
+    void testArbitraryNonApiEndpointRequiresAuthentication() throws Exception {
+        mockMvc.perform(get("/non-api-unmapped-endpoint"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Arbitrary non-webhook telegram endpoint requires authentication")
+    void testArbitraryTelegramEndpointRequiresAuthentication() throws Exception {
+        mockMvc.perform(get("/api/telegram/other"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Actuator health check remains publicly accessible")
+    void testActuatorHealthIsPublic() throws Exception {
+        mockMvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Session status check remains publicly accessible")
+    void testSessionStatusIsPublic() throws Exception {
+        mockMvc.perform(get("/api/auth/session"))
+                .andExpect(status().isOk());
+    }
 }

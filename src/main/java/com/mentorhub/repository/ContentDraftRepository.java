@@ -14,4 +14,6 @@ public interface ContentDraftRepository extends JpaRepository<ContentDraft, Long
     List<ContentDraft> findByReportIdAndDraftType(Long reportId, String draftType);
 
     boolean existsByFileTgId(String fileTgId);
+
+    boolean existsByFileUniqueId(String fileUniqueId);
 }

@@ -6,6 +6,8 @@ interface AccessibleModalProps {
   onClose: () => void;
   overlayClassName?: string;
   children: ReactNode;
+  hasUnsavedChanges?: boolean;
+  confirmDiscardMessage?: string;
 }
 
 const FOCUSABLE_SELECTOR = [
@@ -22,20 +24,46 @@ export function AccessibleModal({
   onClose,
   overlayClassName = '',
   children,
+  hasUnsavedChanges,
+  confirmDiscardMessage,
 }: AccessibleModalProps) {
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
+  const isDomDirtyRef = useRef(false);
+  const hasUnsavedChangesRef = useRef(hasUnsavedChanges);
+  const confirmDiscardMessageRef = useRef(confirmDiscardMessage);
+
   useLayoutEffect(() => {
     onCloseRef.current = onClose;
-  }, [onClose]);
+    hasUnsavedChangesRef.current = hasUnsavedChanges;
+    confirmDiscardMessageRef.current = confirmDiscardMessage;
+  }, [onClose, hasUnsavedChanges, confirmDiscardMessage]);
 
   const requestClose = useCallback(() => {
+    const isDirty = hasUnsavedChangesRef.current ?? isDomDirtyRef.current;
+    if (isDirty) {
+      const message =
+        confirmDiscardMessageRef.current || 'Есть несохранённые изменения. Закрыть без сохранения?';
+      const confirmed =
+        typeof window !== 'undefined' && typeof window.confirm === 'function'
+          ? window.confirm(message)
+          : true;
+      if (!confirmed) return;
+    }
+    isDomDirtyRef.current = false;
     onCloseRef.current();
   }, []);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
+
+    const markDirty = () => {
+      isDomDirtyRef.current = true;
+    };
+    dialog.addEventListener('input', markDirty);
+    dialog.addEventListener('change', markDirty);
+
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusable = () => [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)];
     const first = focusable()[0];
@@ -70,6 +98,8 @@ export function AccessibleModal({
 
     document.addEventListener('keydown', handleKeyDown, true);
     return () => {
+      dialog.removeEventListener('input', markDirty);
+      dialog.removeEventListener('change', markDirty);
       document.removeEventListener('keydown', handleKeyDown, true);
       if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
     };
@@ -88,6 +118,12 @@ export function AccessibleModal({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
+        onInputCapture={() => {
+          isDomDirtyRef.current = true;
+        }}
+        onChangeCapture={() => {
+          isDomDirtyRef.current = true;
+        }}
         className="max-h-[calc(100dvh-1.5rem)] w-full flex justify-center overflow-y-auto overscroll-contain rounded-2xl outline-none sm:max-h-[calc(100dvh-2.5rem)]"
       >
         {children}

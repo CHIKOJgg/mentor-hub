@@ -71,7 +71,7 @@ public class SecurityConfig {
                                     }
                                 }
                         )
-                        .ignoringRequestMatchers("/api/telegram/**"))
+                        .ignoringRequestMatchers("/api/telegram/webhook"))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session
@@ -83,6 +83,7 @@ public class SecurityConfig {
                                 "/",
                                 "/index.html",
                                 "/favicon.svg",
+                                "/favicon.ico",
                                 "/assets/**",
                                 "/*.js",
                                 "/*.css",
@@ -93,13 +94,13 @@ public class SecurityConfig {
                                 "/api/auth/login",
                                 "/api/auth/logout",
                                 "/api/auth/session",
-                                "/api/telegram/**",
+                                "/api/telegram/webhook",
                                 "/actuator/health",
                                 "/actuator/info",
                                 "/error"
                         ).permitAll()
                         .requestMatchers("/api/**").hasAnyRole("MENTOR", "CURATOR")
-                        .anyRequest().permitAll()
+                        .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, authException) -> {

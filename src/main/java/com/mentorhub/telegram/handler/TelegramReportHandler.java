@@ -569,9 +569,12 @@ public class TelegramReportHandler {
     private boolean createOrUpdateDraft(DailyReport report, Student student, String draftType, String label,
                                         String url, String fileTgId, String fileUniqueId, boolean deduplicationEnabled) {
         if (report.getContentDrafts() != null) {
-            boolean textOnlyDraft = !StringUtils.hasText(fileTgId) && !StringUtils.hasText(url);
+            boolean textOnlyDraft = !StringUtils.hasText(fileTgId)
+                    && !StringUtils.hasText(fileUniqueId)
+                    && !StringUtils.hasText(url);
             boolean alreadyPresent = report.getContentDrafts().stream().anyMatch(d ->
                     (StringUtils.hasText(fileTgId) && Objects.equals(d.getFileTgId(), fileTgId))
+                    || (StringUtils.hasText(fileUniqueId) && Objects.equals(d.getFileUniqueId(), fileUniqueId))
                     || (StringUtils.hasText(url) && (Objects.equals(d.getUrl(), url) || (d.getLabel() != null && d.getLabel().contains(url))))
                     || (StringUtils.hasText(url) && d.getUrl() != null && (d.getUrl().contains(url) || url.contains(d.getUrl())))
                     || (textOnlyDraft && Objects.equals(d.getLabel(), label) && Objects.equals(d.getDraftType(), draftType))
@@ -586,7 +589,11 @@ public class TelegramReportHandler {
         boolean isDuplicate = false;
         String duplicateDate = null;
 
-        if (deduplicationEnabled && StringUtils.hasText(fileTgId)) {
+        if (deduplicationEnabled && StringUtils.hasText(fileUniqueId)
+                && contentDraftRepository.existsByFileUniqueId(fileUniqueId)) {
+            isDuplicate = true;
+            duplicateDate = "ранее";
+        } else if (deduplicationEnabled && StringUtils.hasText(fileTgId)) {
             // Efficient indexed deduplication check instead of loading entire table
             if (contentDraftRepository.existsByFileTgId(fileTgId)) {
                 isDuplicate = true;
@@ -600,6 +607,7 @@ public class TelegramReportHandler {
                 .label(label)
                 .url(url)
                 .fileTgId(fileTgId)
+                .fileUniqueId(fileUniqueId)
                 .isDuplicate(isDuplicate)
                 .duplicateDate(duplicateDate)
                 .createdAt(Instant.now())

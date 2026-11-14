@@ -63,8 +63,23 @@ const createLocalId = (prefix: string): string => {
   return `${prefix}-${Date.now().toString(36)}`;
 };
 
-const getTodayIsoDate = (): string => {
-  return new Date().toISOString().slice(0, 10);
+export const APP_TIMEZONE = 'Europe/Minsk';
+
+const getMinskDateKey = (date: Date): string => {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: APP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find(part => part.type === 'year')?.value ?? '';
+  const month = parts.find(part => part.type === 'month')?.value ?? '';
+  const day = parts.find(part => part.type === 'day')?.value ?? '';
+  return `${year}-${month}-${day}`;
+};
+
+const getTodayIsoDate = (date: Date = new Date()): string => {
+  return getMinskDateKey(date);
 };
 
 const getIsoTimestamp = (): string => {
@@ -196,7 +211,8 @@ const newStudentTemplate = {
 };
 
 const makeInitialWeekDays = (): DayInfo[] => {
-  const today = new Date();
+  const todayIso = getTodayIsoDate();
+  const today = new Date(`${todayIso}T12:00:00+03:00`);
   const monday = new Date(today);
   const offset = (today.getDay() + 6) % 7;
   monday.setDate(today.getDate() - offset);
@@ -244,19 +260,6 @@ const getZoomSessionDate = (session: ZoomSessionRecord): Date | null => {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const getMinskDateKey = (date: Date): string => {
-  const parts = new Intl.DateTimeFormat('en', {
-    timeZone: 'Europe/Minsk',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const year = parts.find(part => part.type === 'year')?.value ?? '';
-  const month = parts.find(part => part.type === 'month')?.value ?? '';
-  const day = parts.find(part => part.type === 'day')?.value ?? '';
-  return `${year}-${month}-${day}`;
 };
 
 const getZoomSessionTimeLabel = (session: ZoomSessionRecord): string => {
@@ -394,7 +397,7 @@ const toApiStudentPayload = (student: StudentDiscipline) => ({
   currentIncome: student.currentIncome,
   initialAvgTicket: student.initialAvgTicket,
   currentAvgTicket: student.currentAvgTicket,
-  startDate: student.startDate ?? new Date().toISOString().slice(0, 10),
+  startDate: student.startDate ?? getTodayIsoDate(),
   isActive: student.isActive ?? true,
   isPaused: student.isOnPause,
   pauseReason: student.pauseReason ?? null,
@@ -413,7 +416,7 @@ const mapApiSettings = (settings: ApiSystemSettings): SystemSettings => ({
 const getReportContentCount = (reports: DailyReport[], type: ContentType): number =>
   reports.reduce((count, report) => count + (report.contentDrafts ?? []).filter(draft => draft.type === type).length, 0);
 
-const getReportDate = (report: DailyReport): string => report.reportDate ?? new Date().toISOString().slice(0, 10);
+const getReportDate = (report: DailyReport): string => report.reportDate ?? getTodayIsoDate();
 
 const getReportRange = (reports: DailyReport[], period: 'week' | 'month' | 'all'): DailyReport[] => {
   if (period === 'all') return reports;
@@ -1299,7 +1302,7 @@ export default function App() {
               tariff: localStudent.tariff === 'VIP' ? 'VIP' : 'STANDARD',
               initialIncome: localStudent.initialIncome,
               initialAvgTicket: localStudent.initialAvgTicket,
-              startDate: localStudent.startDate ?? new Date().toISOString().slice(0, 10),
+              startDate: localStudent.startDate ?? getTodayIsoDate(),
             });
             serverStudent = await api.updateStudent<ApiStudent>(created.id, toApiStudentPayload({ ...localStudent, id: created.id }));
           } else {

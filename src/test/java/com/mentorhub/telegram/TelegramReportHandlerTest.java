@@ -536,7 +536,7 @@ class TelegramReportHandlerTest {
         assertThat(sentReplyCount).isEqualTo(1);
 
         org.telegram.telegrambots.meta.api.objects.Video repeatedVideo = new org.telegram.telegrambots.meta.api.objects.Video();
-        repeatedVideo.setFileId("video_file_same");
+        repeatedVideo.setFileId("video_file_same_reuploaded");
         repeatedVideo.setFileUniqueId("video_unique_same");
         Message repeated = Message.builder().messageId(705).chat(chat).video(repeatedVideo).caption("#рилс ТЕСТ").build();
         handler.handleStudentMessage(student, repeated);
