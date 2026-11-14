@@ -22,6 +22,23 @@ app:
     curator-telegram-user-id: ${ADMIN_CURATOR_TELEGRAM_USER_ID:}
 
 spring:
+  ai:
+    retry:
+      # Failed structured extraction is handled by the application's deterministic fallback.
+      # Avoid repeating non-transient provider errors (invalid model, token limit, etc.).
+      max-attempts: 1
+    openai:
+      base-url: ${AI_BASE_URL:https://api.openai.com}
+      api-key: ${AI_API_KEY:mock-key}
+      chat:
+        options:
+          model: ${AI_MODEL:gpt-4o-mini}
+          temperature: 0.2
+      audio:
+        transcription:
+          options:
+            model: ${AI_WHISPER_MODEL:whisper-1}
+            language: ru
   profiles:
     default: production
   application:
@@ -58,19 +75,8 @@ spring:
     baseline-on-migrate: true
     locations: classpath:db/migration
 
-  ai:
-    openai:
-      base-url: ${AI_BASE_URL:https://api.openai.com}
-      api-key: ${AI_API_KEY:mock-key}
-      chat:
-        options:
-          model: ${AI_MODEL:gpt-4o-mini}
-          temperature: 0.2
-      audio:
-        transcription:
-          options:
-            model: ${AI_WHISPER_MODEL:whisper-1}
-            language: ru
+telegrambots:
+  enabled: false
 
 telegram:
   bot:

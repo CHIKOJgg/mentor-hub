@@ -313,9 +313,9 @@ export const EditStudentModal = ({
             <label className="text-xs font-semibold text-slate-600 block mb-1">Финансовая цель потока (₽):</label>
             <input
               type="number"
-              value={student.portalData?.targetIncome || 100000}
+              value={student.portalData?.targetIncome ?? student.initialIncome * 2}
               onChange={e => {
-                const val = Number(e.target.value) || 100000;
+                const val = Number(e.target.value) || 0;
                 updateEditingStudent({
                   ...student,
                   portalData: student.portalData

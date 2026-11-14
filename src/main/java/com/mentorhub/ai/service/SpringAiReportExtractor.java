@@ -29,6 +29,7 @@ public class SpringAiReportExtractor {
 
     private static final long AI_CHAT_TIMEOUT_MS = 15000L;
     private static final long AI_WHISPER_TIMEOUT_MS = 15000L;
+    private static final int MAX_AI_COMPLETION_TOKENS = 650;
 
     private final DeterministicAiFallbackService fallbackService;
     private final ChatClient chatClient;
@@ -183,6 +184,7 @@ public class SpringAiReportExtractor {
             ExtractedReportDto result = chatClient.prompt()
                     .system(systemPrompt)
                     .user(rawMessage)
+                    .options(OpenAiChatOptions.builder().maxTokens(MAX_AI_COMPLETION_TOKENS).build())
                     .call()
                     .entity(ExtractedReportDto.class);
 
@@ -194,13 +196,14 @@ public class SpringAiReportExtractor {
             boolean isOpenRouter = baseUrl != null && baseUrl.contains("openrouter");
             List<String> fallbacks = isOpenRouter
                     ? List.of("openrouter/free", "meta-llama/llama-3.3-70b-instruct:free", "meta-llama/llama-3.1-8b-instruct:free", "qwen/qwen-2.5-72b-instruct:free")
-                    : List.of("llama-3.1-8b-instant", "llama-3.3-70b-specdec", "llama3-70b-8192", "qwen/qwen3.8-27b");
+                    : List.of("qwen/qwen3.8-27b", "openai/gpt-oss-120b");
 
             for (String fallbackModel : fallbacks) {
                 try {
                     log.info("Attempting AI model fallback '{}' for student '{}'...", fallbackModel, studentName);
                     OpenAiChatOptions options = OpenAiChatOptions.builder()
                             .model(fallbackModel)
+                            .maxTokens(MAX_AI_COMPLETION_TOKENS)
                             .temperature(0.2)
                             .httpHeaders(Map.of(
                                     "HTTP-Referer", "https://mentorhub.app",
@@ -262,12 +265,14 @@ public class SpringAiReportExtractor {
                         {"role": "user", "content": %s}
                       ],
                       "response_format": {"type": "json_object"},
+                      "max_tokens": %d,
                       "temperature": 0.2
                     }
                     """.formatted(
                             freeModel,
                             objectMapper.writeValueAsString(systemPrompt),
-                            objectMapper.writeValueAsString(rawMessage)
+                            objectMapper.writeValueAsString(rawMessage),
+                            MAX_AI_COMPLETION_TOKENS
                     );
 
                 String responseBody = restClient.post()

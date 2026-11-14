@@ -1,7 +1,11 @@
 package com.mentorhub.security;
 
+import com.mentorhub.repository.AdminTokenRepository;
+import com.mentorhub.security.AdminTokenHasher;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -19,11 +23,9 @@ import org.springframework.security.web.util.matcher.RequestHeaderRequestMatcher
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.beans.factory.annotation.Value;
-
-import com.mentorhub.repository.AdminTokenRepository;
-import com.mentorhub.security.AdminTokenHasher;
 import org.springframework.util.StringUtils;
+
+import java.net.URI;
 import java.util.List;
 
 @Configuration
@@ -137,8 +139,44 @@ public class SecurityConfig {
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Admin-Token"));
         config.setAllowCredentials(false);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
+        UrlBasedCorsConfigurationSource allowListedOrigins = new UrlBasedCorsConfigurationSource();
+        allowListedOrigins.registerCorsConfiguration("/**", config);
+        return request -> isSameOriginRequest(request)
+                ? null
+                : allowListedOrigins.getCorsConfiguration(request);
+    }
+
+    private boolean isSameOriginRequest(HttpServletRequest request) {
+        String origin = request.getHeader("Origin");
+        if (!StringUtils.hasText(origin)) {
+            return false;
+        }
+        try {
+            URI originUri = URI.create(origin);
+            if (originUri.getHost() == null
+                    || originUri.getRawUserInfo() != null
+                    || originUri.getRawQuery() != null
+                    || originUri.getRawFragment() != null
+                    || (StringUtils.hasText(originUri.getRawPath()) && !"/".equals(originUri.getRawPath()))) {
+                return false;
+            }
+
+            String requestScheme = request.getScheme();
+            String originScheme = originUri.getScheme();
+            return originScheme != null
+                    && originScheme.equalsIgnoreCase(requestScheme)
+                    && originUri.getHost().equalsIgnoreCase(request.getServerName())
+                    && effectivePort(originScheme, originUri.getPort())
+                    == effectivePort(requestScheme, request.getServerPort());
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private int effectivePort(String scheme, int port) {
+        if (port >= 0) {
+            return port;
+        }
+        return "https".equalsIgnoreCase(scheme) ? 443 : 80;
     }
 }

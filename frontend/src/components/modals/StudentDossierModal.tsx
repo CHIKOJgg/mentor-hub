@@ -26,6 +26,12 @@ export const StudentDossierModal = ({
 }: StudentDossierModalProps) => {
   if (!student) return null;
 
+  const targetIncome = student.portalData?.targetIncome ?? student.initialIncome * 2;
+  const hasTargetIncome = targetIncome > 0;
+  const goalProgress = hasTargetIncome
+    ? Math.min(100, Math.round((student.currentIncome / targetIncome) * 100))
+    : null;
+
   return (
     <AccessibleModal title={`Досье ученицы ${student.fullName}`} onClose={onClose}>
       <div className="bg-white rounded-2xl max-w-2xl w-full p-5 border border-slate-200 space-y-5 shadow-2xl sm:p-6">
@@ -101,7 +107,7 @@ export const StudentDossierModal = ({
               <div className="p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-100">
                 <span className="text-[11px] text-indigo-600 block font-medium">Цель на поток (Б)</span>
                 <span className="text-base font-bold text-indigo-800 font-mono mt-0.5 block">
-                  {(student.portalData?.targetIncome || student.initialIncome * 2).toLocaleString('ru-RU')} ₽
+                  {hasTargetIncome ? `${targetIncome.toLocaleString('ru-RU')} ₽` : 'Не задана'}
                 </span>
               </div>
             </div>
@@ -111,16 +117,16 @@ export const StudentDossierModal = ({
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-slate-700">Прогресс к цели Точки Б:</span>
                 <span className="font-mono font-bold text-indigo-600">
-                  {Math.min(100, Math.round((student.currentIncome / (student.portalData?.targetIncome || student.initialIncome * 2 || 1)) * 100))}%
+                  {goalProgress === null ? 'Задайте цель' : `${goalProgress}%`}
                 </span>
               </div>
               <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
-                <div
-                  className="h-full bg-indigo-600 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${Math.min(100, Math.round((student.currentIncome / (student.portalData?.targetIncome || student.initialIncome * 2 || 1)) * 100))}%`
-                  }}
-                />
+                {goalProgress !== null && (
+                  <div
+                    className="h-full bg-indigo-600 rounded-full transition-all duration-500"
+                    style={{ width: `${goalProgress}%` }}
+                  />
+                )}
               </div>
             </div>
 

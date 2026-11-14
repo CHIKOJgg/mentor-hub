@@ -6,6 +6,7 @@
   },
   "deploy": {
     "numReplicas": 1,
+    "overlapSeconds": 0,
     "healthcheckPath": "/actuator/health",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",

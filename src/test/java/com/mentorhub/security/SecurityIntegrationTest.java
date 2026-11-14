@@ -9,7 +9,10 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.MediaType;
+import jakarta.servlet.http.Cookie;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -17,6 +20,7 @@ import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -48,6 +52,24 @@ class SecurityIntegrationTest {
                         .header("Access-Control-Request-Headers", "X-Admin-Token"))
                 .andExpect(status().isForbidden())
                 .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+    }
+
+    @Test
+    @DisplayName("Same-origin login works without adding the application's own origin to CORS")
+    void testSameOriginLoginIsNotRejectedByCors() throws Exception {
+        MvcResult csrfResult = mockMvc.perform(get("/api/auth/csrf"))
+                .andExpect(status().isOk())
+                .andReturn();
+        Cookie csrfCookie = csrfResult.getResponse().getCookie("XSRF-TOKEN");
+
+        org.assertj.core.api.Assertions.assertThat(csrfCookie).isNotNull();
+        mockMvc.perform(post("/api/auth/login")
+                        .header("Origin", "http://localhost")
+                        .cookie(csrfCookie)
+                        .header("X-XSRF-TOKEN", csrfCookie.getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accessKey\":\"invalid-local-review-token-1234567890\"}"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

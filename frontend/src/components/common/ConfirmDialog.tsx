@@ -1,4 +1,5 @@
-import { AlertTriangle, Info } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, Info, LoaderCircle } from 'lucide-react';
 import { AccessibleModal } from './AccessibleModal';
 
 export interface ConfirmDialogProps {
@@ -22,7 +23,19 @@ export function ConfirmDialog({
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
   if (!isOpen) return null;
+
+  const handleConfirm = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await onConfirm();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <AccessibleModal title={title} onClose={onClose} overlayClassName="z-[60] animate-in fade-in duration-150">
@@ -42,23 +55,23 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onClose}
+            disabled={isSubmitting}
             className="px-4 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
           >
             {cancelLabel}
           </button>
           <button
             type="button"
-            onClick={() => {
-              onClose();
-              void onConfirm();
-            }}
+            onClick={() => void handleConfirm()}
+            disabled={isSubmitting}
             className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-white transition cursor-pointer ${
               isDanger
                 ? 'bg-rose-600 hover:bg-rose-700 shadow-xs'
                 : 'bg-slate-900 hover:bg-slate-800 shadow-xs'
             }`}
           >
-            {confirmLabel}
+            {isSubmitting && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            {isSubmitting ? 'Выполняется…' : confirmLabel}
           </button>
         </div>
       </div>
