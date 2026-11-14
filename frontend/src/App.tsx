@@ -2665,7 +2665,18 @@ export default function App() {
                                 {/* Pause toggle action */}
                                 <td className="py-4.5 px-4 text-center w-36 min-w-[144px]">
                                   <button
-                                    onClick={() => toggleStudentPause(s.id)}
+                                    onClick={() => requestConfirm({
+                                      title: s.isOnPause ? 'Вернуть ученицу в активный трек?' : 'Поставить ученицу на паузу?',
+                                      message: s.isOnPause
+                                        ? `Будущие дни календаря для «${s.fullName}» снова будут учитываться по обычным правилам.`
+                                        : `С сегодняшнего дня календарь и дедлайны для «${s.fullName}» будут переведены в режим паузы.`,
+                                      confirmLabel: s.isOnPause ? 'Снять с паузы' : 'Поставить на паузу',
+                                      isDanger: false,
+                                      onConfirm: () => toggleStudentPause(s.id),
+                                    })}
+                                    aria-label={s.isOnPause
+                                      ? `${s.fullName}: на паузе. Нажмите, чтобы вернуть в активный трек`
+                                      : `${s.fullName}: активна. Нажмите, чтобы поставить на паузу`}
                                     title={s.isOnPause ? 'Снять с паузы' : 'Поставить на паузу по болезни'}
                                     className={`text-xs sm:text-sm px-3.5 py-1.5 rounded-lg border font-medium transition cursor-pointer inline-flex items-center justify-center gap-1.5 w-28 min-w-[112px] ${
                                       s.isOnPause
