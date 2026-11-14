@@ -43,6 +43,7 @@ public class TelegramPollingLeader {
     private final DataSource dataSource;
     private final MentorBotConsumer bot;
     private final AtomicBoolean stopping = new AtomicBoolean();
+    private final Object shutdownMonitor = new Object();
     private volatile Thread worker;
 
     @Value("${telegram.bot.token:}")
@@ -70,7 +71,9 @@ public class TelegramPollingLeader {
         if (currentWorker == null) {
             return;
         }
-        currentWorker.interrupt();
+        synchronized (shutdownMonitor) {
+            shutdownMonitor.notifyAll();
+        }
         try {
             currentWorker.join(TimeUnit.SECONDS.toMillis(15));
         } catch (InterruptedException ex) {
@@ -140,8 +143,8 @@ public class TelegramPollingLeader {
             } catch (Exception ex) {
                 log.warn("Telegram polling could not start or continue: {}", ex.getMessage());
             } finally {
-                closePollingApplication(pollingApplication);
                 stopPollingExecutor(pollingExecutor);
+                closePollingApplication(pollingApplication);
                 if (lockAcquired && lockConnection != null) {
                     releaseLock(lockConnection);
                 }
@@ -197,6 +200,7 @@ public class TelegramPollingLeader {
         if (executor == null) {
             return;
         }
+        boolean interrupted = Thread.interrupted();
         executor.shutdown();
         try {
             if (!executor.awaitTermination(HTTP_CALL_TIMEOUT_SECONDS + 1L, TimeUnit.SECONDS)) {
@@ -204,18 +208,32 @@ public class TelegramPollingLeader {
                 executor.awaitTermination(1, TimeUnit.SECONDS);
             }
         } catch (InterruptedException ex) {
+            interrupted = true;
             executor.shutdownNow();
-            Thread.currentThread().interrupt();
+            try {
+                executor.awaitTermination(1, TimeUnit.SECONDS);
+            } catch (InterruptedException ignored) {
+                interrupted = true;
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
     private boolean sleep(int seconds) {
-        try {
-            TimeUnit.SECONDS.sleep(seconds);
+        synchronized (shutdownMonitor) {
+            if (stopping.get()) {
+                return false;
+            }
+            try {
+                TimeUnit.SECONDS.timedWait(shutdownMonitor, seconds);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
             return !stopping.get();
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            return false;
         }
     }
 

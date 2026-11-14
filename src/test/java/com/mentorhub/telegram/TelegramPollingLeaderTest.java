@@ -10,6 +10,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.mock;
 
 @Testcontainers(disabledWithoutDocker = true)
@@ -20,6 +21,15 @@ class TelegramPollingLeaderTest {
             .withDatabaseName("telegram_polling_lock_test")
             .withUsername("telegram_test")
             .withPassword("telegram_test_only");
+
+    @Test
+    void stopWakesWorkerWithoutInterruptingItsPollingThread() {
+        TelegramPollingLeader leader = new TelegramPollingLeader(mock(DataSource.class), null);
+
+        leader.startAfterApplicationReady();
+
+        assertThatCode(leader::stop).doesNotThrowAnyException();
+    }
 
     @Test
     void onlyOneDatabaseSessionCanOwnTelegramPollingLock() throws Exception {
