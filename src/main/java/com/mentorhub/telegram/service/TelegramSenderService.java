@@ -5,9 +5,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
+import org.telegram.telegrambots.meta.api.methods.GetFile;
 import org.telegram.telegrambots.meta.api.methods.GetMe;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
+import org.telegram.telegrambots.meta.api.objects.File;
 import org.telegram.telegrambots.meta.api.objects.ReplyParameters;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
@@ -251,21 +253,30 @@ public class TelegramSenderService {
 
     public byte[] downloadFileBytes(String fileId, int maxBytes) {
         if (!isConfigured() || fileId == null || fileId.isBlank() || maxBytes < 1) return null;
-        try (InputStream stream = telegramClient.downloadFileAsStream(fileId);
-             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            if (stream == null) return null;
-            byte[] buffer = new byte[8192];
-            int total = 0;
-            int read;
-            while ((read = stream.read(buffer)) != -1) {
-                total += read;
-                if (total > maxBytes) {
-                    log.warn("Telegram attachment {} exceeds size limit of {} bytes", fileId, maxBytes);
-                    return null;
-                }
-                output.write(buffer, 0, read);
+        try {
+            GetFile getFile = new GetFile(fileId);
+            File file = telegramClient.execute(getFile);
+            if (file == null || !org.springframework.util.StringUtils.hasText(file.getFilePath())) {
+                log.warn("Telegram getFile returned empty filePath for fileId {}", fileId);
+                return null;
             }
-            return output.toByteArray();
+
+            try (InputStream stream = telegramClient.downloadFileAsStream(file);
+                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                if (stream == null) return null;
+                byte[] buffer = new byte[8192];
+                int total = 0;
+                int read;
+                while ((read = stream.read(buffer)) != -1) {
+                    total += read;
+                    if (total > maxBytes) {
+                        log.warn("Telegram attachment {} exceeds size limit of {} bytes", fileId, maxBytes);
+                        return null;
+                    }
+                    output.write(buffer, 0, read);
+                }
+                return output.toByteArray();
+            }
         } catch (TelegramApiException | IOException ex) {
             log.warn("Unable to download Telegram file {}: {}", fileId, ex.getMessage());
             return null;

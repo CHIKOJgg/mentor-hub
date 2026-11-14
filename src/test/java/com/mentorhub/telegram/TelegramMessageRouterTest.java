@@ -138,16 +138,16 @@ class TelegramMessageRouterTest {
     }
 
     @Test
-    @DisplayName("Unknown user logged to audit_message_logs as UNMATCHED_USER")
+    @DisplayName("Unknown user in private chat logged to audit_message_logs as UNMATCHED_USER")
     void routeIncomingMessage_unknownUserLogged() {
         User stranger = User.builder().id(999888777L).firstName("Stranger").isBot(false).userName("stranger").build();
-        Chat chat = Chat.builder().id(-100123456789L).type("supergroup").build();
+        Chat chat = Chat.builder().id(999888777L).type("private").build();
         Message message = Message.builder().messageId(13).from(stranger).chat(chat).text("#рассылки 10").build();
 
         when(studentRepository.findByTgChatId(any())).thenReturn(Optional.empty());
         when(studentRepository.findByTgUsername(any())).thenReturn(Optional.empty());
 
-        router.routeIncomingMessage(message, 101L, "MINI_GROUP");
+        router.routeIncomingMessage(message, 101L, "DIRECT_BOT");
 
         ArgumentCaptor<AuditMessageLog> captor = ArgumentCaptor.forClass(AuditMessageLog.class);
         verify(auditMessageLogRepository).save(captor.capture());
@@ -155,8 +155,28 @@ class TelegramMessageRouterTest {
         AuditMessageLog log = captor.getValue();
         assertThat(log.getProcessingStatus()).isEqualTo("UNMATCHED_USER");
         assertThat(log.getTgUserId()).isEqualTo(999888777L);
-        assertThat(log.getTgChatId()).isEqualTo(-100123456789L);
+        assertThat(log.getTgChatId()).isEqualTo(999888777L);
         assertThat(recordedStudent).isNull();
+    }
+
+    @Test
+    @DisplayName("Auto-registers new student when unknown student writes in supergroup")
+    void routeIncomingMessage_autoRegistersStudentInGroup() {
+        User stranger = User.builder().id(999888777L).firstName("Милана").lastName("Горохова").isBot(false).userName("milana_g").build();
+        Chat chat = Chat.builder().id(-100123456789L).type("supergroup").title("VIP — Милана").build();
+        Message message = Message.builder().messageId(13).from(stranger).chat(chat).text("#рассылки 10").build();
+
+        when(studentRepository.findByTgChatId(any())).thenReturn(Optional.empty());
+        when(studentRepository.findByTgUsername(any())).thenReturn(Optional.empty());
+
+        router.routeIncomingMessage(message, 101L, "MINI_GROUP");
+
+        assertThat(recordedStudent).isNotNull();
+        assertThat(recordedStudent.getFullName()).isEqualTo("Милана Горохова");
+        assertThat(recordedStudent.getTgUsername()).isEqualTo("milana_g");
+        assertThat(recordedStudent.getTgChatId()).isEqualTo(-100123456789L);
+        assertThat(recordedStudent.getTariff()).isEqualTo("VIP");
+        assertThat(recordedStudent.getIsActive()).isTrue();
     }
 
     @Test

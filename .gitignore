@@ -15,6 +15,11 @@ target/
 .env
 .env.local
 .env.*.local
+.worktrees/
+audit-screenshots/
+output/
+*.png
+docs/~$*
 *.pem
 *.key
 
@@ -47,4 +52,9 @@ csrf.json
 sess.txt
 .playwright-mcp/
 *.local
+.worktrees/
+audit-screenshots/
+output/
+*.png
+docs/~$*
 

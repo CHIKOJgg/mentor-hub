@@ -411,4 +411,59 @@ class TelegramReportHandlerTest {
         assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("240000.00"));
         assertThat(student.getTotalMailings()).isEqualTo(140);
     }
+
+    @Test
+    @DisplayName("Voice message and video note without report triggers are scanned silently and not marked as report submission")
+    void handleStudentMessage_voiceAndVideoNoteScannedSilently() {
+        Student student = Student.builder()
+                .id(1L)
+                .fullName("Мирослав")
+                .tgChatId(71010101L)
+                .build();
+
+        DailyReport existingReport = DailyReport.builder()
+                .id(10L)
+                .student(student)
+                .reportDate(LocalDate.now())
+                .status("APPROVED")
+                .contentDrafts(new ArrayList<>())
+                .reelSubmissions(new ArrayList<>())
+                .salesEntries(new ArrayList<>())
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.of(existingReport));
+
+        sentReplyText = null;
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+
+        // Voice message without report trigger
+        org.telegram.telegrambots.meta.api.objects.Voice voice = new org.telegram.telegrambots.meta.api.objects.Voice();
+        voice.setFileId("voice_file_123");
+        Message voiceMessage = Message.builder()
+                .messageId(701)
+                .chat(chat)
+                .voice(voice)
+                .build();
+
+        DailyReport rVoice = handler.handleStudentMessage(student, voiceMessage);
+        assertThat(sentReplyText).isNull();
+        assertThat(rVoice.getStatus()).isEqualTo("APPROVED");
+        assertThat(rVoice.getContentDrafts()).isEmpty();
+
+        // Video note (кружочек) without report trigger
+        org.telegram.telegrambots.meta.api.objects.VideoNote videoNote = new org.telegram.telegrambots.meta.api.objects.VideoNote();
+        videoNote.setFileId("videonote_file_456");
+        videoNote.setFileUniqueId("unique_vn_456");
+        Message vnMessage = Message.builder()
+                .messageId(702)
+                .chat(chat)
+                .videoNote(videoNote)
+                .build();
+
+        DailyReport rVn = handler.handleStudentMessage(student, vnMessage);
+        assertThat(sentReplyText).isNull();
+        assertThat(rVn.getStatus()).isEqualTo("APPROVED");
+        assertThat(rVn.getContentDrafts()).isEmpty();
+    }
 }

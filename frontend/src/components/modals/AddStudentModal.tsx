@@ -1,5 +1,4 @@
 import { X, Save } from 'lucide-react';
-import { BEAUTY_NICHES } from '../../types';
 import { AccessibleModal } from '../common/AccessibleModal';
 import { StudentCategoryField } from '../common/StudentCategoryField';
 import { useModalDismiss } from '../common/useModalDismiss';
@@ -31,7 +30,12 @@ export function AddStudentModal({
   onUpdate,
   onSubmit,
 }: AddStudentModalProps) {
-  const hasUnsavedChanges = JSON.stringify(newStudent) !== JSON.stringify({ fullName: '', niche: BEAUTY_NICHES[0], telegram: '', telegramChatId: '', initialIncome: 0, initialAvgTicket: 0 });
+  const hasUnsavedChanges = Boolean(
+    newStudent.fullName.trim() ||
+    newStudent.telegram.trim() ||
+    newStudent.initialIncome > 0 ||
+    newStudent.initialAvgTicket > 0
+  );
   const requestClose = useModalDismiss(onClose, hasUnsavedChanges);
   if (!isOpen) return null;
 
@@ -63,6 +67,22 @@ export function AddStudentModal({
               placeholder="Например: Милана Горохова"
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500"
             />
+          </label>
+
+          <label className="text-xs font-semibold text-slate-600 sm:col-span-2">
+            Telegram (@username или без @)
+            <div className="relative mt-1">
+              <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm font-medium text-slate-400">@</span>
+              <input
+                value={newStudent.telegram.replace(/^@/, '')}
+                onChange={event => onUpdate(prev => ({ ...prev, telegram: event.target.value.trim() }))}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') void onSubmit();
+                }}
+                placeholder="username_tg"
+                className="w-full rounded-xl border border-slate-200 pl-8 pr-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500"
+              />
+            </div>
           </label>
 
           <div className="text-xs font-semibold text-slate-600 sm:col-span-2">

@@ -18,7 +18,7 @@ class ProductionFlywayH2MigrationTest {
         Flyway production = productionFlyway(url);
         production.migrate();
 
-        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("10");
+        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("12");
         assertThat(count(url, "students")).isZero();
         assertThat(count(url, "daily_reports")).isZero();
         assertThat(count(url, "task_rules")).isZero();
@@ -42,7 +42,7 @@ class ProductionFlywayH2MigrationTest {
         Flyway production = productionFlyway(url);
         production.migrate();
 
-        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("10");
+        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("12");
         assertThat(count(url, "daily_reports")).isEqualTo(legacyReportCount);
         assertThat(count(url, "flyway_schema_history WHERE version IN ('7', '8')")).isZero();
     }
@@ -58,7 +58,7 @@ class ProductionFlywayH2MigrationTest {
             statement.executeUpdate("""
                     INSERT INTO flyway_schema_history
                         (installed_rank, version, description, type, script, checksum, installed_by, installed_on, execution_time, success)
-                    VALUES (2, '11', 'removed cleanup migration', 'SQL', 'V11__remove_all_test_and_demo_data.sql', 123, 'sa', CURRENT_TIMESTAMP, 1, TRUE)
+                    VALUES (99, '11', 'removed cleanup migration', 'SQL', 'V11__remove_all_test_and_demo_data.sql', 123, 'sa', CURRENT_TIMESTAMP, 1, TRUE)
                     """);
         }
 

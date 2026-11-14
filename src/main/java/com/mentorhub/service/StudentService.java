@@ -151,12 +151,38 @@ public class StudentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + id));
 
         boolean newPausedState = Boolean.TRUE.equals(request.isPaused());
-        student.setIsPaused(newPausedState);
-        student.setPauseReason(newPausedState ? request.pauseReason() : null);
+        LocalDate today = LocalDate.now(MINSK_ZONE);
+        if (newPausedState) {
+            student.setIsPaused(true);
+            student.setPausedFromDate(today);
+            student.setPauseReason(request.pauseReason() != null ? request.pauseReason() : "Болезнь / пауза потока ☕");
+        } else {
+            LocalDate pausedFrom = student.getPausedFromDate();
+            if (pausedFrom != null) {
+                LocalDate checkDate = pausedFrom;
+                while (checkDate.isBefore(today)) {
+                    if (studentDayOverrideRepository.findByStudentIdAndDayDate(student.getId(), checkDate).isEmpty()
+                            && dailyReportRepository.findByStudentIdAndReportDate(student.getId(), checkDate).isEmpty()) {
+                        StudentDayOverride pauseOverride = StudentDayOverride.builder()
+                                .student(student)
+                                .dayDate(checkDate)
+                                .status("PAUSED")
+                                .details("Режим паузы: болезнь, стрик заморожен ☕")
+                                .updatedAt(Instant.now())
+                                .build();
+                        studentDayOverrideRepository.save(pauseOverride);
+                    }
+                    checkDate = checkDate.plusDays(1);
+                }
+            }
+            student.setIsPaused(false);
+            student.setPausedFromDate(null);
+            student.setPauseReason(null);
+        }
 
         studentRepository.save(student);
-        log.info("Toggled pause for student '{}' (id #{}): isPaused={}, reason='{}'",
-                student.getFullName(), id, newPausedState, student.getPauseReason());
+        log.info("Toggled pause for student '{}' (id #{}): isPaused={}, pausedFromDate={}, reason='{}'",
+                student.getFullName(), id, newPausedState, student.getPausedFromDate(), student.getPauseReason());
 
         return new TogglePauseResponse(
                 "st-" + student.getId(),
@@ -443,7 +469,9 @@ public class StudentService {
             }
 
             // 3. Absence handling: check illness / pause mode
-            if (Boolean.TRUE.equals(student.getIsPaused())) {
+            boolean isDayInPause = Boolean.TRUE.equals(student.getIsPaused())
+                    && (student.getPausedFromDate() == null || !dayDate.isBefore(student.getPausedFromDate()));
+            if (isDayInPause) {
                 calendar.add(new DayInfoResponse(
                         dayName,
                         dateFormatted,

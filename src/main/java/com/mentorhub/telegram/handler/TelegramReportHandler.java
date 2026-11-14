@@ -155,12 +155,24 @@ public class TelegramReportHandler {
         if (message.hasVoice() && (settings == null || Boolean.TRUE.equals(settings.getAiWhisperEnabled()))) {
             String voiceFileId = message.getVoice().getFileId();
             byte[] audioBytes = telegramSenderService.downloadFileBytes(voiceFileId, 20 * 1024 * 1024);
-            String voiceTranscript = audioBytes == null ? "" : springAiReportExtractor.transcribeAudio(audioBytes, "voice.oga");
+            String voiceTranscript = audioBytes == null ? "" : springAiReportExtractor.transcribeAudio(audioBytes, "voice.ogg");
             if (StringUtils.hasText(voiceTranscript) && !voiceTranscript.startsWith("[")) {
                 report.setVoiceTranscript(StringUtils.hasText(report.getVoiceTranscript())
                         ? report.getVoiceTranscript() + "\n" + voiceTranscript
                         : voiceTranscript);
                 rawContent = (StringUtils.hasText(rawContent) ? rawContent + "\n" : "") + voiceTranscript;
+            }
+        }
+
+        if (message.hasAudio() && (settings == null || Boolean.TRUE.equals(settings.getAiWhisperEnabled()))) {
+            String audioFileId = message.getAudio().getFileId();
+            byte[] audioBytes = telegramSenderService.downloadFileBytes(audioFileId, 25 * 1024 * 1024);
+            String audioTranscript = audioBytes == null ? "" : springAiReportExtractor.transcribeAudio(audioBytes, "audio.mp3");
+            if (StringUtils.hasText(audioTranscript) && !audioTranscript.startsWith("[")) {
+                report.setVoiceTranscript(StringUtils.hasText(report.getVoiceTranscript())
+                        ? report.getVoiceTranscript() + "\n" + audioTranscript
+                        : audioTranscript);
+                rawContent = (StringUtils.hasText(rawContent) ? rawContent + "\n" : "") + audioTranscript;
             }
         }
 
@@ -446,7 +458,10 @@ public class TelegramReportHandler {
             boolean hasMailings,
             boolean hasClients,
             boolean hasQuestion) {
-        if (message != null && (message.hasVideo() || message.hasVideoNote() || message.hasDocument() || message.hasPhoto() || message.hasVoice() || message.hasAudio())) {
+        // Video files, documents, and photos are explicit content draft submissions.
+        // Voice messages, audio, and video notes (кружочки) are communication/reflection media
+        // and should NOT automatically trigger report submission unless they contain report hashtags or keywords.
+        if (message != null && (message.hasVideo() || message.hasDocument() || message.hasPhoto())) {
             return true;
         }
         if (newDraftsAdded > 0 || newReelsAdded > 0 || hasSales || hasMailings || hasClients || hasQuestion) {
@@ -479,15 +494,8 @@ public class TelegramReportHandler {
             }
         }
 
-        // Video note (кружочек)
-        if (message.hasVideoNote()) {
-            String fileId = message.getVideoNote().getFileId();
-            String fileUniqueId = message.getVideoNote().getFileUniqueId();
-            boolean added = createOrUpdateDraft(report, student, "REEL", "Черновик Reels (видеозаметка)", null, fileId, fileUniqueId, deduplicationEnabled);
-            if (added) {
-                student.setTotalReels((student.getTotalReels() != null ? student.getTotalReels() : 0) + 1);
-            }
-        }
+        // Voice messages and video notes (кружочки) should NOT be registered as ContentDrafts (Reels),
+        // they are communication/reflection media and scanned silently unless accompanied by report hashtags.
 
         // PDF document attachment -> Carousel draft
         if (message.hasDocument()) {

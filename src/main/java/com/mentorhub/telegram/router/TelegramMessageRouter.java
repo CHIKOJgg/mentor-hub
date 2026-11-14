@@ -26,6 +26,7 @@ import org.telegram.telegrambots.meta.api.objects.message.Message;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -260,42 +261,103 @@ public class TelegramMessageRouter {
         Optional<Student> studentOpt = identifyStudent(chatId, fromId, from.getUserName(), message);
 
         if (studentOpt.isEmpty()) {
-            log.warn("Unmatched user encountered: chat_id={}, user_id={}, username='{}'",
-                    chatId, fromId, from.getUserName());
+            boolean isGroup = message.getChat() != null && (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat());
+            if (isGroup) {
+                // Check if an unlinked student matching this name already exists in DB
+                String incomingName = telegramFullName(from);
+                String normalizedName = normalizePersonName(incomingName);
+                Optional<Student> matchedByName = studentRepository.findAll().stream()
+                        .filter(s -> (s.getTgChatId() == null || s.getTgChatId().equals(chatId))
+                                && normalizePersonName(s.getFullName()).equals(normalizedName))
+                        .findFirst();
 
-            auditMessageLogRepository.save(AuditMessageLog.builder()
-                    .updateId(updateId)
-                    .tgChatId(chatId)
-                    .tgUserId(fromId)
-                    .sourceType(sourceType)
-                    .rawPayload(rawText != null ? rawText : "[Attachment / Empty]")
-                    .processingStatus("UNMATCHED_USER")
-                    .errorMessage("Student not found for chat " + chatId + " / user " + fromId)
-                    .createdAt(Instant.now())
-                    .build());
-
-            if (telegramSenderService != null && chatId != null) {
-                boolean hasExplicitTrigger = rawText != null && (rawText.contains("#") || rawText.startsWith("/"));
-                boolean hasMedia = message.getVoice() != null || message.getVideoNote() != null;
-                if (hasExplicitTrigger || hasMedia) {
-                    boolean isGroup = message.getChat() != null && (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat());
-                    String guidance;
-                    if (isGroup) {
-                        guidance = "Здравствуйте! Я бот-ассистент платформы Mentor Hub для Ксении и Кати 🌸\n\n" +
-                                "Чтобы связать эту группу с ученицей, укажите имя ученицы в названии группы (например: «VIP — Милана») или отправьте команду:\n" +
-                                "/bind [Имя или ник ученицы] (например: /bind Милана или /bind yxxtg)";
-                    } else {
-                        String uName = from.getUserName() != null ? "@" + from.getUserName() : "ID: " + fromId;
-                        guidance = "Здравствуйте! Ваш Telegram (" + uName + ") пока не привязан к списку учениц в системе.\n\n" +
-                                "Добавьте меня в вашу рабочую мини-группу с Ксенией и Катей, и чат подключится автоматически!";
+                Student student;
+                if (matchedByName.isPresent()) {
+                    student = matchedByName.get();
+                    student.setTgChatId(chatId);
+                    if (!StringUtils.hasText(student.getTgUsername()) && StringUtils.hasText(from.getUserName())) {
+                        student.setTgUsername(from.getUserName().replace("@", "").trim());
                     }
-                    telegramSenderService.sendCaringReply(chatId, message.getMessageId(), guidance);
+                    student.setIsActive(true);
+                    student = studentRepository.save(student);
+                    log.info("Auto-bound existing student '{}' (#{}) to Telegram group {} on incoming message",
+                            student.getFullName(), student.getId(), chatId);
+                } else {
+                    student = newStudentFromTelegram(from);
+                    if (StringUtils.hasText(message.getChat().getTitle())) {
+                        String titleUpper = message.getChat().getTitle().toUpperCase(Locale.ROOT);
+                        if (titleUpper.contains("VIP") || titleUpper.contains("ВИП")) {
+                            student.setTariff("VIP");
+                        }
+                    }
+                    student.setTgChatId(chatId);
+                    student.setIsActive(true);
+                    student.setIsPaused(false);
+                    student.setStartDate(LocalDate.now());
+                    student = studentRepository.save(student);
+                    log.info("Auto-registered new student '{}' (#{}) from Telegram group '{}' ({}) on incoming message",
+                            student.getFullName(), student.getId(), message.getChat().getTitle(), chatId);
                 }
+
+                auditMessageLogRepository.save(AuditMessageLog.builder()
+                        .updateId(updateId)
+                        .tgChatId(chatId)
+                        .tgUserId(fromId)
+                        .sourceType(sourceType)
+                        .rawPayload(rawText != null ? rawText : "[Auto-Bound Student on Message]")
+                        .processingStatus("AUTO_BOUND_STUDENT")
+                        .createdAt(Instant.now())
+                        .build());
+
+                if (telegramSenderService != null) {
+                    String welcomeMsg = "🌸 Привет, " + student.getFullName() + "! Я бот-ассистент платформы Mentor Hub для Ксении и Кати.\n\n" +
+                            "Я автоматически подключила твою рабочую группу к системе! Жду твои ежедневные отчеты с хэштегами:\n" +
+                            "• #рилс / #видео\n" +
+                            "• #карусель / #пост\n" +
+                            "• #сторителл / #сторис\n" +
+                            "• #рассылки / #трафик\n" +
+                            "• #продажи / #диалоги\n" +
+                            "• #вопрос (для срочной помощи)\n\n" +
+                            "Также можешь присылать голосовые или кружочки — я всё расшифрую и передам Ксении и Кате 🚀";
+                    telegramSenderService.sendCaringReply(chatId, message.getMessageId(), welcomeMsg);
+                }
+
+                studentOpt = Optional.of(student);
+            } else {
+                log.warn("Unmatched user encountered in private chat: chat_id={}, user_id={}, username='{}'",
+                        chatId, fromId, from.getUserName());
+
+                auditMessageLogRepository.save(AuditMessageLog.builder()
+                        .updateId(updateId)
+                        .tgChatId(chatId)
+                        .tgUserId(fromId)
+                        .sourceType(sourceType)
+                        .rawPayload(rawText != null ? rawText : "[Attachment / Empty]")
+                        .processingStatus("UNMATCHED_USER")
+                        .errorMessage("Student not found for chat " + chatId + " / user " + fromId)
+                        .createdAt(Instant.now())
+                        .build());
+
+                if (telegramSenderService != null && chatId != null) {
+                    boolean hasExplicitTrigger = rawText != null && (rawText.contains("#") || rawText.startsWith("/"));
+                    boolean hasMedia = message.getVoice() != null || message.getVideoNote() != null;
+                    if (hasExplicitTrigger || hasMedia) {
+                        String uName = from.getUserName() != null ? "@" + from.getUserName() : "ID: " + fromId;
+                        String guidance = "Здравствуйте! Ваш Telegram (" + uName + ") пока не привязан к списку учениц в системе.\n\n" +
+                                "Добавьте меня в вашу рабочую мини-группу с Ксенией и Катей, и чат подключится автоматически!";
+                        telegramSenderService.sendCaringReply(chatId, message.getMessageId(), guidance);
+                    }
+                }
+                return;
             }
-            return;
         }
 
         Student student = studentOpt.get();
+        if (Boolean.FALSE.equals(student.getIsActive())) {
+            student.setIsActive(true);
+            student = studentRepository.save(student);
+            log.info("Reactivated inactive student '{}' (#{}), tgChatId={}", student.getFullName(), student.getId(), chatId);
+        }
 
         // Check if message is student's daily focus / reply to morning push
         if (isMorningFocusMessage(message, rawText)) {
@@ -424,6 +486,7 @@ public class TelegramMessageRouter {
                 studentRepository.saveAndFlush(previous);
             }
             student.setTgChatId(groupChatId);
+            student.setIsActive(true);
             if (!StringUtils.hasText(student.getTgUsername()) && StringUtils.hasText(member.getUserName())) {
                 student.setTgUsername(member.getUserName().replace("@", "").trim());
             }
@@ -543,6 +606,12 @@ public class TelegramMessageRouter {
         if (StringUtils.hasText(username)) {
             String cleanName = username.replace("@", "").trim();
             Optional<Student> byName = studentRepository.findByTgUsername(cleanName);
+            if (byName.isEmpty()) {
+                byName = studentRepository.findAll().stream()
+                        .filter(student -> StringUtils.hasText(student.getTgUsername())
+                                && student.getTgUsername().replace("@", "").trim().equalsIgnoreCase(cleanName))
+                        .findFirst();
+            }
             if (byName.isPresent()) {
                 Student st = byName.get();
                 if (isGroupChat) {

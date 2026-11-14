@@ -52,6 +52,8 @@ import {
   CheckCircle2,
   History,
   Sparkles,
+  Archive,
+  RotateCcw,
 } from 'lucide-react';
 
 const createLocalId = (prefix: string): string => {
@@ -470,7 +472,9 @@ export default function App() {
   const [rules, setRules] = useState<TaskRule[]>(() => readPersisted('task-rules', []));
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(() => readPersisted('system-settings', defaultSystemSettings));
   const [promotionSubTab, setPromotionSubTab] = useState<'scripts' | 'cheatsheets' | 'hashtags'>('scripts');
-  const [studentsFilter, setStudentsFilter] = useState<'all' | 'perfect' | 'attention' | 'pause' | 'zooms'>('all');
+  const [studentsFilter, setStudentsFilter] = useState<'all' | 'perfect' | 'attention' | 'pause' | 'zooms' | 'archive'>('all');
+  const [archivedStudents, setArchivedStudents] = useState<StudentDiscipline[]>([]);
+  const [isLoadingArchive, setIsLoadingArchive] = useState(false);
   const [studentsViewMode, setStudentsViewMode] = useState<'calendar' | 'zooms'>('calendar');
   const [zoomCalendarWeekOffset, setZoomCalendarWeekOffset] = useState(0);
   const [zoomCalendarReferenceDate] = useState(() => {
@@ -1572,6 +1576,14 @@ export default function App() {
       try {
         await api.togglePause(studentId, { isPaused: nextState, pauseReason: updated.pauseReason ?? null });
         clearLocalChange('students', studentId);
+        try {
+          const fresh = await api.getStudentById<ApiStudent>(studentId);
+          const mapped = mapApiStudent(fresh);
+          const refreshed = withZoomSessionSummary(mapped, mapped.zoomSessions ?? getStudentZoomSessions(student));
+          setStudents(prev => prev.map(item => item.id === studentId ? refreshed : item));
+        } catch {
+          // Keep local state if individual fetch fails
+        }
         showToast(nextState ? `${student.fullName} поставлена на паузу` : `${student.fullName} возвращена в активный трек`);
         return;
       } catch {
@@ -1582,6 +1594,34 @@ export default function App() {
       markLocalChange('students', studentId);
     }
     showToast(`${student.fullName}: статус обновлён; ожидает синхронизации`);
+  };
+
+  const loadArchivedStudents = async () => {
+    if (apiConnection !== 'connected') return;
+    setIsLoadingArchive(true);
+    try {
+      const result = await api.getArchivedStudents<ApiStudent[]>();
+      const mapped = result.map(s => withZoomSessionSummary(mapApiStudent(s), mapApiStudent(s).zoomSessions ?? []));
+      setArchivedStudents(mapped);
+    } catch {
+      showToast('Не удалось загрузить архив учениц');
+    } finally {
+      setIsLoadingArchive(false);
+    }
+  };
+
+  const restoreStudent = async (studentId: string, fullName: string) => {
+    try {
+      await api.updateStudent(studentId, { isActive: true });
+      setArchivedStudents(prev => prev.filter(s => s.id !== studentId));
+      if (apiConnection === 'connected') {
+        const fresh = await api.getStudents<ApiStudent[]>();
+        setStudents(fresh.map(s => withZoomSessionSummary(mapApiStudent(s), mapApiStudent(s).zoomSessions ?? [])));
+      }
+      showToast(`Ученица ${fullName} возвращена в активный поток 🌸`);
+    } catch {
+      showToast(`Не удалось восстановить ${fullName}`);
+    }
   };
 
   const q = searchQuery.trim().toLowerCase();
@@ -1600,6 +1640,16 @@ export default function App() {
     );
     return true;
   });
+
+  const filteredArchived = useMemo(() => {
+    return archivedStudents.filter(s => {
+      const matchesSearch =
+        s.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.fullName.toLowerCase().includes(q) ||
+        s.niche.toLowerCase().includes(q);
+      return matchesSearch;
+    });
+  }, [archivedStudents, searchQuery, q]);
   const saturdayDateLabel = students[0]?.weekDays.find(day => day.day === 'Сб')?.date;
 
   const zoomCalendarDays = useMemo(() => {
@@ -2290,11 +2340,14 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setIsManagingStudents(true)}
-                      title="Настройки состава потока и безопасное управление ученицами"
+                      title="Состав потока и безопасное управление ученицами"
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition cursor-pointer shadow-2xs"
                     >
-                      <Settings className="w-4 h-4 text-slate-600" />
-                      <span>Настройки</span>
+                      <Users className="w-4 h-4 text-slate-600" />
+                      <span>Состав потока</span>
+                      <span className="ml-0.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+                        {students.length}
+                      </span>
                     </button>
                   </div>
 
@@ -2342,10 +2395,17 @@ export default function App() {
                       { id: 'attention', label: 'Требуют внимания' },
                       { id: 'pause', label: 'На паузе' },
                       { id: 'zooms', label: 'Есть созвон' },
+                      { id: 'archive', label: 'Архив' },
                     ].map(tab => (
                       <button
                         key={tab.id}
-                        onClick={() => setStudentsFilter(tab.id as typeof studentsFilter)}
+                        onClick={() => {
+                          const nextFilter = tab.id as typeof studentsFilter;
+                          setStudentsFilter(nextFilter);
+                          if (nextFilter === 'archive') {
+                            void loadArchivedStudents();
+                          }
+                        }}
                         className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                           studentsFilter === tab.id
                             ? 'bg-slate-900 text-white shadow-xs'
@@ -2356,6 +2416,7 @@ export default function App() {
                         {tab.id === 'attention' && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" strokeWidth={2} />}
                         {tab.id === 'pause' && <Coffee className="w-3.5 h-3.5 text-slate-400" />}
                         {tab.id === 'zooms' && <Video className="w-3.5 h-3.5 text-indigo-400" />}
+                        {tab.id === 'archive' && <Archive className="w-3.5 h-3.5 text-slate-400" />}
                         <span>{tab.label}</span>
                       </button>
                     ))}
@@ -2375,8 +2436,81 @@ export default function App() {
                   </div>
                 )}
 
-                {/* VIEW 1: CALENDAR VIEW */}
-                {studentsViewMode === 'calendar' && (
+                {/* ARCHIVE VIEW */}
+                {studentsFilter === 'archive' ? (
+                  <div className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden">
+                    <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Archive className="h-4 w-4 text-slate-500" />
+                          <h3 className="text-sm font-bold text-slate-800">Архив учениц ({filteredArchived.length})</h3>
+                        </div>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Ученицы, удаленные или переведенные в архив. Нажмите «Восстановить в поток», чтобы вернуть ученицу в активный список.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void loadArchivedStudents()}
+                        className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${isLoadingArchive ? 'animate-spin' : ''}`} />
+                        <span>Обновить</span>
+                      </button>
+                    </div>
+
+                    {isLoadingArchive ? (
+                      <div className="flex justify-center py-12">
+                        <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
+                      </div>
+                    ) : filteredArchived.length === 0 ? (
+                      <div className="px-6 py-12 text-center text-sm text-slate-500">
+                        {archivedStudents.length === 0
+                          ? 'В архиве пока нет учениц.'
+                          : 'По выбранным условиям ученицы в архиве не найдены.'}
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-100">
+                        {filteredArchived.map(s => (
+                          <div key={s.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 py-4 hover:bg-slate-50/70 transition">
+                            <div className="flex items-center gap-3.5">
+                              <div className="h-9 w-9 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold shrink-0">
+                                {s.avatarText}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-bold text-slate-900">{s.fullName}</span>
+                                  {s.telegram && (
+                                    <span className="text-xs text-slate-500 font-mono">@{s.telegram.replace(/^@/, '')}</span>
+                                  )}
+                                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                                    {s.tariff || 'STANDARD'}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-slate-500 mt-0.5">
+                                  Ниша: {s.niche} · Старт: {s.startDate}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void restoreStudent(s.id, s.fullName)}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3.5 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition cursor-pointer shadow-2xs"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                <span>Восстановить в поток</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* VIEW 1: CALENDAR VIEW */}
+                    {studentsViewMode === 'calendar' && (
                   <div>
                     {/* Legend */}
                     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-4 text-xs font-medium text-slate-500">
@@ -2664,8 +2798,10 @@ export default function App() {
                     )}
                   </section>
                 )}
-              </div>
+              </>
             )}
+          </div>
+        )}
 
             {/* ════════════ TAB: ANALYTICS ════════════ */}
             {activeTab === 'analytics' && (

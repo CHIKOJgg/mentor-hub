@@ -69,6 +69,9 @@ public class Student {
     @Builder.Default
     private Boolean isPaused = false;
 
+    @Column(name = "paused_from_date")
+    private LocalDate pausedFromDate;
+
     @Column(name = "pause_reason")
     private String pauseReason;
 

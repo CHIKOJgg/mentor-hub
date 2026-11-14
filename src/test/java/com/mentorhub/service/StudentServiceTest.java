@@ -107,6 +107,7 @@ class StudentServiceTest {
 
         Student updatedMilana = studentRepository.findById(milana.getId()).orElseThrow();
         assertThat(updatedMilana.getIsPaused()).isTrue();
+        assertThat(updatedMilana.getPausedFromDate()).isNotNull();
         assertThat(updatedMilana.getPauseReason()).isEqualTo("Поездка на конференцию");
 
         // 2. Unpause student
@@ -119,7 +120,33 @@ class StudentServiceTest {
 
         Student restoredMilana = studentRepository.findById(milana.getId()).orElseThrow();
         assertThat(restoredMilana.getIsPaused()).isFalse();
+        assertThat(restoredMilana.getPausedFromDate()).isNull();
         assertThat(restoredMilana.getPauseReason()).isNull();
+    }
+
+    @Test
+    @DisplayName("Calendar preserves prior days when pause is activated mid-week")
+    void testPauseCalendarPreservesPriorDays() {
+        Student milana = studentRepository.findByTgUsername("milana_gorohova")
+                .orElseThrow(() -> new AssertionError("Milana not found"));
+
+        studentService.togglePause(milana.getId(), new TogglePauseRequest(true, "Болеет"));
+        List<DayInfoResponse> calendar = studentService.getDisciplineCalendar(milana.getId());
+        assertThat(calendar).hasSize(7);
+
+        LocalDate today = LocalDate.now();
+        // Days before pausedFromDate are NOT marked as PAUSED
+        calendar.stream()
+                .filter(d -> d.isoDate() != null && d.isoDate().isBefore(today))
+                .forEach(d -> assertThat(d.status()).isNotEqualTo("PAUSED"));
+
+        // Day of pause (today) IS marked as PAUSED
+        calendar.stream()
+                .filter(d -> d.isoDate() != null && d.isoDate().isEqual(today))
+                .forEach(d -> assertThat(d.status()).isEqualTo("PAUSED"));
+
+        // Clean up
+        studentService.togglePause(milana.getId(), new TogglePauseRequest(false, null));
     }
 
     @Test

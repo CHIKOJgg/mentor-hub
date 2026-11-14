@@ -106,6 +106,8 @@ export const api = {
   rejectReport: <T>(id: string, reason: string) =>
     apiRequest<T>(`/inbox/${encodeURIComponent(id)}/reject`, json('POST', { reason })),
   getStudents: <T>() => apiRequest<T>('/students?active=true'),
+  getArchivedStudents: <T>() => apiRequest<T>('/students?active=false'),
+  getStudentById: <T>(id: string) => apiRequest<T>(`/students/${encodeURIComponent(id)}`),
   createStudent: <T>(payload: unknown) => apiRequest<T>('/students', json('POST', payload)),
   updateStudent: <T>(id: string, payload: unknown) =>
     apiRequest<T>(`/students/${encodeURIComponent(id)}`, json('PUT', payload)),
