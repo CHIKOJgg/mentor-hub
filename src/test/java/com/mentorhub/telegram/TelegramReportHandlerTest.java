@@ -52,6 +52,7 @@ class TelegramReportHandlerTest {
     private Long sentChatId;
     private Integer sentReplyToId;
     private String sentReplyText;
+    private int sentReplyCount;
     private TelegramSenderService stubSenderService;
     private TelegramReportHandler handler;
 
@@ -64,6 +65,7 @@ class TelegramReportHandlerTest {
         salesEntryRepository = mock(SalesEntryRepository.class);
         mentorSettingRepository = mock(MentorSettingRepository.class);
         zoomMeetingRepository = mock(ZoomMeetingRepository.class);
+        sentReplyCount = 0;
 
         when(dailyReportRepository.save(any(DailyReport.class))).thenAnswer(i -> i.getArgument(0));
         when(studentRepository.save(any(Student.class))).thenAnswer(i -> i.getArgument(0));
@@ -97,6 +99,7 @@ class TelegramReportHandlerTest {
         stubSenderService = new TelegramSenderService(null) {
             @Override
             public boolean sendCaringReply(Long chatId, Integer replyToMsgId, String text) {
+                sentReplyCount++;
                 sentChatId = chatId;
                 sentReplyToId = replyToMsgId;
                 sentReplyText = text;
@@ -465,5 +468,92 @@ class TelegramReportHandlerTest {
         assertThat(sentReplyText).isNull();
         assertThat(rVn.getStatus()).isEqualTo("APPROVED");
         assertThat(rVn.getContentDrafts()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Transcribed report command with leading whitespace reopens an approved report")
+    void handleStudentMessage_transcribedReportWithLeadingWhitespaceIsSubmitted() {
+        Student student = Student.builder()
+                .id(1L)
+                .fullName("Мирослав")
+                .tgChatId(-10071010101L)
+                .build();
+        DailyReport existingReport = DailyReport.builder()
+                .id(10L)
+                .student(student)
+                .reportDate(LocalDate.now())
+                .status("APPROVED")
+                .submittedAt(Instant.now().minusSeconds(60))
+                .mailingsCount(40)
+                .salesTotal(new BigDecimal("60000.00"))
+                .contentDrafts(new ArrayList<>())
+                .reelSubmissions(new ArrayList<>())
+                .salesEntries(new ArrayList<>())
+                .build();
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.of(existingReport));
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message transcribedVoice = Message.builder()
+                .messageId(703)
+                .chat(chat)
+                .text(" Отчёт. Проверка голосового отчёта Мирослав.")
+                .build();
+
+        DailyReport result = handler.handleStudentMessage(student, transcribedVoice);
+
+        assertThat(result.getStatus()).isEqualTo("PENDING");
+        assertThat(result.getLastTgMessageId()).isEqualTo(703);
+        assertThat(sentChatId).isEqualTo(-10071010101L);
+        assertThat(sentReplyToId).isEqualTo(703);
+        assertThat(sentReplyText).contains("Принято на проверку (").contains("Черновик обновлён.");
+    }
+
+    @Test
+    @DisplayName("Repeated video media does not add a draft or send another acknowledgment")
+    void handleStudentMessage_repeatedVideoDoesNotCreateDraftOrReplyAgain() {
+        Student student = Student.builder().id(1L).fullName("Мирослав").tgChatId(-10071010101L).build();
+        DailyReport report = DailyReport.builder()
+                .id(10L)
+                .student(student)
+                .reportDate(LocalDate.now())
+                .status("PENDING")
+                .contentDrafts(new ArrayList<>())
+                .reelSubmissions(new ArrayList<>())
+                .salesEntries(new ArrayList<>())
+                .build();
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.of(report));
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+
+        org.telegram.telegrambots.meta.api.objects.Video originalVideo = new org.telegram.telegrambots.meta.api.objects.Video();
+        originalVideo.setFileId("video_file_same");
+        originalVideo.setFileUniqueId("video_unique_same");
+        Message original = Message.builder().messageId(704).chat(chat).video(originalVideo).caption("#рилс ТЕСТ").build();
+        handler.handleStudentMessage(student, original);
+
+        assertThat(report.getContentDrafts()).hasSize(2);
+        assertThat(sentReplyCount).isEqualTo(1);
+
+        org.telegram.telegrambots.meta.api.objects.Video repeatedVideo = new org.telegram.telegrambots.meta.api.objects.Video();
+        repeatedVideo.setFileId("video_file_same");
+        repeatedVideo.setFileUniqueId("video_unique_same");
+        Message repeated = Message.builder().messageId(705).chat(chat).video(repeatedVideo).caption("#рилс ТЕСТ").build();
+        handler.handleStudentMessage(student, repeated);
+
+        assertThat(report.getContentDrafts()).hasSize(2);
+        assertThat(report.getStatus()).isEqualTo("PENDING");
+        assertThat(report.getLastTgMessageId()).isEqualTo(704);
+        assertThat(sentReplyCount).isEqualTo(1);
+
+        org.telegram.telegrambots.meta.api.objects.Video differentVideo = new org.telegram.telegrambots.meta.api.objects.Video();
+        differentVideo.setFileId("video_file_different");
+        differentVideo.setFileUniqueId("video_unique_different");
+        Message distinct = Message.builder().messageId(706).chat(chat).video(differentVideo).build();
+        handler.handleStudentMessage(student, distinct);
+
+        assertThat(report.getContentDrafts()).hasSize(3);
+        assertThat(report.getLastTgMessageId()).isEqualTo(706);
+        assertThat(sentReplyCount).isEqualTo(2);
     }
 }

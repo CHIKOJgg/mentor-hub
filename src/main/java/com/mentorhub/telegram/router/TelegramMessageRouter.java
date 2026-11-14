@@ -849,6 +849,37 @@ public class TelegramMessageRouter {
 
         if (matched.isPresent()) {
             Student st = matched.get();
+
+            Optional<Student> currentChatBinding = studentRepository.findByTgChatId(chatId);
+            if (currentChatBinding.isPresent()) {
+                Student currentlyBound = currentChatBinding.get();
+                if (java.util.Objects.equals(currentlyBound.getId(), st.getId())) {
+                    log.info("Student '{}' is already bound to chat {}", st.getFullName(), chatId);
+                    if (telegramSenderService != null) {
+                        telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
+                                "ℹ️ Эта группа уже привязана к ученице " + st.getFullName() + ". Повторная привязка не требуется 🌸");
+                    }
+                } else {
+                    log.warn("Refusing to bind chat {} to student #{}; it is already bound to student #{}",
+                            chatId, st.getId(), currentlyBound.getId());
+                    if (telegramSenderService != null) {
+                        telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
+                                "⚠️ Эта группа уже привязана к другой ученице. Привязка не изменена; обратитесь к наставнику.");
+                    }
+                }
+                return;
+            }
+
+            Long existingChatId = st.getTgChatId();
+            if (existingChatId != null && existingChatId < 0 && !existingChatId.equals(chatId)) {
+                log.warn("Refusing to rebind student #{} from group {} to group {}", st.getId(), existingChatId, chatId);
+                if (telegramSenderService != null) {
+                    telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
+                            "⚠️ Ученица " + st.getFullName() + " уже привязана к другой группе. Привязка не изменена; обратитесь к наставнику.");
+                }
+                return;
+            }
+
             st.setTgChatId(chatId);
             if (message.getFrom() != null && StringUtils.hasText(message.getFrom().getUserName())) {
                 if (!StringUtils.hasText(st.getTgUsername())) {

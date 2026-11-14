@@ -12,6 +12,7 @@ import com.mentorhub.repository.StudentRepository;
 import com.mentorhub.scheduler.CallbackQueryHandler;
 import com.mentorhub.telegram.handler.TelegramReportHandler;
 import com.mentorhub.telegram.router.TelegramMessageRouter;
+import com.mentorhub.telegram.service.TelegramSenderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -429,6 +430,11 @@ class TelegramMessageRouterTest {
         Chat chat = Chat.builder().id(groupId).type("supergroup").build();
         Student student = Student.builder().id(1L).fullName("Милана Горохова").tgUsername("yxxtg").build();
         when(studentRepository.findAll()).thenReturn(List.of(student));
+        when(studentRepository.findByTgChatId(groupId)).thenReturn(Optional.empty(), Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
 
         Message firstBind = Message.builder().messageId(19).from(studentUser).chat(chat).text("/bind yxxtg").build();
         Message repeatedBind = Message.builder().messageId(20).from(studentUser).chat(chat).text("/bind @yxxtg").build();
@@ -438,6 +444,34 @@ class TelegramMessageRouterTest {
 
         assertThat(student.getTgChatId()).isEqualTo(groupId);
         assertThat(student.getTgUsername()).isEqualTo("yxxtg");
-        verify(studentRepository, times(2)).save(student);
+        verify(studentRepository, times(1)).save(student);
+        ArgumentCaptor<String> replyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(sender, times(2)).sendCaringReply(eq(groupId), anyInt(), replyCaptor.capture());
+        assertThat(replyCaptor.getAllValues().get(0)).contains("успешно привязана");
+        assertThat(replyCaptor.getAllValues().get(1)).contains("уже привязана");
+    }
+
+    @Test
+    @DisplayName("/bind refuses to replace a different student's existing group binding")
+    void routeIncomingMessage_bindDoesNotReplaceDifferentStudentBinding() {
+        long groupId = -10071010101L;
+        User studentUser = User.builder().id(71010101L).firstName("Мирослав").isBot(false).userName("yxxtg").build();
+        Chat chat = Chat.builder().id(groupId).type("supergroup").build();
+        Student currentStudent = Student.builder().id(1L).fullName("Мирослав").tgChatId(groupId).build();
+        Student requestedStudent = Student.builder().id(2L).fullName("Милана").build();
+        when(studentRepository.findAll()).thenReturn(List.of(currentStudent, requestedStudent));
+        when(studentRepository.findByTgChatId(groupId)).thenReturn(Optional.of(currentStudent));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+        Message bindOtherStudent = Message.builder().messageId(21).from(studentUser).chat(chat).text("/bind Милана").build();
+
+        router.routeIncomingMessage(bindOtherStudent, 109L, "MINI_GROUP");
+
+        assertThat(currentStudent.getTgChatId()).isEqualTo(groupId);
+        assertThat(requestedStudent.getTgChatId()).isNull();
+        verify(studentRepository, never()).save(requestedStudent);
+        verify(sender).sendCaringReply(eq(groupId), eq(21), contains("уже привязана к другой ученице"));
     }
 }

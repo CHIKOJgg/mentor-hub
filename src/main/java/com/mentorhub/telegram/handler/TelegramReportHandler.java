@@ -369,7 +369,11 @@ public class TelegramReportHandler {
         boolean hasClients = newClients != null && newClients > 0;
         boolean hasQuestion = StringUtils.hasText(extractedQuestion);
 
-        boolean isReport = isReportSubmission(message, rawContent, newDraftsAdded, newReelsAdded, hasSales, hasMailings, hasClients, hasQuestion);
+        boolean hasMediaAttachment = message != null && (message.hasVideo() || message.hasDocument() || message.hasPhoto());
+        boolean hasNewReportContent = newDraftsAdded > 0 || newReelsAdded > 0 || hasSales || hasMailings || hasClients || hasQuestion;
+        boolean isDuplicateMediaSubmission = hasMediaAttachment && !hasNewReportContent;
+        boolean isReport = !isDuplicateMediaSubmission &&
+                isReportSubmission(message, rawContent, newDraftsAdded, newReelsAdded, hasSales, hasMailings, hasClients, hasQuestion);
 
         if (isReport) {
             report.setSubmittedAt(Instant.now());
@@ -468,7 +472,7 @@ public class TelegramReportHandler {
             return true;
         }
         if (StringUtils.hasText(rawContent)) {
-            String lower = rawContent.toLowerCase(java.util.Locale.ROOT);
+            String lower = rawContent.trim().toLowerCase(java.util.Locale.ROOT);
             if (lower.contains("#рилс") || lower.contains("#карусель") || lower.contains("#сторителл")
                     || lower.contains("#контент") || lower.contains("#рассылки") || lower.contains("#продажи")
                     || lower.contains("#вопрос") || lower.contains("#клиенты") || lower.contains("#отчет")
@@ -565,12 +569,13 @@ public class TelegramReportHandler {
     private boolean createOrUpdateDraft(DailyReport report, Student student, String draftType, String label,
                                         String url, String fileTgId, String fileUniqueId, boolean deduplicationEnabled) {
         if (report.getContentDrafts() != null) {
+            boolean textOnlyDraft = !StringUtils.hasText(fileTgId) && !StringUtils.hasText(url);
             boolean alreadyPresent = report.getContentDrafts().stream().anyMatch(d ->
                     (StringUtils.hasText(fileTgId) && Objects.equals(d.getFileTgId(), fileTgId))
                     || (StringUtils.hasText(url) && (Objects.equals(d.getUrl(), url) || (d.getLabel() != null && d.getLabel().contains(url))))
-                    || (Objects.equals(d.getLabel(), label) && Objects.equals(d.getDraftType(), draftType))
                     || (StringUtils.hasText(url) && d.getUrl() != null && (d.getUrl().contains(url) || url.contains(d.getUrl())))
-                    || (label != null && d.getLabel() != null && (label.contains(d.getLabel()) || d.getLabel().contains(label)))
+                    || (textOnlyDraft && Objects.equals(d.getLabel(), label) && Objects.equals(d.getDraftType(), draftType))
+                    || (textOnlyDraft && label != null && d.getLabel() != null && (label.contains(d.getLabel()) || d.getLabel().contains(label)))
             );
             if (alreadyPresent) {
                 log.info("Draft '{}' already present in report #{}, skipping duplicate", label, report.getId());
