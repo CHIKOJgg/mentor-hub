@@ -37,6 +37,21 @@ class SecurityIntegrationTest {
     private AdminTokenRepository adminTokenRepository;
 
     @Test
+    @DisplayName("Legacy favicon requests redirect to the advertised SVG icon")
+    void testLegacyFaviconRedirectsToSvg() throws Exception {
+        mockMvc.perform(get("/favicon.ico"))
+                .andExpect(status().isMovedPermanently())
+                .andExpect(header().string("Location", "/favicon.svg"));
+    }
+
+    @Test
+    @DisplayName("Missing static resources return 404 instead of an internal server error")
+    void testMissingStaticResourceReturnsNotFound() throws Exception {
+        mockMvc.perform(get("/assets/does-not-exist.js"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     @DisplayName("System diagnostics require an authenticated administrator")
     void testSystemStatusRequiresToken() throws Exception {
         mockMvc.perform(get("/api/system/status"))
