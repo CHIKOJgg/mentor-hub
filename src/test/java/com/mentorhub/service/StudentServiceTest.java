@@ -89,6 +89,41 @@ class StudentServiceTest {
     }
 
     @Test
+    @DisplayName("Illness pause overrides daily report starting strictly from pausedFromDate")
+    void testPauseOverridesExistingDailyReportOnAndAfterPauseDate() {
+        Student milana = studentRepository.findByTgUsername("milana_gorohova")
+                .orElseThrow(() -> new AssertionError("Milana not found"));
+
+        // Milana has report on 2026-11-02 (Monday)
+        LocalDate monday = LocalDate.of(2026, 11, 2);
+        LocalDate tuesday = LocalDate.of(2026, 11, 3);
+
+        // Pause starting from Tuesday
+        milana.setIsPaused(true);
+        milana.setPausedFromDate(tuesday);
+        milana.setPauseReason("Болеет со вторника");
+        studentRepository.save(milana);
+
+        StudentDisciplineResponse res1 = studentService.getStudentById(milana.getId());
+        DayInfoResponse monDay = res1.weekDays().stream()
+                .filter(d -> "Пн".equals(d.day())).findFirst().orElseThrow();
+        DayInfoResponse tueDay = res1.weekDays().stream()
+                .filter(d -> "Вт".equals(d.day())).findFirst().orElseThrow();
+
+        assertThat(monDay.status()).isEqualTo("COMPLETED_ON_TIME");
+        assertThat(tueDay.status()).isEqualTo("PAUSED");
+
+        // Now pause starting from Monday: Monday should become PAUSED even though report exists
+        milana.setPausedFromDate(monday);
+        studentRepository.save(milana);
+
+        StudentDisciplineResponse res2 = studentService.getStudentById(milana.getId());
+        DayInfoResponse monDayPaused = res2.weekDays().stream()
+                .filter(d -> "Пн".equals(d.day())).findFirst().orElseThrow();
+        assertThat(monDayPaused.status()).isEqualTo("PAUSED");
+    }
+
+    @Test
     @DisplayName("togglePause toggles pause state and freezes streak")
     void testTogglePause() {
         Student milana = studentRepository.findByTgUsername("milana_gorohova")

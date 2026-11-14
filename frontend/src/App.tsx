@@ -1569,7 +1569,23 @@ export default function App() {
     const student = students.find(item => item.id === studentId);
     if (!student) return;
     const nextState = !student.isOnPause;
-    const updated = { ...student, isOnPause: nextState, pauseReason: nextState ? student.pauseReason || 'На паузе' : undefined };
+    const todayIso = getTodayIsoDate();
+
+    const updatedWeekDays = student.weekDays.map(d => {
+      const isTodayOrFuture = d.isoDate ? d.isoDate >= todayIso : false;
+      if (d.day === 'Вс') return d;
+      if (nextState && isTodayOrFuture) {
+        return { ...d, status: 'PAUSED' as const, missedDetails: 'Режим паузы: болезнь, стрик заморожен ☕' };
+      }
+      return d;
+    });
+
+    const updated = {
+      ...student,
+      isOnPause: nextState,
+      pauseReason: nextState ? student.pauseReason || 'На паузе' : undefined,
+      weekDays: updatedWeekDays,
+    };
     setStudents(prev => prev.map(item => item.id === studentId ? updated : item));
 
     if (apiConnection === 'connected' && !studentId.startsWith('local-')) {

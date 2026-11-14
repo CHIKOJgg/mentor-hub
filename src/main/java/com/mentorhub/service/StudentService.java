@@ -446,6 +446,26 @@ public class StudentService {
             Optional<DailyReport> reportOpt = reports != null
                     ? Optional.ofNullable(reports.get(dayDate))
                     : dailyReportRepository.findByStudentIdAndReportDate(student.getId(), dayDate);
+
+            // 3. Illness / pause mode:
+            // If pausedFromDate is explicitly set, illness overrides any report/draft on or after pausedFromDate.
+            // If pausedFromDate is null (legacy/seed data), illness applies to days without authentic reports.
+            boolean isDayInPause = Boolean.TRUE.equals(student.getIsPaused())
+                    && (student.getPausedFromDate() != null
+                            ? !dayDate.isBefore(student.getPausedFromDate())
+                            : reportOpt.isEmpty());
+
+            if (isDayInPause) {
+                calendar.add(new DayInfoResponse(
+                        dayName,
+                        dateFormatted,
+                        "PAUSED",
+                        "Режим паузы: болезнь, стрик заморожен ☕",
+                        dayDate
+                ));
+                continue;
+            }
+
             if (reportOpt.isPresent()) {
                 DailyReport report = reportOpt.get();
                 if (Boolean.TRUE.equals(report.getIsOnTime())) {
@@ -465,20 +485,6 @@ public class StudentService {
                             dayDate
                     ));
                 }
-                continue;
-            }
-
-            // 3. Absence handling: check illness / pause mode
-            boolean isDayInPause = Boolean.TRUE.equals(student.getIsPaused())
-                    && (student.getPausedFromDate() == null || !dayDate.isBefore(student.getPausedFromDate()));
-            if (isDayInPause) {
-                calendar.add(new DayInfoResponse(
-                        dayName,
-                        dateFormatted,
-                        "PAUSED",
-                        "Режим паузы: болезнь, стрик заморожен ☕",
-                        dayDate
-                ));
                 continue;
             }
 
