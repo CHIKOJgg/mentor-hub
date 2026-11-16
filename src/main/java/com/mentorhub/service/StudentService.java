@@ -107,6 +107,8 @@ public class StudentService {
                 .initialAvgTicket(request.initialAvgTicket() != null ? request.initialAvgTicket() : BigDecimal.ZERO)
                 .currentAvgTicket(request.initialAvgTicket() != null ? request.initialAvgTicket() : BigDecimal.ZERO)
                 .startDate(request.startDate() != null ? request.startDate() : LocalDate.now(MINSK_ZONE))
+                .currency(StringUtils.hasText(request.currency()) ? request.currency().toUpperCase(Locale.ROOT) : "BYN")
+                .timezone(StringUtils.hasText(request.timezone()) ? request.timezone() : "Europe/Minsk")
                 .isActive(true)
                 .isPaused(false)
                 .build();
@@ -143,6 +145,8 @@ public class StudentService {
             student.setCurrentTaskDay(request.currentTaskDay());
             student.setTaskPlanStartDate(LocalDate.now(MINSK_ZONE));
         }
+        if (request.currency() != null) student.setCurrency(request.currency().toUpperCase(Locale.ROOT));
+        if (request.timezone() != null) student.setTimezone(request.timezone());
 
         Student updated = studentRepository.save(student);
         log.info("Updated student '{}' with id #{}", updated.getFullName(), updated.getId());
@@ -371,7 +375,9 @@ public class StudentService {
                         )).toList(),
                 student.getTaskPlanRaw(),
                 currentDay,
-                todayTask
+                todayTask,
+                student.getCurrency() != null ? student.getCurrency() : "BYN",
+                student.getTimezone() != null ? student.getTimezone() : "Europe/Minsk"
         );
     }
 

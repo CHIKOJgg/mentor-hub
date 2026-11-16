@@ -15,5 +15,21 @@ public record CreateStudentRequest(
     String tariff,
     BigDecimal initialIncome,
     BigDecimal initialAvgTicket,
-    LocalDate startDate
-) {}
+    LocalDate startDate,
+    String currency,
+    String timezone
+) {
+    public CreateStudentRequest(
+        String fullName,
+        String avatarText,
+        String tgUsername,
+        Long tgChatId,
+        String niche,
+        String tariff,
+        BigDecimal initialIncome,
+        BigDecimal initialAvgTicket,
+        LocalDate startDate
+    ) {
+        this(fullName, avatarText, tgUsername, tgChatId, niche, tariff, initialIncome, initialAvgTicket, startDate, "BYN", "Europe/Minsk");
+    }
+}

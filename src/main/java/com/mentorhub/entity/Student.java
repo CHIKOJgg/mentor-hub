@@ -57,6 +57,14 @@ public class Student {
     @Builder.Default
     private String tariff = "STANDARD";
 
+    @Column(name = "currency", nullable = false, length = 10)
+    @Builder.Default
+    private String currency = "BYN";
+
+    @Column(name = "timezone", nullable = false, length = 50)
+    @Builder.Default
+    private String timezone = "Europe/Minsk";
+
     @Column(name = "start_date", nullable = false)
     @Builder.Default
     private LocalDate startDate = LocalDate.now();

@@ -11,6 +11,8 @@ export interface NewStudentForm {
   initialIncome: number;
   initialAvgTicket: number;
   tariff?: string;
+  currency?: string;
+  timezone?: string;
 }
 
 export interface AddStudentModalProps {
@@ -96,25 +98,53 @@ export function AddStudentModal({
           </div>
 
           <label className="text-xs font-semibold text-slate-600">
-            Доход на старте (Точка А), ₽
+            Валюта расчетов
+            <select
+              value={newStudent.currency || 'BYN'}
+              onChange={event => onUpdate(prev => ({ ...prev, currency: event.target.value }))}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500 bg-white"
+            >
+              <option value="BYN">BYN (Белорусский рубль)</option>
+              <option value="RUB">RUB (Российский рубль, ₽)</option>
+            </select>
+          </label>
+
+          <label className="text-xs font-semibold text-slate-600">
+            Часовой пояс
+            <select
+              value={newStudent.timezone || 'Europe/Minsk'}
+              onChange={event => onUpdate(prev => ({ ...prev, timezone: event.target.value }))}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500 bg-white"
+            >
+              <option value="Europe/Minsk">Минск / Москва (UTC+3)</option>
+              <option value="Asia/Yekaterinburg">Екатеринбург (UTC+5, +2ч)</option>
+              <option value="Asia/Omsk">Омск (UTC+6, +3ч)</option>
+              <option value="Asia/Novosibirsk">Новосибирск (UTC+7, +4ч)</option>
+              <option value="Asia/Irkutsk">Иркутск (UTC+8, +5ч)</option>
+              <option value="Asia/Vladivostok">Владивосток (UTC+10, +7ч)</option>
+            </select>
+          </label>
+
+          <label className="text-xs font-semibold text-slate-600">
+            Доход на старте (Точка А), {newStudent.currency === 'RUB' ? '₽' : 'BYN'}
             <input
               type="number"
               min={0}
               value={newStudent.initialIncome || ''}
               onChange={event => onUpdate(prev => ({ ...prev, initialIncome: Number(event.target.value) || 0 }))}
-              placeholder="30000"
+              placeholder="1000"
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500"
             />
           </label>
 
           <label className="text-xs font-semibold text-slate-600">
-            Средний чек на старте, ₽
+            Средний чек на старте, {newStudent.currency === 'RUB' ? '₽' : 'BYN'}
             <input
               type="number"
               min={0}
               value={newStudent.initialAvgTicket || ''}
               onChange={event => onUpdate(prev => ({ ...prev, initialAvgTicket: Number(event.target.value) || 0 }))}
-              placeholder="3000"
+              placeholder="150"
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal focus:outline-none focus:border-indigo-500"
             />
           </label>

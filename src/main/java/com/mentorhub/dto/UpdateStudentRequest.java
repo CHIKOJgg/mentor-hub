@@ -19,7 +19,9 @@ public record UpdateStudentRequest(
     Boolean isPaused,
     String pauseReason,
     String taskPlanRaw,
-    Integer currentTaskDay
+    Integer currentTaskDay,
+    String currency,
+    String timezone
 ) {
     public UpdateStudentRequest(
         String fullName,
@@ -39,6 +41,29 @@ public record UpdateStudentRequest(
     ) {
         this(fullName, avatarText, tgUsername, tgChatId, niche, tariff,
              initialIncome, currentIncome, initialAvgTicket, currentAvgTicket,
-             startDate, isActive, isPaused, pauseReason, null, null);
+             startDate, isActive, isPaused, pauseReason, null, null, null, null);
+    }
+
+    public UpdateStudentRequest(
+        String fullName,
+        String avatarText,
+        String tgUsername,
+        Long tgChatId,
+        String niche,
+        String tariff,
+        BigDecimal initialIncome,
+        BigDecimal currentIncome,
+        BigDecimal initialAvgTicket,
+        BigDecimal currentAvgTicket,
+        LocalDate startDate,
+        Boolean isActive,
+        Boolean isPaused,
+        String pauseReason,
+        String taskPlanRaw,
+        Integer currentTaskDay
+    ) {
+        this(fullName, avatarText, tgUsername, tgChatId, niche, tariff,
+             initialIncome, currentIncome, initialAvgTicket, currentAvgTicket,
+             startDate, isActive, isPaused, pauseReason, taskPlanRaw, currentTaskDay, null, null);
     }
 }

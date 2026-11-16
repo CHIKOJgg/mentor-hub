@@ -119,6 +119,8 @@ export interface StudentDiscipline {
   tariff?: string;
   startDate?: string;
   isActive?: boolean;
+  currency?: string;
+  timezone?: string;
   initialIncome: number; // Point A
   currentIncome: number; // Point B
   initialAvgTicket: number;

@@ -50,6 +50,8 @@ export interface ApiStudent {
   niche: string;
   tariff?: string;
   startDate?: string;
+  currency?: string;
+  timezone?: string;
   initialIncome: number | string;
   currentIncome: number | string;
   initialAvgTicket: number | string;

@@ -373,6 +373,8 @@ const mapApiReport = (report: ApiDailyReport): DailyReport => ({
 const mapApiStudent = (student: ApiStudent): StudentDiscipline => {
   const mapped: StudentDiscipline = {
     ...student,
+    currency: student.currency || 'BYN',
+    timezone: student.timezone || 'Europe/Minsk',
     telegram: student.tgUsername ? (student.tgUsername.startsWith('@') ? student.tgUsername : `@${student.tgUsername}`) : undefined,
     telegramChatId: student.tgChatId,
     tariff: student.tariff?.toUpperCase() === 'VIP' ? 'VIP' : 'Стандарт',
@@ -397,6 +399,8 @@ const toApiStudentPayload = (student: StudentDiscipline) => ({
   tgChatId: student.telegramChatId ?? null,
   niche: student.niche,
   tariff: student.tariff === 'VIP' ? 'VIP' : 'STANDARD',
+  currency: student.currency ?? 'BYN',
+  timezone: student.timezone ?? 'Europe/Minsk',
   initialIncome: student.initialIncome,
   currentIncome: student.currentIncome,
   initialAvgTicket: student.initialAvgTicket,
@@ -3060,9 +3064,10 @@ export default function App() {
                           <tbody className="divide-y divide-slate-100">
                             {students.map(s => {
                               const period = getStudentPeriodStats(s);
+                              const sCurr = s.currency === 'RUB' ? '₽' : 'BYN';
                               const incomeDisplay = analyticsPeriod === 'all'
-                                ? `${s.initialIncome.toLocaleString('ru-RU')} → ${s.currentIncome.toLocaleString('ru-RU')} ₽`
-                                : `${period.income.toLocaleString('ru-RU')} ₽`;
+                                ? `${s.initialIncome.toLocaleString('ru-RU')} → ${s.currentIncome.toLocaleString('ru-RU')} ${sCurr}`
+                                : `${period.income.toLocaleString('ru-RU')} ${sCurr}`;
                               const reelsDisp = period.reels;
                               const carouselsDisp = period.carousels;
                               const storytellsDisp = period.storytells;
@@ -3092,7 +3097,7 @@ export default function App() {
                                     )}
                                   </td>
                                   <td className="px-4 py-4 text-slate-700 font-medium">
-                                    {s.currentAvgTicket.toLocaleString('ru-RU')} ₽
+                                    {s.currentAvgTicket.toLocaleString('ru-RU')} {sCurr}
                                   </td>
                                   <td className="px-4 py-4 text-slate-700 font-mono text-xs">
                                     {reelsDisp} / {carouselsDisp} / {storytellsDisp}
@@ -3208,40 +3213,45 @@ export default function App() {
                       </div>
 
                       {/* Financial Growth Grid (Point A -> Point B & Period Metrics) */}
-                      <div className="analytics-financial-grid grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
-                        <div className="analytics-financial-metric px-6 py-5">
-                          <div className="text-xs text-slate-400 uppercase font-semibold mb-1">Точка А</div>
-                          <div className="text-xl sm:text-2xl font-bold text-slate-900">{selectedStudent.initialIncome.toLocaleString('ru-RU')} ₽</div>
-                          <div className="text-xs text-slate-500 mt-0.5">чек: {selectedStudent.initialAvgTicket.toLocaleString('ru-RU')} ₽</div>
-                        </div>
-                        <div className="analytics-financial-metric analytics-financial-metric--current px-6 py-5">
-                          <div className="text-xs text-slate-400 uppercase font-semibold mb-1">Точка Б (текущий)</div>
-                          <div className="analytics-positive-value text-xl sm:text-2xl font-bold text-emerald-600">{selectedStudent.currentIncome.toLocaleString('ru-RU')} ₽</div>
-                          <div className="text-xs text-slate-500 mt-0.5">чек: {selectedStudent.currentAvgTicket.toLocaleString('ru-RU')} ₽</div>
-                        </div>
-                        <div className="analytics-financial-metric analytics-financial-metric--growth px-6 py-5">
-                          <div className="text-xs text-slate-400 uppercase font-semibold mb-1">Рост дохода</div>
-                          <div className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-1.5">
-                            <TrendingUp className="w-5 h-5 text-indigo-600" strokeWidth={2} />
-                            ×{calculateMultiplier(selectedStudent.currentIncome, selectedStudent.initialIncome)}
+                      {(() => {
+                        const selCurr = selectedStudent.currency === 'RUB' ? '₽' : 'BYN';
+                        return (
+                          <div className="analytics-financial-grid grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
+                            <div className="analytics-financial-metric px-6 py-5">
+                              <div className="text-xs text-slate-400 uppercase font-semibold mb-1">Точка А</div>
+                              <div className="text-xl sm:text-2xl font-bold text-slate-900">{selectedStudent.initialIncome.toLocaleString('ru-RU')} {selCurr}</div>
+                              <div className="text-xs text-slate-500 mt-0.5">чек: {selectedStudent.initialAvgTicket.toLocaleString('ru-RU')} {selCurr}</div>
+                            </div>
+                            <div className="analytics-financial-metric analytics-financial-metric--current px-6 py-5">
+                              <div className="text-xs text-slate-400 uppercase font-semibold mb-1">Точка Б (текущий)</div>
+                              <div className="analytics-positive-value text-xl sm:text-2xl font-bold text-emerald-600">{selectedStudent.currentIncome.toLocaleString('ru-RU')} {selCurr}</div>
+                              <div className="text-xs text-slate-500 mt-0.5">чек: {selectedStudent.currentAvgTicket.toLocaleString('ru-RU')} {selCurr}</div>
+                            </div>
+                            <div className="analytics-financial-metric analytics-financial-metric--growth px-6 py-5">
+                              <div className="text-xs text-slate-400 uppercase font-semibold mb-1">Рост дохода</div>
+                              <div className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-1.5">
+                                <TrendingUp className="w-5 h-5 text-indigo-600" strokeWidth={2} />
+                                ×{calculateMultiplier(selectedStudent.currentIncome, selectedStudent.initialIncome)}
+                              </div>
+                              <div className="analytics-positive-value text-xs text-indigo-600 font-medium mt-0.5">+{(selectedStudent.currentIncome - selectedStudent.initialIncome).toLocaleString('ru-RU')} {selCurr} к старту</div>
+                            </div>
+                            <div className="analytics-financial-metric px-6 py-5">
+                              <div className="text-xs text-slate-400 uppercase font-semibold mb-1">
+                                {analyticsPeriod === 'week' ? 'Доход за неделю' : analyticsPeriod === 'month' ? 'Доход за месяц' : 'Средний чек'}
+                              </div>
+                              <div className="text-xl sm:text-2xl font-bold text-slate-900">
+                                {analyticsPeriod === 'all'
+                                  ? `${selectedStudent.currentAvgTicket.toLocaleString('ru-RU')} ${selCurr}`
+                                  : `${selectedStudentPeriodStats.income.toLocaleString('ru-RU')} ${selCurr}`
+                                }
+                              </div>
+                              <div className="text-xs text-slate-500 mt-0.5">
+                                {analyticsPeriod === 'all' ? 'текущий тариф' : `за выбранный период (${analyticsPeriod === 'week' ? '7 дней' : '30 дней'})`}
+                              </div>
+                            </div>
                           </div>
-                          <div className="analytics-positive-value text-xs text-indigo-600 font-medium mt-0.5">+{(selectedStudent.currentIncome - selectedStudent.initialIncome).toLocaleString('ru-RU')} ₽ к старту</div>
-                        </div>
-                        <div className="analytics-financial-metric px-6 py-5">
-                          <div className="text-xs text-slate-400 uppercase font-semibold mb-1">
-                            {analyticsPeriod === 'week' ? 'Доход за неделю' : analyticsPeriod === 'month' ? 'Доход за месяц' : 'Средний чек'}
-                          </div>
-                          <div className="text-xl sm:text-2xl font-bold text-slate-900">
-                            {analyticsPeriod === 'all'
-                              ? `${selectedStudent.currentAvgTicket.toLocaleString('ru-RU')} ₽`
-                              : `${selectedStudentPeriodStats.income.toLocaleString('ru-RU')} ₽`
-                            }
-                          </div>
-                          <div className="text-xs text-slate-500 mt-0.5">
-                            {analyticsPeriod === 'all' ? 'текущий тариф' : `за выбранный период (${analyticsPeriod === 'week' ? '7 дней' : '30 дней'})`}
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
 
                       {/* Content & Ingestion Metrics Strip */}
                       <div className="px-6 py-5 bg-slate-50/50 border-b border-slate-100">

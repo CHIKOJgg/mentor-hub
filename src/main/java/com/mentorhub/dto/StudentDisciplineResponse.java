@@ -32,7 +32,9 @@ public record StudentDisciplineResponse(
     List<ZoomMeetingDto> zoomSessions,
     String taskPlanRaw,
     Integer currentTaskDay,
-    String todayTask
+    String todayTask,
+    String currency,
+    String timezone
 ) {
     public StudentDisciplineResponse(
         String id,
@@ -66,6 +68,44 @@ public record StudentDisciplineResponse(
              initialIncome, currentIncome, initialAvgTicket, currentAvgTicket,
              totalReels, totalCarousels, totalStorytells, totalMailings, totalNewClients, disciplineRate,
              isOnPause, pauseReason, nextZoomDate, completedZoomsCount, contractZoomQuota,
-             weekDays, zoomSessions, null, 1, null);
+             weekDays, zoomSessions, null, 1, null, "BYN", "Europe/Minsk");
+    }
+
+    public StudentDisciplineResponse(
+        String id,
+        String fullName,
+        String avatarText,
+        String tgUsername,
+        Long tgChatId,
+        String niche,
+        String tariff,
+        java.time.LocalDate startDate,
+        Boolean isActive,
+        BigDecimal initialIncome,
+        BigDecimal currentIncome,
+        BigDecimal initialAvgTicket,
+        BigDecimal currentAvgTicket,
+        Integer totalReels,
+        Integer totalCarousels,
+        Integer totalStorytells,
+        Integer totalMailings,
+        Integer totalNewClients,
+        Integer disciplineRate,
+        Boolean isOnPause,
+        String pauseReason,
+        String nextZoomDate,
+        Integer completedZoomsCount,
+        Integer contractZoomQuota,
+        List<DayInfoResponse> weekDays,
+        List<ZoomMeetingDto> zoomSessions,
+        String taskPlanRaw,
+        Integer currentTaskDay,
+        String todayTask
+    ) {
+        this(id, fullName, avatarText, tgUsername, tgChatId, niche, tariff, startDate, isActive,
+             initialIncome, currentIncome, initialAvgTicket, currentAvgTicket,
+             totalReels, totalCarousels, totalStorytells, totalMailings, totalNewClients, disciplineRate,
+             isOnPause, pauseReason, nextZoomDate, completedZoomsCount, contractZoomQuota,
+             weekDays, zoomSessions, taskPlanRaw, currentTaskDay, todayTask, "BYN", "Europe/Minsk");
     }
 }

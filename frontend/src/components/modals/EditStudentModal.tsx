@@ -34,6 +34,7 @@ export const EditStudentModal = ({
   const requestClose = useModalDismiss(closeDialog, hasUnsavedChanges);
 
   if (!student) return null;
+  const currSymbol = student.currency === 'RUB' ? '₽' : 'BYN';
   const updateEditingStudent = (updated: StudentDiscipline) => {
     setHasUnsavedChanges(true);
     setEditingStudent(updated);
@@ -142,7 +143,36 @@ export const EditStudentModal = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Точка А (старт, ₽):</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1">Валюта расчетов:</label>
+              <select
+                value={student.currency || 'BYN'}
+                onChange={e => updateEditingStudent({ ...student, currency: e.target.value })}
+                className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 bg-white"
+              >
+                <option value="BYN">BYN (Белорусский рубль)</option>
+                <option value="RUB">RUB (Российский рубль, ₽)</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600 block mb-1">Часовой пояс:</label>
+              <select
+                value={student.timezone || 'Europe/Minsk'}
+                onChange={e => updateEditingStudent({ ...student, timezone: e.target.value })}
+                className="w-full text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 bg-white"
+              >
+                <option value="Europe/Minsk">Минск / Москва (UTC+3)</option>
+                <option value="Asia/Yekaterinburg">Екатеринбург (UTC+5, +2ч)</option>
+                <option value="Asia/Omsk">Омск (UTC+6, +3ч)</option>
+                <option value="Asia/Novosibirsk">Новосибирск (UTC+7, +4ч)</option>
+                <option value="Asia/Irkutsk">Иркутск (UTC+8, +5ч)</option>
+                <option value="Asia/Vladivostok">Владивосток (UTC+10, +7ч)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-600 block mb-1">Точка А (старт, {currSymbol}):</label>
               <input
                 type="number"
                 value={student.initialIncome}
@@ -151,7 +181,7 @@ export const EditStudentModal = ({
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Точка Б (факт, ₽):</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1">Точка Б (факт, {currSymbol}):</label>
               <input
                 type="number"
                 value={student.currentIncome}
@@ -163,7 +193,7 @@ export const EditStudentModal = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Средний чек на старте (₽):</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1">Средний чек на старте ({currSymbol}):</label>
               <input
                 type="number"
                 value={student.initialAvgTicket}
@@ -172,7 +202,7 @@ export const EditStudentModal = ({
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Текущий средний чек (₽):</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1">Текущий средний чек ({currSymbol}):</label>
               <input
                 type="number"
                 value={student.currentAvgTicket}

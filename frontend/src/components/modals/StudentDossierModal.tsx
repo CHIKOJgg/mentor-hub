@@ -32,6 +32,7 @@ export const StudentDossierModal = ({
 
   const targetIncome = student.portalData?.targetIncome ?? student.initialIncome * 2;
   const hasTargetIncome = targetIncome > 0;
+  const currSymbol = student.currency === 'RUB' ? '₽' : 'BYN';
   const goalProgress = hasTargetIncome
     ? Math.min(100, Math.round((student.currentIncome / targetIncome) * 100))
     : null;
@@ -111,19 +112,19 @@ export const StudentDossierModal = ({
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
                 <span className="text-[11px] text-slate-400 block font-medium">Точка А (старт)</span>
                 <span className="text-base font-bold text-slate-900 font-mono mt-0.5 block">
-                  {student.initialIncome.toLocaleString('ru-RU')} ₽
+                  {student.initialIncome.toLocaleString('ru-RU')} {currSymbol}
                 </span>
               </div>
               <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-100">
                 <span className="text-[11px] text-emerald-600 block font-medium">Текущий факт</span>
                 <span className="text-base font-bold text-emerald-800 font-mono mt-0.5 block">
-                  {student.currentIncome.toLocaleString('ru-RU')} ₽
+                  {student.currentIncome.toLocaleString('ru-RU')} {currSymbol}
                 </span>
               </div>
               <div className="p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-100">
                 <span className="text-[11px] text-indigo-600 block font-medium">Цель на поток (Б)</span>
                 <span className="text-base font-bold text-indigo-800 font-mono mt-0.5 block">
-                  {hasTargetIncome ? `${targetIncome.toLocaleString('ru-RU')} ₽` : 'Не задана'}
+                  {hasTargetIncome ? `${targetIncome.toLocaleString('ru-RU')} ${currSymbol}` : 'Не задана'}
                 </span>
               </div>
             </div>
@@ -150,7 +151,7 @@ export const StudentDossierModal = ({
               <div className="p-3 rounded-xl border border-slate-100 space-y-1">
                 <span className="text-slate-400">Средний чек:</span>
                 <div className="text-sm font-bold text-slate-900 font-mono">
-                  {student.currentAvgTicket.toLocaleString('ru-RU')} ₽ (было {student.initialAvgTicket.toLocaleString('ru-RU')} ₽)
+                  {student.currentAvgTicket.toLocaleString('ru-RU')} {currSymbol} (было {student.initialAvgTicket.toLocaleString('ru-RU')} {currSymbol})
                 </div>
               </div>
               <div className="p-3 rounded-xl border border-slate-100 space-y-1">
@@ -255,7 +256,7 @@ export const StudentDossierModal = ({
                     </div>
 
                     <div className="flex items-center gap-3 text-xs font-semibold text-slate-700">
-                      <span>Продажи: <strong className="text-emerald-700">{r.salesAmount.toLocaleString('ru-RU')} ₽</strong></span>
+                      <span>Продажи: <strong className="text-emerald-700">{r.salesAmount.toLocaleString('ru-RU')} {currSymbol}</strong></span>
                       <span>·</span>
                       <span>Клиенты: +{r.newClientsCount}</span>
                       <span>·</span>

@@ -302,4 +302,35 @@ class StudentServiceTest {
         assertThat(studentService.getCurrentDayNumber(student, dayAfterTomorrow)).isEqualTo(3);
         assertThat(studentService.getTodayTask(student, dayAfterTomorrow)).isEqualTo("продажа");
     }
+
+    @Test
+    @DisplayName("Creates and updates student with currency and timezone")
+    void testCreateAndUpdateStudentCurrencyAndTimezone() {
+        CreateStudentRequest createReq = new CreateStudentRequest(
+                "Алёна Сибирь",
+                "АС",
+                "alyona_sib",
+                -100999888L,
+                "Бьюти",
+                "VIP",
+                new BigDecimal("50000"),
+                new BigDecimal("5000"),
+                LocalDate.now(),
+                "RUB",
+                "Asia/Novosibirsk"
+        );
+
+        StudentDisciplineResponse created = studentService.createStudent(createReq);
+        assertThat(created.currency()).isEqualTo("RUB");
+        assertThat(created.timezone()).isEqualTo("Asia/Novosibirsk");
+
+        UpdateStudentRequest updateReq = new UpdateStudentRequest(
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                null, null, "BYN", "Asia/Vladivostok"
+        );
+        StudentDisciplineResponse updated = studentService.updateStudent(Long.parseLong(created.id().replace("st-", "")), updateReq);
+        assertThat(updated.currency()).isEqualTo("BYN");
+        assertThat(updated.timezone()).isEqualTo("Asia/Vladivostok");
+    }
 }

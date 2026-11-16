@@ -125,4 +125,20 @@ class DailyReminderSchedulerTest {
         assertThat(reminderChatId).isEqualTo(71010101L);
         assertThat(reminderText).contains("Милана Горохова, привет! Напоминаю: до дедлайна сдачи отчета остался 1 час (до 21:00) ⏰");
     }
+
+    @Test
+    @DisplayName("Resolves student timezone with fallback to Europe/Minsk")
+    void resolveStudentZone_test() {
+        Student msk = Student.builder().timezone("Europe/Moscow").build();
+        assertThat(scheduler.resolveStudentZone(msk).getId()).isEqualTo("Europe/Moscow");
+
+        Student vlad = Student.builder().timezone("Asia/Vladivostok").build();
+        assertThat(scheduler.resolveStudentZone(vlad).getId()).isEqualTo("Asia/Vladivostok");
+
+        Student def = Student.builder().timezone(null).build();
+        assertThat(scheduler.resolveStudentZone(def).getId()).isEqualTo("Europe/Minsk");
+
+        Student invalid = Student.builder().timezone("Invalid/Timezone").build();
+        assertThat(scheduler.resolveStudentZone(invalid).getId()).isEqualTo("Europe/Minsk");
+    }
 }

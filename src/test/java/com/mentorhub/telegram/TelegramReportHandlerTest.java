@@ -601,4 +601,35 @@ class TelegramReportHandlerTest {
         assertThat(report.getLastTgMessageId()).isEqualTo(706);
         assertThat(sentReplyCount).isEqualTo(2);
     }
+
+    @Test
+    @DisplayName("Parses #созвон hashtag with date, time, and Zoom link, schedules call and updates student")
+    void handleMeetingMessage_schedulesWithDateAndZoom() {
+        Student student = Student.builder().id(5L).fullName("Вероника").timezone("Europe/Minsk").build();
+        ZoomMeeting meeting = ZoomMeeting.builder()
+                .student(student)
+                .callNumber(1)
+                .meetingTitle("Консультация #1")
+                .isCompleted(false)
+                .build();
+
+        when(zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(5L)).thenReturn(List.of(meeting));
+        when(zoomMeetingRepository.save(any(ZoomMeeting.class))).thenAnswer(i -> i.getArgument(0));
+
+        Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").build();
+        Message message = Message.builder()
+                .messageId(101)
+                .chat(chat)
+                .text("#созвон 18.11 в 15:00 https://us05web.zoom.us/j/123456789")
+                .build();
+
+        assertThat(handler.isMeetingMessage(message)).isTrue();
+        boolean processed = handler.processMeetingMessage(student, message);
+
+        assertThat(processed).isTrue();
+        assertThat(meeting.getZoomUrl()).isEqualTo("https://us05web.zoom.us/j/123456789");
+        assertThat(meeting.getScheduledAt()).isNotNull();
+        verify(zoomMeetingRepository).save(meeting);
+        verify(studentRepository).save(argThat(s -> s.getNextZoomAt() != null));
+    }
 }

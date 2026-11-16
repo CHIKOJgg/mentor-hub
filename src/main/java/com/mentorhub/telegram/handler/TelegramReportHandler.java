@@ -23,8 +23,10 @@ import org.telegram.telegrambots.meta.api.objects.message.Message;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -32,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -48,6 +51,33 @@ public class TelegramReportHandler {
             "#(?i)(контент|рилс|карусель|карусели|сторителл|сторис)[:\\s]*([^#\n]*)"
     );
     private static final Pattern URL_PATTERN = Pattern.compile("(?i)https?://[^\\s<>\\\"']+");
+
+    private static final Pattern MEETING_TIME_PATTERN = Pattern.compile(
+            "(?:в\\s*)?(\\b[0-2]?\\d):([0-5]\\d)\\b"
+    );
+    private static final Pattern MEETING_HOUR_PATTERN = Pattern.compile(
+            "в\\s*(\\b[0-2]?\\d)\\b(?!\\s*[:.])"
+    );
+    private static final Pattern MEETING_NUM_DATE_PATTERN = Pattern.compile(
+            "\\b(\\d{1,2})[./](\\d{1,2})(?:[./](\\d{2,4}))?\\b"
+    );
+    private static final Pattern MEETING_RU_DATE_PATTERN = Pattern.compile(
+            "\\b(\\d{1,2})\\s+([а-яё]+)", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
+    private static final String[] RU_MONTHS = {
+            "январ", "феврал", "март", "апрел", "ма", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр"
+    };
+
+    private static final Map<String, DayOfWeek> RU_WEEKDAYS = Map.of(
+            "понедельник", DayOfWeek.MONDAY,
+            "вторник", DayOfWeek.TUESDAY,
+            "сред", DayOfWeek.WEDNESDAY,
+            "четверг", DayOfWeek.THURSDAY,
+            "пятниц", DayOfWeek.FRIDAY,
+            "суббот", DayOfWeek.SATURDAY,
+            "воскресень", DayOfWeek.SUNDAY
+    );
 
     private final DailyReportRepository dailyReportRepository;
     private final StudentRepository studentRepository;
@@ -714,8 +744,23 @@ public class TelegramReportHandler {
         }
     }
 
+    public boolean isMeetingMessage(Message message) {
+        if (message == null) return false;
+        String rawContent = message.getText() != null ? message.getText() : message.getCaption();
+        if (!StringUtils.hasText(rawContent)) return false;
+        String lower = rawContent.toLowerCase(Locale.ROOT);
+        return lower.contains("#созвон") || lower.contains("#zoom") || lower.contains("#встреча")
+                || lower.startsWith("/созвон") || lower.startsWith("/meeting") || lower.startsWith("/zoom")
+                || containsVideoMeetingLink(message);
+    }
+
     @Transactional
     public boolean captureZoomLinkFromMessage(Student student, Message message) {
+        return processMeetingMessage(student, message);
+    }
+
+    @Transactional
+    public boolean processMeetingMessage(Student student, Message message) {
         if (zoomMeetingRepository == null || student == null || message == null) return false;
         MentorSetting settings = mentorSettingRepository != null
                 ? mentorSettingRepository.findFirstByOrderByIdAsc().orElse(null)
@@ -723,6 +768,10 @@ public class TelegramReportHandler {
         if (settings != null && !Boolean.TRUE.equals(settings.getZoomAutoDetectEnabled())) return false;
         String rawContent = message.getText() != null ? message.getText() : message.getCaption();
         if (!StringUtils.hasText(rawContent)) return false;
+
+        String lower = rawContent.toLowerCase(Locale.ROOT);
+        boolean hasMeetingTag = lower.contains("#созвон") || lower.contains("#zoom") || lower.contains("#встреча")
+                || lower.startsWith("/созвон") || lower.startsWith("/meeting") || lower.startsWith("/zoom");
 
         Matcher matcher = URL_PATTERN.matcher(rawContent);
         String link = null;
@@ -742,9 +791,16 @@ public class TelegramReportHandler {
                 // Ignore malformed URLs embedded in a message.
             }
         }
-        if (link == null) return false;
-        final String capturedLink = link;
 
+        ZoneId studentZone = resolveStudentZone(student);
+        Instant scheduledAt = parseMeetingDateTime(rawContent, studentZone);
+
+        // If neither link nor scheduled time nor hashtag was found, not a meeting message
+        if (link == null && scheduledAt == null && !hasMeetingTag) {
+            return false;
+        }
+
+        final String capturedLink = link;
         List<ZoomMeeting> sessions = zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(student.getId());
         Long chatId = message.getChat() != null ? message.getChat().getId() : null;
         Integer messageId = message.getMessageId();
@@ -757,15 +813,16 @@ public class TelegramReportHandler {
                 ? Instant.ofEpochSecond(message.getDate().longValue())
                 : Instant.now();
         final boolean recordingLink = isRecording;
+
         ZoomMeeting meeting = sessions.stream()
                 .filter(session -> recordingLink
                         ? Objects.equals(session.getRecordingUrl(), capturedLink)
-                        : Objects.equals(session.getZoomUrl(), capturedLink))
+                        : (capturedLink != null && Objects.equals(session.getZoomUrl(), capturedLink)))
                 .findFirst()
                 .orElseGet(() -> sessions.stream()
                 .filter(session -> recordingLink
                         ? StringUtils.hasText(session.getZoomUrl()) && !StringUtils.hasText(session.getRecordingUrl())
-                        : !StringUtils.hasText(session.getZoomUrl()) && !Boolean.TRUE.equals(session.getIsCompleted()))
+                        : !Boolean.TRUE.equals(session.getIsCompleted()))
                 .findFirst()
                 .orElseGet(() -> {
                     int nextCallNumber = sessions.stream()
@@ -776,7 +833,7 @@ public class TelegramReportHandler {
                     return ZoomMeeting.builder()
                             .student(student)
                             .callNumber(nextCallNumber)
-                            .meetingTitle("Сверхплановая консультация #" + nextCallNumber)
+                            .meetingTitle("Консультация #" + nextCallNumber)
                             .isCompleted(false)
                             .build();
                 }));
@@ -786,17 +843,23 @@ public class TelegramReportHandler {
             meeting.setIsCompleted(true);
             meeting.setCompletedAt(messageAt);
         } else {
-            meeting.setZoomUrl(capturedLink);
-            meeting.setLinkSentAt(messageAt);
-            // Sending an invitation is not proof that the consultation took place.
+            if (capturedLink != null) {
+                meeting.setZoomUrl(capturedLink);
+                meeting.setLinkSentAt(messageAt);
+            }
+            if (scheduledAt != null) {
+                meeting.setScheduledAt(scheduledAt);
+            }
         }
+
         meeting.setSourceChatId(chatId);
         meeting.setSourceMessageId(messageId);
         String evidenceUrl = buildTelegramMessageUrl(message);
         if (StringUtils.hasText(evidenceUrl)) meeting.setEvidenceUrl(evidenceUrl);
         zoomMeetingRepository.save(meeting);
 
-        if (recordingLink) {
+        // Recalculate nextZoomAt and completedZoomsCount on student if recording or schedule changed
+        if (recordingLink || scheduledAt != null) {
             student.setCompletedZoomsCount(Math.toIntExact(zoomMeetingRepository.countByStudentIdAndIsCompletedTrue(student.getId())));
             student.setNextZoomAt(zoomMeetingRepository.findByStudentIdOrderByCallNumberAscIdAsc(student.getId()).stream()
                     .filter(item -> !Boolean.TRUE.equals(item.getIsCompleted()))
@@ -806,7 +869,144 @@ public class TelegramReportHandler {
                     .orElse(null));
             studentRepository.save(student);
         }
+
+        // Send caring confirmation to the group chat
+        if (telegramSenderService != null && chatId != null) {
+            String businessConnectionId = settings != null && Boolean.TRUE.equals(settings.getIsBusinessConnected())
+                    ? settings.getBusinessConnectionId()
+                    : null;
+            if (recordingLink) {
+                String reply = "📼 Запись созвона для " + student.getFullName() + " сохранена в карточку! 🌸";
+                telegramSenderService.sendCaringReply(chatId, messageId, reply, businessConnectionId);
+            } else if (scheduledAt != null) {
+                DateTimeFormatter df = DateTimeFormatter.ofPattern("dd.MM (EE)", new Locale("ru"));
+                DateTimeFormatter tf = DateTimeFormatter.ofPattern("HH:mm");
+                LocalDateTime ldt = LocalDateTime.ofInstant(scheduledAt, studentZone);
+                String linkPart = capturedLink != null ? "\n🔗 Ссылка: " + capturedLink : "";
+                String reply = String.format(
+                        "📅 Созвон с %s назначен на %s в %s! 🌸\nДобавила в график и карточку ученицы.%s",
+                        student.getFullName(),
+                        df.format(ldt),
+                        tf.format(ldt),
+                        linkPart
+                );
+                telegramSenderService.sendCaringReply(chatId, messageId, reply, businessConnectionId);
+            } else if (capturedLink != null) {
+                String reply = "🔗 Ссылка на созвон для " + student.getFullName() + " сохранена в карточку! 🌸\n" + capturedLink;
+                telegramSenderService.sendCaringReply(chatId, messageId, reply, businessConnectionId);
+            }
+        }
+
         return true;
+    }
+
+    public Instant parseMeetingDateTime(String text, ZoneId zone) {
+        if (!StringUtils.hasText(text)) return null;
+        String lower = text.toLowerCase(Locale.ROOT);
+
+        // 1. Parse time
+        LocalTime targetTime = null;
+        Matcher mTime = MEETING_TIME_PATTERN.matcher(lower);
+        if (mTime.find()) {
+            int h = Integer.parseInt(mTime.group(1));
+            int m = Integer.parseInt(mTime.group(2));
+            if (h >= 0 && h < 24 && m >= 0 && m < 60) {
+                targetTime = LocalTime.of(h, m);
+            }
+        } else {
+            Matcher mHour = MEETING_HOUR_PATTERN.matcher(lower);
+            if (mHour.find()) {
+                int h = Integer.parseInt(mHour.group(1));
+                if (h >= 0 && h < 24) {
+                    targetTime = LocalTime.of(h, 0);
+                }
+            }
+        }
+
+        // 2. Parse date
+        LocalDate targetDate = null;
+        if (lower.contains("послезавтра")) {
+            targetDate = LocalDate.now(zone).plusDays(2);
+        } else if (lower.contains("завтра")) {
+            targetDate = LocalDate.now(zone).plusDays(1);
+        } else if (lower.contains("сегодня")) {
+            targetDate = LocalDate.now(zone);
+        }
+
+        if (targetDate == null) {
+            Matcher mNum = MEETING_NUM_DATE_PATTERN.matcher(lower);
+            if (mNum.find()) {
+                int d = Integer.parseInt(mNum.group(1));
+                int mo = Integer.parseInt(mNum.group(2));
+                int y = mNum.group(3) != null ? Integer.parseInt(mNum.group(3)) : LocalDate.now(zone).getYear();
+                if (y < 100) y += 2000;
+                if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+                    try {
+                        targetDate = LocalDate.of(y, mo, d);
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
+
+        if (targetDate == null) {
+            Matcher mRu = MEETING_RU_DATE_PATTERN.matcher(lower);
+            if (mRu.find()) {
+                int d = Integer.parseInt(mRu.group(1));
+                String monStr = mRu.group(2);
+                for (int i = 0; i < RU_MONTHS.length; i++) {
+                    if (monStr.startsWith(RU_MONTHS[i])) {
+                        try {
+                            targetDate = LocalDate.of(LocalDate.now(zone).getYear(), i + 1, d);
+                        } catch (Exception ignored) {}
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (targetDate == null) {
+            for (Map.Entry<String, DayOfWeek> entry : RU_WEEKDAYS.entrySet()) {
+                if (lower.contains(entry.getKey())) {
+                    LocalDate base = LocalDate.now(zone);
+                    DayOfWeek targetDow = entry.getValue();
+                    int diff = (targetDow.getValue() - base.getDayOfWeek().getValue() + 7) % 7;
+                    if (diff == 0) diff = 7;
+                    targetDate = base.plusDays(diff);
+                    break;
+                }
+            }
+        }
+
+        if (targetDate == null && targetTime == null) {
+            return null;
+        }
+
+        if (targetDate == null) {
+            LocalDate today = LocalDate.now(zone);
+            LocalDateTime candidate = LocalDateTime.of(today, targetTime);
+            if (candidate.isBefore(LocalDateTime.now(zone))) {
+                targetDate = today.plusDays(1);
+            } else {
+                targetDate = today;
+            }
+        }
+
+        if (targetTime == null) {
+            targetTime = LocalTime.of(15, 0); // Default to 15:00 if date given without time
+        }
+
+        return LocalDateTime.of(targetDate, targetTime).atZone(zone).toInstant();
+    }
+
+    public ZoneId resolveStudentZone(Student student) {
+        if (student != null && StringUtils.hasText(student.getTimezone())) {
+            try {
+                return ZoneId.of(student.getTimezone());
+            } catch (Exception ex) {
+                log.warn("Invalid timezone '{}' for student #{}, defaulting to Europe/Minsk", student.getTimezone(), student.getId());
+            }
+        }
+        return MINSK_ZONE;
     }
 
     public boolean containsVideoMeetingLink(Message message) {

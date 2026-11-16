@@ -257,9 +257,9 @@ public class TelegramMessageRouter {
                 handleToggleAckCommand(chatId, message, lower, isMentor ? "Ксения" : "Катя");
                 return;
             }
-            if (telegramReportHandler.containsVideoMeetingLink(message)) {
+            if (telegramReportHandler.isMeetingMessage(message)) {
                 Optional<Student> studentForMeeting = identifyStudent(chatId, fromId, from.getUserName(), message);
-                if (studentForMeeting.isPresent() && telegramReportHandler.captureZoomLinkFromMessage(studentForMeeting.get(), message)) {
+                if (studentForMeeting.isPresent() && telegramReportHandler.processMeetingMessage(studentForMeeting.get(), message)) {
                     auditMessageLogRepository.save(AuditMessageLog.builder()
                             .updateId(updateId)
                             .tgChatId(chatId)
@@ -341,7 +341,7 @@ public class TelegramMessageRouter {
                         .build());
 
                 if (telegramSenderService != null) {
-                    String welcomeMsg = "🌸 Привет, " + student.getFullName() + "! Я бот-ассистент платформы Mentor Hub для Ксении и Кати.\n\n" +
+                    String welcomeMsg = "🌸 Привет, " + student.getFullName() + "! Я бот-помощник платформы наставничества для Ксении и Кати.\n\n" +
                             "Я автоматически подключила твою рабочую группу к системе! Жду твои ежедневные отчеты с хэштегами:\n" +
                             "• #рилс / #видео\n" +
                             "• #карусель / #пост\n" +
@@ -427,6 +427,27 @@ public class TelegramMessageRouter {
                         student.getFullName(), student.getId(), message.getMessageId(), ex.getMessage(), ex);
             }
             return;
+        }
+
+        // Check if message is a meeting schedule (#созвон) or meeting link
+        if (telegramReportHandler.isMeetingMessage(message)) {
+            try {
+                if (telegramReportHandler.processMeetingMessage(student, message)) {
+                    auditMessageLogRepository.save(AuditMessageLog.builder()
+                            .updateId(updateId)
+                            .tgChatId(chatId)
+                            .tgUserId(fromId)
+                            .sourceType(sourceType)
+                            .rawPayload(rawText)
+                            .processingStatus("ZOOM_LINK_CAPTURED")
+                            .createdAt(Instant.now())
+                            .build());
+                    return;
+                }
+            } catch (Exception ex) {
+                log.error("Failed to process meeting message for student '{}' (#{}), msgId={}: {}",
+                        student.getFullName(), student.getId(), message.getMessageId(), ex.getMessage(), ex);
+            }
         }
 
         try {
@@ -942,7 +963,7 @@ public class TelegramMessageRouter {
     private void handleWelcomeCommand(Long chatId, Long fromId, User from, Message message) {
         if (telegramSenderService == null || chatId == null) return;
         StringBuilder welcome = new StringBuilder();
-        welcome.append("Здравствуйте! Я бот-ассистент платформы «Mentor Hub» для наставничества Ксении и куратора Кати 🌸\n\n");
+        welcome.append("Здравствуйте! Я бот-помощник платформы «Mentor Hub» для наставничества Ксении и куратора Кати 🌸\n\n");
         welcome.append("Я работаю в мини-группах («Ксения + Катя + Ученица + Бот») и принимаю ежедневные отчёты с хэштегами:\n");
         appendRulesSummary(welcome);
         welcome.append("\nКоманды бота:\n");
