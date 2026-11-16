@@ -421,12 +421,131 @@ public class StudentService {
         return plan;
     }
 
+    public record PlanSchedule(
+            LocalDate startDate,
+            String cleanPlan,
+            Map<Integer, String> days
+    ) {}
+
+    public static PlanSchedule parsePlanWithSchedule(String raw, LocalDate today, ZoneId zone) {
+        if (today == null) {
+            today = LocalDate.now(zone != null ? zone : ZoneId.of("Europe/Minsk"));
+        }
+        LocalDate defaultStart = today.plusDays(1); // Default is tomorrow as per mentor preference
+        if (!StringUtils.hasText(raw)) {
+            return new PlanSchedule(defaultStart, "", Collections.emptyMap());
+        }
+
+        String trimmed = raw.trim();
+        List<String> lines = trimmed.lines().toList();
+        if (lines.isEmpty()) {
+            return new PlanSchedule(defaultStart, "", Collections.emptyMap());
+        }
+
+        String firstLine = lines.get(0).trim();
+        LocalDate startFromFirstLine = tryParseDateModifier(firstLine, today);
+        if (startFromFirstLine != null) {
+            String planBody = lines.size() > 1 ? String.join("\n", lines.subList(1, lines.size())).trim() : "";
+            Map<Integer, String> days = parseTaskPlan(planBody);
+            return new PlanSchedule(startFromFirstLine, planBody, days);
+        }
+
+        int colonIdx = firstLine.indexOf(':');
+        if (colonIdx > 0 && colonIdx < 30) {
+            String prefix = firstLine.substring(0, colonIdx).trim();
+            LocalDate startFromPrefix = tryParseDateModifier(prefix, today);
+            if (startFromPrefix != null) {
+                String remainderOfFirstLine = firstLine.substring(colonIdx + 1).trim();
+                List<String> remainingLines = new ArrayList<>();
+                if (!remainderOfFirstLine.isEmpty()) {
+                    remainingLines.add(remainderOfFirstLine);
+                }
+                if (lines.size() > 1) {
+                    remainingLines.addAll(lines.subList(1, lines.size()));
+                }
+                String planBody = String.join("\n", remainingLines).trim();
+                Map<Integer, String> days = parseTaskPlan(planBody);
+                return new PlanSchedule(startFromPrefix, planBody, days);
+            }
+        }
+
+        Map<Integer, String> days = parseTaskPlan(trimmed);
+        return new PlanSchedule(defaultStart, trimmed, days);
+    }
+
+    private static LocalDate tryParseDateModifier(String text, LocalDate today) {
+        if (!StringUtils.hasText(text)) return null;
+        String clean = text.trim().toLowerCase(Locale.ROOT)
+                .replaceAll("[\\[\\]()#]", "")
+                .trim();
+        if (clean.startsWith("старт")) {
+            clean = clean.replaceFirst("^старт[:\\s]*", "").trim();
+        }
+        if (clean.startsWith("со ")) {
+            clean = clean.substring(3).trim();
+        } else if (clean.startsWith("с ")) {
+            clean = clean.substring(2).trim();
+        }
+
+        if (clean.equals("сегодня") || clean.equals("сегодняшнего дня")) {
+            return today;
+        }
+        if (clean.equals("завтра") || clean.equals("завтрашнего дня")) {
+            return today.plusDays(1);
+        }
+        if (clean.equals("послезавтра")) {
+            return today.plusDays(2);
+        }
+        if (clean.startsWith("через")) {
+            Matcher nm = Pattern.compile("\\d+").matcher(clean);
+            if (nm.find()) {
+                int days = Integer.parseInt(nm.group());
+                return today.plusDays(days);
+            }
+        }
+        DayOfWeek targetDow = null;
+        if (clean.startsWith("пон") || clean.equals("пн")) targetDow = DayOfWeek.MONDAY;
+        else if (clean.startsWith("вто") || clean.equals("вт")) targetDow = DayOfWeek.TUESDAY;
+        else if (clean.startsWith("сре") || clean.equals("ср")) targetDow = DayOfWeek.WEDNESDAY;
+        else if (clean.startsWith("чет") || clean.equals("чт")) targetDow = DayOfWeek.THURSDAY;
+        else if (clean.startsWith("пят") || clean.equals("пт")) targetDow = DayOfWeek.FRIDAY;
+        else if (clean.startsWith("суб") || clean.equals("сб")) targetDow = DayOfWeek.SATURDAY;
+        else if (clean.startsWith("вос") || clean.equals("вс")) targetDow = DayOfWeek.SUNDAY;
+
+        if (targetDow != null) {
+            int diff = (targetDow.getValue() - today.getDayOfWeek().getValue() + 7) % 7;
+            if (diff == 0) diff = 7;
+            return today.plusDays(diff);
+        }
+
+        Matcher dateMatcher = Pattern.compile("^(\\d{1,2})[./](\\d{1,2})(?:[./](\\d{2,4}))?$").matcher(clean);
+        if (dateMatcher.matches()) {
+            try {
+                int day = Integer.parseInt(dateMatcher.group(1));
+                int month = Integer.parseInt(dateMatcher.group(2));
+                int year = dateMatcher.group(3) != null
+                        ? (dateMatcher.group(3).length() == 2 ? 2000 + Integer.parseInt(dateMatcher.group(3)) : Integer.parseInt(dateMatcher.group(3)))
+                        : today.getYear();
+                LocalDate parsedDate = LocalDate.of(year, month, day);
+                if (dateMatcher.group(3) == null && parsedDate.isBefore(today)) {
+                    parsedDate = parsedDate.plusYears(1);
+                }
+                return parsedDate;
+            } catch (Exception ignored) {}
+        }
+
+        return null;
+    }
+
     public int getCurrentDayNumber(Student student, LocalDate today) {
         if (student == null) return 1;
         int baseDay = student.getCurrentTaskDay() != null ? student.getCurrentTaskDay() : 1;
         LocalDate startDate = student.getTaskPlanStartDate() != null ? student.getTaskPlanStartDate() : today;
-        if (today == null || startDate == null || today.isBefore(startDate)) {
+        if (today == null || startDate == null) {
             return baseDay;
+        }
+        if (today.isBefore(startDate)) {
+            return 0; // Plan has not started yet
         }
         long daysDiff = ChronoUnit.DAYS.between(startDate, today);
         return baseDay + (int) daysDiff;
@@ -436,9 +555,14 @@ public class StudentService {
         if (student == null || !StringUtils.hasText(student.getTaskPlanRaw())) {
             return null;
         }
+        LocalDate startDate = student.getTaskPlanStartDate();
+        if (today != null && startDate != null && today.isBefore(startDate)) {
+            return null; // Plan has not started yet
+        }
         Map<Integer, String> plan = parseTaskPlan(student.getTaskPlanRaw());
         if (plan.isEmpty()) return null;
         int dayNum = getCurrentDayNumber(student, today);
+        if (dayNum <= 0) return null;
         if (plan.containsKey(dayNum)) {
             return plan.get(dayNum);
         }

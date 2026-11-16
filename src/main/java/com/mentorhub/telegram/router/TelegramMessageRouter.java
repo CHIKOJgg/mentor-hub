@@ -26,9 +26,12 @@ import org.telegram.telegrambots.meta.api.objects.business.BusinessConnection;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -1064,16 +1067,29 @@ public class TelegramMessageRouter {
         }
 
         Student student = studentOpt.get();
-        telegramReportHandler.handleMorningFocusMessage(student, message, "Задача от наставника " + mentorName + ": " + cleanTask);
+        telegramReportHandler.recordDailyFocusSilently(student, "Задача от наставника " + mentorName + ": " + cleanTask);
 
         log.info("Mentor {} set task for student '{}' (#{}): {}",
                 mentorName, student.getFullName(), student.getId(), cleanTask);
 
+        MentorSetting settings = mentorSettingRepository != null
+                ? mentorSettingRepository.findFirstByOrderByIdAsc().orElse(null)
+                : null;
+        boolean reportAckEnabled = settings != null && Boolean.TRUE.equals(settings.getReportAckEnabled());
+
         if (telegramSenderService != null) {
-            String reply = "🎯 Наставник " + mentorName + " поставила задачу на сегодня для " + student.getFullName() + ":\n" +
-                    "«" + cleanTask + "»\n\n" +
-                    "⏰ Ждём выполнение в отчёте до 21:00 🌸";
-            telegramSenderService.sendCaringReply(chatId, message.getMessageId(), reply);
+            boolean reacted = telegramSenderService.setMessageReaction(chatId, message.getMessageId(), "🎯");
+            if (!reportAckEnabled) {
+                if (!reacted) {
+                    String shortAck = "🎯 Задача принята: «" + cleanTask + "» 🌸";
+                    telegramSenderService.sendSilentReply(chatId, message.getMessageId(), shortAck);
+                }
+            } else {
+                String reply = "🎯 Наставник " + mentorName + " поставила задачу на сегодня для " + student.getFullName() + ":\n" +
+                        "«" + cleanTask + "»\n\n" +
+                        "⏰ Ждём выполнение в отчёте до 21:00 🌸";
+                telegramSenderService.sendSilentReply(chatId, message.getMessageId(), reply);
+            }
         }
     }
 
@@ -1113,25 +1129,33 @@ public class TelegramMessageRouter {
         }
 
         Student student = studentOpt.get();
-        LocalDate today = LocalDate.now(MINSK_ZONE);
+        ZoneId studentZone = resolveStudentZone(student);
+        LocalDate studentToday = LocalDate.now(studentZone);
 
         if (!StringUtils.hasText(cleanPlan)) {
             if (telegramSenderService != null) {
                 if (StringUtils.hasText(student.getTaskPlanRaw())) {
                     Map<Integer, String> plan = StudentService.parseTaskPlan(student.getTaskPlanRaw());
-                    int activeDay = studentService != null ? studentService.getCurrentDayNumber(student, today) : 1;
+                    int activeDay = studentService != null ? studentService.getCurrentDayNumber(student, studentToday) : 1;
+                    LocalDate startDate = student.getTaskPlanStartDate() != null ? student.getTaskPlanStartDate() : studentToday;
                     StringBuilder sb = new StringBuilder();
-                    sb.append("📋 Персональный план для ").append(student.getFullName()).append(":\n\n");
+                    sb.append("📋 Персональный план для ").append(student.getFullName());
+                    sb.append(" (на ").append(plan.size()).append(" дн., старт: ").append(formatStartLabel(startDate, studentToday)).append("):\n\n");
                     for (Map.Entry<Integer, String> entry : plan.entrySet()) {
-                        if (entry.getKey() == activeDay) {
-                            sb.append("👉 *День ").append(entry.getKey()).append(" (сегодня)*: ").append(entry.getValue()).append("\n");
+                        int dayNum = entry.getKey();
+                        LocalDate dayDate = startDate.plusDays(dayNum - 1);
+                        String dateLabel = formatDayDateLabel(dayDate, studentToday);
+                        if (dayDate.equals(studentToday)) {
+                            sb.append("👉 *День ").append(dayNum).append(" (").append(dateLabel).append(")*: ").append(entry.getValue()).append("\n");
+                        } else if (dayDate.isBefore(studentToday)) {
+                            sb.append("✔️ День ").append(dayNum).append(" (").append(dateLabel).append("): ").append(entry.getValue()).append("\n");
                         } else {
-                            sb.append("▫️ День ").append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
+                            sb.append("▫️ День ").append(dayNum).append(" (").append(dateLabel).append("): ").append(entry.getValue()).append("\n");
                         }
                     }
                     sb.append("\n💡 Сменить день: `/день [номер]` (например: `/день 2`)\n");
-                    sb.append("💡 Чтобы задать новый план, скопируйте текст после `/план`");
-                    telegramSenderService.sendCaringReply(chatId, message.getMessageId(), sb.toString());
+                    sb.append("💡 Чтобы задать новый план, отправьте: `/план` и далее текст плана по дням");
+                    telegramSenderService.sendSilentReply(chatId, message.getMessageId(), sb.toString());
                 } else {
                     telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
                             "📋 У ученицы " + student.getFullName() + " пока не задан индивидуальный план.\n\n" +
@@ -1147,36 +1171,41 @@ public class TelegramMessageRouter {
             return;
         }
 
-        student.setTaskPlanRaw(cleanPlan);
+        StudentService.PlanSchedule schedule = StudentService.parsePlanWithSchedule(cleanPlan, studentToday, studentZone);
+        LocalDate startDate = schedule.startDate();
+        String finalPlanText = schedule.cleanPlan();
+        Map<Integer, String> parsed = schedule.days();
+
+        student.setTaskPlanRaw(finalPlanText);
         student.setCurrentTaskDay(1);
-        student.setTaskPlanStartDate(today);
+        student.setTaskPlanStartDate(startDate);
         studentRepository.save(student);
 
-        Map<Integer, String> parsed = StudentService.parseTaskPlan(cleanPlan);
-        String day1Task = parsed.getOrDefault(1, cleanPlan.lines().findFirst().orElse(cleanPlan));
+        if (startDate.equals(studentToday)) {
+            String day1Task = parsed.getOrDefault(1, finalPlanText.lines().findFirst().orElse(finalPlanText));
+            telegramReportHandler.recordDailyFocusSilently(student, "План от наставника " + mentorName + " (День 1): " + day1Task);
+        }
 
-        telegramReportHandler.handleMorningFocusMessage(student, message, "План от наставника " + mentorName + " (День 1): " + day1Task);
+        log.info("Mentor {} set multi-day task plan for student '{}' (#{}): {} days parsed, starting {}",
+                mentorName, student.getFullName(), student.getId(), parsed.size(), startDate);
 
-        log.info("Mentor {} set multi-day task plan for student '{}' (#{}): {} days parsed",
-                mentorName, student.getFullName(), student.getId(), parsed.size());
+        MentorSetting settings = mentorSettingRepository != null
+                ? mentorSettingRepository.findFirstByOrderByIdAsc().orElse(null)
+                : null;
+        boolean reportAckEnabled = settings != null && Boolean.TRUE.equals(settings.getReportAckEnabled());
 
         if (telegramSenderService != null) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("📋 Наставник ").append(mentorName).append(" сохранила персональный план для ").append(student.getFullName());
-            if (!parsed.isEmpty()) {
-                sb.append(" (на ").append(parsed.size()).append(" дн.):\n\n");
-                for (Map.Entry<Integer, String> entry : parsed.entrySet()) {
-                    if (entry.getKey() == 1) {
-                        sb.append("👉 *День 1 (сегодня)*: ").append(entry.getValue()).append("\n");
-                    } else {
-                        sb.append("▫️ День ").append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
-                    }
+            boolean reacted = telegramSenderService.setMessageReaction(chatId, message.getMessageId(), "👍");
+            if (!reportAckEnabled) {
+                // Quiet mode: reaction is the confirmation! If reaction failed, send a short 1-line silent message
+                if (!reacted) {
+                    String shortAck = "📋 План сохранён на " + parsed.size() + " дн. (старт: " + formatStartLabel(startDate, studentToday) + ") 🌸";
+                    telegramSenderService.sendSilentReply(chatId, message.getMessageId(), shortAck);
                 }
             } else {
-                sb.append(":\n\n").append(cleanPlan).append("\n");
+                String overview = formatPlanOverview(mentorName, student, startDate, parsed, studentToday);
+                telegramSenderService.sendSilentReply(chatId, message.getMessageId(), overview);
             }
-            sb.append("\n⏰ Бот будет автоматически каждое утро присылать задачу текущего дня, а вечером напоминать о дедлайне 🌸");
-            telegramSenderService.sendCaringReply(chatId, message.getMessageId(), sb.toString());
         }
     }
 
@@ -1202,21 +1231,109 @@ public class TelegramMessageRouter {
             }
             return;
         }
-        LocalDate today = LocalDate.now(MINSK_ZONE);
+        ZoneId studentZone = resolveStudentZone(student);
+        LocalDate studentToday = LocalDate.now(studentZone);
         student.setCurrentTaskDay(targetDay);
-        student.setTaskPlanStartDate(today);
+        student.setTaskPlanStartDate(studentToday);
         studentRepository.save(student);
 
-        String todayTask = studentService != null ? studentService.getTodayTask(student, today) : null;
+        String todayTask = studentService != null ? studentService.getTodayTask(student, studentToday) : null;
         if (StringUtils.hasText(todayTask)) {
-            telegramReportHandler.handleMorningFocusMessage(student, message, "Задача (День " + targetDay + "): " + todayTask);
+            telegramReportHandler.recordDailyFocusSilently(student, "Задача (День " + targetDay + "): " + todayTask);
         }
 
+        log.info("Mentor {} switched current day to {} for student '{}'",
+                mentorName, targetDay, student.getFullName());
+
+        MentorSetting settings = mentorSettingRepository != null
+                ? mentorSettingRepository.findFirstByOrderByIdAsc().orElse(null)
+                : null;
+        boolean reportAckEnabled = settings != null && Boolean.TRUE.equals(settings.getReportAckEnabled());
+
         if (telegramSenderService != null) {
-            String reply = "🎯 Для ученицы " + student.getFullName() + " установлен День " + targetDay + "!\n" +
-                    (StringUtils.hasText(todayTask) ? "Задача на сегодня: «" + todayTask + "» 🌸" : "");
-            telegramSenderService.sendCaringReply(chatId, message.getMessageId(), reply);
+            boolean reacted = telegramSenderService.setMessageReaction(chatId, message.getMessageId(), "👍");
+            if (!reportAckEnabled) {
+                if (!reacted) {
+                    String shortReply = "🗓 Текущий день переключён на День " + targetDay +
+                            (StringUtils.hasText(todayTask) ? " («" + todayTask + "»)" : "") + " 🌸";
+                    telegramSenderService.sendSilentReply(chatId, message.getMessageId(), shortReply);
+                }
+            } else {
+                String reply = "🎯 Для ученицы " + student.getFullName() + " установлен День " + targetDay + "!\n" +
+                        (StringUtils.hasText(todayTask) ? "Задача на сегодня: «" + todayTask + "» 🌸" : "");
+                telegramSenderService.sendSilentReply(chatId, message.getMessageId(), reply);
+            }
         }
+    }
+
+    private ZoneId resolveStudentZone(Student student) {
+        if (student != null && StringUtils.hasText(student.getTimezone())) {
+            try {
+                return ZoneId.of(student.getTimezone().trim());
+            } catch (Exception ignored) {}
+        }
+        return MINSK_ZONE;
+    }
+
+    private static String formatStartLabel(LocalDate startDate, LocalDate today) {
+        if (startDate == null || today == null) return "завтра";
+        long diff = ChronoUnit.DAYS.between(today, startDate);
+        if (diff == 0) return "сегодня";
+        if (diff == 1) return "завтра (" + startDate.format(DateTimeFormatter.ofPattern("dd.MM")) + ")";
+        if (diff == 2) return "послезавтра (" + startDate.format(DateTimeFormatter.ofPattern("dd.MM")) + ")";
+        String dow = getShortRussianDayOfWeek(startDate.getDayOfWeek());
+        return dow + ", " + startDate.format(DateTimeFormatter.ofPattern("dd.MM"));
+    }
+
+    private static String formatDayDateLabel(LocalDate dayDate, LocalDate today) {
+        if (dayDate == null || today == null) return "";
+        long diff = ChronoUnit.DAYS.between(today, dayDate);
+        if (diff == 0) return "сегодня";
+        if (diff == 1) return "завтра, " + dayDate.format(DateTimeFormatter.ofPattern("dd.MM"));
+        if (diff == -1) return "вчера, " + dayDate.format(DateTimeFormatter.ofPattern("dd.MM"));
+        String dow = getShortRussianDayOfWeek(dayDate.getDayOfWeek());
+        return dow + ", " + dayDate.format(DateTimeFormatter.ofPattern("dd.MM"));
+    }
+
+    private static String getShortRussianDayOfWeek(DayOfWeek dow) {
+        if (dow == null) return "";
+        return switch (dow) {
+            case MONDAY -> "пн";
+            case TUESDAY -> "вт";
+            case WEDNESDAY -> "ср";
+            case THURSDAY -> "чт";
+            case FRIDAY -> "пт";
+            case SATURDAY -> "сб";
+            case SUNDAY -> "вс";
+        };
+    }
+
+    private static String formatPlanOverview(
+            String mentorName,
+            Student student,
+            LocalDate startDate,
+            Map<Integer, String> plan,
+            LocalDate today) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("📋 Наставник ").append(mentorName).append(" сохранила персональный план для ").append(student.getFullName());
+        if (plan == null || plan.isEmpty()) {
+            return sb.append(".\n").toString();
+        }
+        sb.append(" (на ").append(plan.size()).append(" дн., старт: ").append(formatStartLabel(startDate, today)).append("):\n\n");
+        for (Map.Entry<Integer, String> entry : plan.entrySet()) {
+            int dayNum = entry.getKey();
+            LocalDate dayDate = startDate != null ? startDate.plusDays(dayNum - 1) : today.plusDays(dayNum - 1);
+            String dateLabel = formatDayDateLabel(dayDate, today);
+            if (dayDate.equals(today)) {
+                sb.append("👉 *День ").append(dayNum).append(" (").append(dateLabel).append(")*: ").append(entry.getValue()).append("\n");
+            } else if (dayDate.isBefore(today)) {
+                sb.append("✔️ День ").append(dayNum).append(" (").append(dateLabel).append("): ").append(entry.getValue()).append("\n");
+            } else {
+                sb.append("▫️ День ").append(dayNum).append(" (").append(dateLabel).append("): ").append(entry.getValue()).append("\n");
+            }
+        }
+        sb.append("\n⏰ Бот будет автоматически каждое утро присылать задачу текущего дня, а вечером напоминать о дедлайне 🌸");
+        return sb.toString();
     }
 
     public Optional<Student> findStudentByQuery(String query) {

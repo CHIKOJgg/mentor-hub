@@ -361,6 +361,8 @@ class TelegramReportHandlerTest {
 
         when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
                 .thenReturn(Optional.empty());
+        when(mentorSettingRepository.findAll())
+                .thenReturn(List.of(MentorSetting.builder().reportAckEnabled(true).build()));
 
         sentReplyText = null;
 
@@ -378,6 +380,35 @@ class TelegramReportHandlerTest {
 
         // Sent custom focus confirmation instead of generic draft acknowledgment
         assertThat(sentReplyText).contains("🎯 Цель на сегодня зафиксирована: «Сегодня я буду делать рилсы»!");
+    }
+
+    @Test
+    @DisplayName("Morning focus text message in quiet mode saves focus silently without sending chat message")
+    void handleMorningFocusMessage_quietMode_savesFocusSilently() {
+        Student student = Student.builder()
+                .id(1L)
+                .fullName("Милана Горохова")
+                .tgChatId(71010101L)
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.empty());
+        when(mentorSettingRepository.findAll())
+                .thenReturn(List.of(MentorSetting.builder().reportAckEnabled(false).build()));
+
+        sentReplyText = null;
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder()
+                .messageId(505)
+                .chat(chat)
+                .text("Фокус дня: 1 рилс")
+                .build();
+
+        DailyReport result = handler.handleMorningFocusMessage(student, message, "Фокус дня: 1 рилс");
+
+        assertThat(result.getReflectionActions()).contains("🎯 Фокус дня: Фокус дня: 1 рилс");
+        assertThat(sentReplyText).isNull();
     }
 
     @Test

@@ -304,6 +304,63 @@ class StudentServiceTest {
     }
 
     @Test
+    @DisplayName("parsePlanWithSchedule defaults Day 1 to tomorrow when no date specified")
+    void testParsePlanWithScheduleDefaultTomorrow() {
+        LocalDate today = LocalDate.of(2026, 11, 16);
+        String planText = """
+                1 день сторис, 10 рассылок
+                2 день рилс
+                """;
+        StudentService.PlanSchedule schedule = StudentService.parsePlanWithSchedule(planText, today, java.time.ZoneId.of("Europe/Minsk"));
+        assertThat(schedule.startDate()).isEqualTo(LocalDate.of(2026, 11, 17));
+        assertThat(schedule.days()).hasSize(2);
+        assertThat(schedule.days().get(1)).isEqualTo("сторис, 10 рассылок");
+        assertThat(schedule.days().get(2)).isEqualTo("рилс");
+
+        Student student = Student.builder()
+                .taskPlanRaw(schedule.cleanPlan())
+                .currentTaskDay(1)
+                .taskPlanStartDate(schedule.startDate())
+                .build();
+
+        // On today (before start date): task is null, day number is 0
+        assertThat(studentService.getCurrentDayNumber(student, today)).isEqualTo(0);
+        assertThat(studentService.getTodayTask(student, today)).isNull();
+
+        // On tomorrow (start date): task is day 1, day number is 1
+        LocalDate tomorrow = today.plusDays(1);
+        assertThat(studentService.getCurrentDayNumber(student, tomorrow)).isEqualTo(1);
+        assertThat(studentService.getTodayTask(student, tomorrow)).isEqualTo("сторис, 10 рассылок");
+    }
+
+    @Test
+    @DisplayName("parsePlanWithSchedule supports explicit relative and absolute dates")
+    void testParsePlanWithScheduleExplicitModifiers() {
+        LocalDate today = LocalDate.of(2026, 11, 16); // Monday
+        java.time.ZoneId zone = java.time.ZoneId.of("Europe/Minsk");
+
+        // "сегодня"
+        var sToday = StudentService.parsePlanWithSchedule("сегодня\n1 день сторис", today, zone);
+        assertThat(sToday.startDate()).isEqualTo(today);
+
+        // "завтра"
+        var sTomorrow = StudentService.parsePlanWithSchedule("завтра:\n1 день сторис", today, zone);
+        assertThat(sTomorrow.startDate()).isEqualTo(today.plusDays(1));
+
+        // "через 2 дня"
+        var sIn2Days = StudentService.parsePlanWithSchedule("через 2 дня\n1 день сторис", today, zone);
+        assertThat(sIn2Days.startDate()).isEqualTo(today.plusDays(2));
+
+        // "со вторника" (from Monday -> Tuesday is next day)
+        var sTuesday = StudentService.parsePlanWithSchedule("со вторника\n1 день сторис", today, zone);
+        assertThat(sTuesday.startDate()).isEqualTo(LocalDate.of(2026, 11, 17));
+
+        // "с 19.11"
+        var sDate = StudentService.parsePlanWithSchedule("с 19.11:\n1 день сторис", today, zone);
+        assertThat(sDate.startDate()).isEqualTo(LocalDate.of(2026, 11, 19));
+    }
+
+    @Test
     @DisplayName("Creates and updates student with currency and timezone")
     void testCreateAndUpdateStudentCurrencyAndTimezone() {
         CreateStudentRequest createReq = new CreateStudentRequest(

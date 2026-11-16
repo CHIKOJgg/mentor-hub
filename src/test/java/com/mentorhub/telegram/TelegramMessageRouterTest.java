@@ -23,6 +23,7 @@ import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.chat.Chat;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -75,6 +76,13 @@ class TelegramMessageRouterTest {
                 recordedStudent = s;
                 recordedMessage = m;
                 recordedFocusText = raw;
+                return DailyReport.builder().build();
+            }
+
+            @Override
+            public DailyReport recordDailyFocusSilently(Student s, String focusText) {
+                recordedStudent = s;
+                recordedFocusText = focusText;
                 return DailyReport.builder().build();
             }
         };
@@ -476,7 +484,7 @@ class TelegramMessageRouterTest {
     }
 
     @Test
-    @DisplayName("Mentor Ksenia identified by @sidarenka_ks can set task via /задача")
+    @DisplayName("Mentor Ksenia identified by @sidarenka_ks can set task via /задача (quiet reaction by default)")
     void routeIncomingMessage_mentorSetsTaskWithZadacha() {
         User ksenia = User.builder().id(999000111L).firstName("KSENIA SIDARENKA | БЬЮТИ НАСТАВНИК").isBot(false).userName("sidarenka_ks").build();
         Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("Настав | Вероничка").build();
@@ -486,6 +494,7 @@ class TelegramMessageRouterTest {
         when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.of(student));
 
         TelegramSenderService sender = mock(TelegramSenderService.class);
+        when(sender.setMessageReaction(any(), any(), any())).thenReturn(true);
         router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
                 auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
 
@@ -493,7 +502,7 @@ class TelegramMessageRouterTest {
 
         assertThat(recordedStudent).isEqualTo(student);
         assertThat(recordedFocusText).contains("Задача от наставника Ксения: Сделать 30 рассылок и выложить сторис");
-        verify(sender).sendCaringReply(eq(-1003279128599L), eq(22), contains("Наставник Ксения поставила задачу на сегодня"));
+        verify(sender).setMessageReaction(eq(-1003279128599L), eq(22), eq("🎯"));
     }
 
     @Test
@@ -538,7 +547,7 @@ class TelegramMessageRouterTest {
     }
 
     @Test
-    @DisplayName("Mentor can set multi-day task plan via /план command and student gets configured")
+    @DisplayName("Mentor can set multi-day task plan via /план command: defaults Day 1 to tomorrow and sets quiet reaction")
     void routeIncomingMessage_mentorSetPlan_savesPlanAndConfirms() {
         User mentorUser = User.builder().id(999000111L).firstName("Ксения").isBot(false).userName("sidarenka_ks").build();
         Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("Настав | Вероничка").build();
@@ -555,6 +564,8 @@ class TelegramMessageRouterTest {
         when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.of(student));
 
         TelegramSenderService sender = mock(TelegramSenderService.class);
+        when(sender.setMessageReaction(any(), any(), any())).thenReturn(true);
+
         router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
                 auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
 
@@ -562,8 +573,38 @@ class TelegramMessageRouterTest {
 
         assertThat(student.getTaskPlanRaw()).contains("1 день - сторис челлендж");
         assertThat(student.getCurrentTaskDay()).isEqualTo(1);
+        assertThat(student.getTaskPlanStartDate()).isEqualTo(LocalDate.now().plusDays(1));
         verify(studentRepository).save(student);
-        verify(sender).sendCaringReply(eq(-1003279128599L), eq(30), argThat(s -> s.contains("сохранила персональный план") && s.contains("День 1 (сегодня)")));
+        verify(sender).setMessageReaction(eq(-1003279128599L), eq(30), eq("👍"));
+    }
+
+    @Test
+    @DisplayName("Mentor can set plan with explicit start date (сегодня)")
+    void routeIncomingMessage_mentorSetPlan_explicitToday() {
+        User mentorUser = User.builder().id(999000111L).firstName("Ксения").isBot(false).userName("sidarenka_ks").build();
+        Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("Настав | Вероничка").build();
+        String planText = """
+                /план сегодня
+                1 день - сторис челлендж
+                2 день - рилс
+                """;
+        Message message = Message.builder().messageId(35).from(mentorUser).chat(chat).text(planText).build();
+
+        Student student = Student.builder().id(5L).fullName("Вероника").tgChatId(-1003279128599L).build();
+        when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        when(sender.setMessageReaction(any(), any(), any())).thenReturn(true);
+
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 115L, "MINI_GROUP");
+
+        assertThat(student.getCurrentTaskDay()).isEqualTo(1);
+        assertThat(student.getTaskPlanStartDate()).isEqualTo(LocalDate.now());
+        verify(studentRepository).save(student);
+        verify(sender).setMessageReaction(eq(-1003279128599L), eq(35), eq("👍"));
     }
 
     @Test
@@ -583,6 +624,8 @@ class TelegramMessageRouterTest {
         when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.of(student));
 
         TelegramSenderService sender = mock(TelegramSenderService.class);
+        when(sender.setMessageReaction(any(), any(), any())).thenReturn(true);
+
         router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
                 auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
 
@@ -590,6 +633,6 @@ class TelegramMessageRouterTest {
 
         assertThat(student.getCurrentTaskDay()).isEqualTo(2);
         verify(studentRepository).save(student);
-        verify(sender).sendCaringReply(eq(-1003279128599L), eq(31), argThat(s -> s.contains("установлен День 2")));
+        verify(sender).setMessageReaction(eq(-1003279128599L), eq(31), eq("👍"));
     }
 }

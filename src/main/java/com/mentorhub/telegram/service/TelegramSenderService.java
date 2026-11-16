@@ -11,6 +11,8 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.File;
 import org.telegram.telegrambots.meta.api.objects.ReplyParameters;
+import org.telegram.telegrambots.meta.api.methods.reactions.SetMessageReaction;
+import org.telegram.telegrambots.meta.api.objects.reactions.ReactionTypeEmoji;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
@@ -40,10 +42,18 @@ public class TelegramSenderService {
     }
 
     public boolean sendCaringReply(Long chatId, Integer replyToMsgId, String text) {
-        return sendCaringReply(chatId, replyToMsgId, text, null);
+        return sendCaringReply(chatId, replyToMsgId, text, null, false);
     }
 
     public boolean sendCaringReply(Long chatId, Integer replyToMsgId, String text, String businessConnectionId) {
+        return sendCaringReply(chatId, replyToMsgId, text, businessConnectionId, false);
+    }
+
+    public boolean sendSilentReply(Long chatId, Integer replyToMsgId, String text) {
+        return sendCaringReply(chatId, replyToMsgId, text, null, true);
+    }
+
+    public boolean sendCaringReply(Long chatId, Integer replyToMsgId, String text, String businessConnectionId, boolean disableNotification) {
         if (!canSend(chatId)) {
             log.debug("Telegram client not available or bot disabled. Caring reply skipped for chat {}", chatId);
             return false;
@@ -54,6 +64,7 @@ public class TelegramSenderService {
                     .chatId(chatId.toString())
                     .replyToMessageId(replyToMsgId)
                     .allowSendingWithoutReply(true)
+                    .disableNotification(disableNotification)
                     .text(text);
             if (replyToMsgId != null) {
                 builder.replyParameters(ReplyParameters.builder()
@@ -66,7 +77,7 @@ public class TelegramSenderService {
             }
 
             telegramClient.execute(builder.build());
-            log.info("Sent caring reply to chat {} (reply to #{})", chatId, replyToMsgId);
+            log.info("Sent caring reply to chat {} (reply to #{}, silent={})", chatId, replyToMsgId, disableNotification);
             return true;
         } catch (TelegramApiException ex) {
             log.warn("Failed to send caring reply to chat {}: {}. Attempting fallback without reply parameter...", chatId, ex.getMessage());
@@ -74,6 +85,7 @@ public class TelegramSenderService {
                 try {
                     SendMessage.SendMessageBuilder<?, ?> fallbackBuilder = SendMessage.builder()
                             .chatId(chatId.toString())
+                            .disableNotification(disableNotification)
                             .text(text);
                     if (businessConnectionId != null && !businessConnectionId.isBlank()) {
                         fallbackBuilder.businessConnectionId(businessConnectionId);
@@ -85,6 +97,29 @@ public class TelegramSenderService {
                     log.warn("Fallback send without reply also failed: {}", fallbackEx.getMessage());
                 }
             }
+            return false;
+        }
+    }
+
+    public boolean setMessageReaction(Long chatId, Integer messageId, String emoji) {
+        if (!canSend(chatId) || messageId == null || emoji == null || emoji.isBlank()) {
+            return false;
+        }
+        try {
+            SetMessageReaction reaction = SetMessageReaction.builder()
+                    .chatId(chatId.toString())
+                    .messageId(messageId)
+                    .reactionTypes(List.of(
+                            ReactionTypeEmoji.builder()
+                                    .emoji(emoji)
+                                    .build()
+                    ))
+                    .build();
+            telegramClient.execute(reaction);
+            log.info("Set reaction '{}' on message #{} in chat {}", emoji, messageId, chatId);
+            return true;
+        } catch (Exception ex) {
+            log.debug("Failed to set reaction '{}' on message #{} in chat {}: {}", emoji, messageId, chatId, ex.getMessage());
             return false;
         }
     }

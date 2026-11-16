@@ -436,6 +436,10 @@ public class TelegramReportHandler {
                     telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement);
                 }
             } else {
+                Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
+                if (telegramSenderService != null && message.getMessageId() != null) {
+                    telegramSenderService.setMessageReaction(chatId, message.getMessageId(), "👍");
+                }
                 log.info("Report acknowledgment reply skipped (reportAckEnabled=false) for student '{}'", student.getFullName());
             }
         } else {
@@ -454,7 +458,7 @@ public class TelegramReportHandler {
     }
 
     @Transactional
-    public DailyReport handleMorningFocusMessage(Student student, Message message, String rawContent) {
+    public DailyReport recordDailyFocusSilently(Student student, String focusText) {
         LocalDate today = LocalDate.now(MINSK_ZONE);
         DailyReport report = dailyReportRepository.findByStudentIdAndReportDate(student.getId(), today)
                 .orElseGet(() -> DailyReport.builder()
@@ -471,7 +475,7 @@ public class TelegramReportHandler {
                         .salesEntries(new ArrayList<>())
                         .build());
 
-        String cleanFocus = rawContent != null ? rawContent.trim() : "";
+        String cleanFocus = focusText != null ? focusText.trim() : "";
         report.setReflectionActions("🎯 Фокус дня: " + cleanFocus);
         if (!StringUtils.hasText(report.getAiSummary())) {
             report.setAiSummary("Фокус на сегодня: " + cleanFocus);
@@ -481,15 +485,32 @@ public class TelegramReportHandler {
                 ? existingRaw + "\n[Фокус дня]: " + cleanFocus
                 : "[Фокус дня]: " + cleanFocus);
 
-        DailyReport savedReport = dailyReportRepository.save(report);
+        return dailyReportRepository.save(report);
+    }
+
+    @Transactional
+    public DailyReport handleMorningFocusMessage(Student student, Message message, String rawContent) {
+        DailyReport savedReport = recordDailyFocusSilently(student, rawContent);
+        String cleanFocus = rawContent != null ? rawContent.trim() : "";
 
         Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
-        String ack = "🎯 Цель на сегодня зафиксирована: «" + cleanFocus + "»!\nЖдём результаты в отчёте до 21:00 🌸";
-        String businessConnectionId = message.getBusinessConnectionId();
-        if (StringUtils.hasText(businessConnectionId)) {
-            telegramSenderService.sendCaringReply(chatId, message.getMessageId(), ack, businessConnectionId);
+        MentorSetting settings = mentorSettingRepository.findAll().stream().findFirst().orElse(null);
+        boolean reportAckEnabled = settings != null && Boolean.TRUE.equals(settings.getReportAckEnabled());
+
+        if (reportAckEnabled) {
+            String ack = "🎯 Цель на сегодня зафиксирована: «" + cleanFocus + "»!\nЖдём результаты в отчёте до 21:00 🌸";
+            String businessConnectionId = message.getBusinessConnectionId();
+            if (StringUtils.hasText(businessConnectionId)) {
+                telegramSenderService.sendCaringReply(chatId, message.getMessageId(), ack, businessConnectionId);
+            } else {
+                telegramSenderService.sendCaringReply(chatId, message.getMessageId(), ack);
+            }
         } else {
-            telegramSenderService.sendCaringReply(chatId, message.getMessageId(), ack);
+            // Quiet mode: react silently with target/thumbs up on the student's message
+            if (telegramSenderService != null && message.getMessageId() != null) {
+                telegramSenderService.setMessageReaction(chatId, message.getMessageId(), "🎯");
+            }
+            log.info("Morning focus acknowledgment skipped (reportAckEnabled=false) for student '{}'", student.getFullName());
         }
 
         log.info("Morning focus set via text for student '{}' (#{}): {}",
