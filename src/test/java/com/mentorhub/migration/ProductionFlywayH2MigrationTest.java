@@ -18,7 +18,7 @@ class ProductionFlywayH2MigrationTest {
         Flyway production = productionFlyway(url);
         production.migrate();
 
-        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("15");
+        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("16");
         assertThat(count(url, "students")).isZero();
         assertThat(count(url, "daily_reports")).isZero();
         assertThat(count(url, "task_rules")).isZero();
@@ -28,6 +28,8 @@ class ProductionFlywayH2MigrationTest {
         assertThat(count(url, "information_schema.columns WHERE lower(table_name) = 'content_drafts' AND lower(column_name) = 'file_unique_id'"))
                 .isEqualTo(1);
         assertThat(count(url, "information_schema.columns WHERE lower(table_name) = 'mentor_settings' AND lower(column_name) = 'report_ack_enabled'"))
+                .isEqualTo(1);
+        assertThat(count(url, "information_schema.columns WHERE lower(table_name) = 'students' AND lower(column_name) = 'task_plan_raw'"))
                 .isEqualTo(1);
     }
 
@@ -46,7 +48,7 @@ class ProductionFlywayH2MigrationTest {
         Flyway production = productionFlyway(url);
         production.migrate();
 
-        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("15");
+        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("16");
         assertThat(count(url, "daily_reports")).isEqualTo(legacyReportCount);
         assertThat(count(url, "information_schema.columns WHERE lower(table_name) = 'content_drafts' AND lower(column_name) = 'file_unique_id'"))
                 .isEqualTo(1);

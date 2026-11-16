@@ -29,5 +29,43 @@ public record StudentDisciplineResponse(
     Integer completedZoomsCount,
     Integer contractZoomQuota,
     List<DayInfoResponse> weekDays,
-    List<ZoomMeetingDto> zoomSessions
-) {}
+    List<ZoomMeetingDto> zoomSessions,
+    String taskPlanRaw,
+    Integer currentTaskDay,
+    String todayTask
+) {
+    public StudentDisciplineResponse(
+        String id,
+        String fullName,
+        String avatarText,
+        String tgUsername,
+        Long tgChatId,
+        String niche,
+        String tariff,
+        java.time.LocalDate startDate,
+        Boolean isActive,
+        BigDecimal initialIncome,
+        BigDecimal currentIncome,
+        BigDecimal initialAvgTicket,
+        BigDecimal currentAvgTicket,
+        Integer totalReels,
+        Integer totalCarousels,
+        Integer totalStorytells,
+        Integer totalMailings,
+        Integer totalNewClients,
+        Integer disciplineRate,
+        Boolean isOnPause,
+        String pauseReason,
+        String nextZoomDate,
+        Integer completedZoomsCount,
+        Integer contractZoomQuota,
+        List<DayInfoResponse> weekDays,
+        List<ZoomMeetingDto> zoomSessions
+    ) {
+        this(id, fullName, avatarText, tgUsername, tgChatId, niche, tariff, startDate, isActive,
+             initialIncome, currentIncome, initialAvgTicket, currentAvgTicket,
+             totalReels, totalCarousels, totalStorytells, totalMailings, totalNewClients, disciplineRate,
+             isOnPause, pauseReason, nextZoomDate, completedZoomsCount, contractZoomQuota,
+             weekDays, zoomSessions, null, 1, null);
+    }
+}

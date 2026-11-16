@@ -536,4 +536,60 @@ class TelegramMessageRouterTest {
         assertThat(student.getTgChatId()).isEqualTo(-1003279128599L);
         verify(studentRepository).save(student);
     }
+
+    @Test
+    @DisplayName("Mentor can set multi-day task plan via /план command and student gets configured")
+    void routeIncomingMessage_mentorSetPlan_savesPlanAndConfirms() {
+        User mentorUser = User.builder().id(999000111L).firstName("Ксения").isBot(false).userName("sidarenka_ks").build();
+        Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("Настав | Вероничка").build();
+        String planText = """
+                /план
+                1 день - сторис челлендж + 7 тредс + прогрев
+                2 день - сторис челлендж + 5 тредс + прогрев + рилс
+                3 день - пост + сторис челлендж
+                4 день - рилс + пост
+                """;
+        Message message = Message.builder().messageId(30).from(mentorUser).chat(chat).text(planText).build();
+
+        Student student = Student.builder().id(5L).fullName("Вероника").tgChatId(-1003279128599L).build();
+        when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 113L, "MINI_GROUP");
+
+        assertThat(student.getTaskPlanRaw()).contains("1 день - сторис челлендж");
+        assertThat(student.getCurrentTaskDay()).isEqualTo(1);
+        verify(studentRepository).save(student);
+        verify(sender).sendCaringReply(eq(-1003279128599L), eq(30), argThat(s -> s.contains("сохранила персональный план") && s.contains("День 1 (сегодня)")));
+    }
+
+    @Test
+    @DisplayName("Mentor can switch active plan day via /день command")
+    void routeIncomingMessage_mentorSetDay_switchesActiveDay() {
+        User mentorUser = User.builder().id(999000111L).firstName("Ксения").isBot(false).userName("sidarenka_ks").build();
+        Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("Настав | Вероничка").build();
+        Message message = Message.builder().messageId(31).from(mentorUser).chat(chat).text("/день 2").build();
+
+        Student student = Student.builder()
+                .id(5L)
+                .fullName("Вероника")
+                .tgChatId(-1003279128599L)
+                .taskPlanRaw("1 день - задание 1\n2 день - задание 2")
+                .currentTaskDay(1)
+                .build();
+        when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 114L, "MINI_GROUP");
+
+        assertThat(student.getCurrentTaskDay()).isEqualTo(2);
+        verify(studentRepository).save(student);
+        verify(sender).sendCaringReply(eq(-1003279128599L), eq(31), argThat(s -> s.contains("установлен День 2")));
+    }
 }

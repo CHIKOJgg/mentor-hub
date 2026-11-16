@@ -6,19 +6,20 @@ import com.mentorhub.entity.MentorSetting;
 import com.mentorhub.repository.DailyReportRepository;
 import com.mentorhub.repository.MentorSettingRepository;
 import com.mentorhub.repository.StudentRepository;
+import com.mentorhub.service.StudentService;
 import com.mentorhub.telegram.service.TelegramSenderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZoneId;
+import java.math.BigDecimal;
+import java.time.*;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,6 +34,9 @@ public class DailyReminderScheduler {
     private final DailyReportRepository dailyReportRepository;
     private final MentorSettingRepository mentorSettingRepository;
     private final TelegramSenderService telegramSenderService;
+
+    @Autowired(required = false)
+    private StudentService studentService;
 
     @Value("${telegram.reminder.rate-limit-ms:1000}")
     private long rateLimitMs = 1000L;
@@ -138,11 +142,24 @@ public class DailyReminderScheduler {
 
         MentorSetting settings = mentorSettingRepository.findAll().stream().findFirst().orElse(null);
         String deadline = settings != null && settings.getDeadlineTime() != null ? settings.getDeadlineTime().toString() : "21:00";
-        String messageText = String.format(
-                "%s, привет! Напоминаю: до дедлайна сдачи отчета остался 1 час (до %s) ⏰ " +
-                "Ждем твои черновики #контента (#рилс, #карусель, #сторителл), результаты по #рассылкам и #продажам!",
-                student.getFullName(), deadline
-        );
+        LocalDate today = LocalDate.now(MINSK_ZONE);
+        String todayTask = studentService != null ? studentService.getTodayTask(student, today) : null;
+
+        String messageText;
+        if (StringUtils.hasText(todayTask)) {
+            messageText = String.format(
+                    "%s, привет! Напоминаю: до дедлайна сдачи отчёта остался 1 час (до %s) ⏰\n\n" +
+                    "Твоя задача на сегодня: %s\n\n" +
+                    "Ждём твои материалы и отчёт 🌸",
+                    student.getFullName(), deadline, todayTask
+            );
+        } else {
+            messageText = String.format(
+                    "%s, привет! Напоминаю: до дедлайна сдачи отчета остался 1 час (до %s) ⏰ " +
+                    "Ждем твои черновики #контента (#рилс, #карусель, #сторителл), результаты по #рассылкам и #продажам!",
+                    student.getFullName(), deadline
+            );
+        }
 
         String businessConnectionId = settings != null && Boolean.TRUE.equals(settings.getIsBusinessConnected())
                 ? settings.getBusinessConnectionId()
@@ -156,12 +173,31 @@ public class DailyReminderScheduler {
         String businessConnectionId = settings != null && Boolean.TRUE.equals(settings.getIsBusinessConnected())
                 ? settings.getBusinessConnectionId()
                 : null;
+        LocalDate today = LocalDate.now(MINSK_ZONE);
+        String deadlineStr = settings == null || settings.getDeadlineTime() == null ? "21:00" : settings.getDeadlineTime().toString();
+
         for (Student student : studentRepository.findByIsActiveTrue()) {
             if (Boolean.TRUE.equals(student.getIsPaused()) || student.getTgChatId() == null) continue;
-            String deadlineStr = settings.getDeadlineTime() == null ? "21:00" : settings.getDeadlineTime().toString();
-            String text = student.getFullName() + ", доброе утро! 🌸\n\n" +
-                    "Выберите один главный результат на сегодня и не забывайте сдать отчёт до " + deadlineStr + ":";
-            telegramSenderService.sendMorningFocusPoll(student.getTgChatId(), student.getId(), text, businessConnectionId);
+
+            String todayTask = studentService != null ? studentService.getTodayTask(student, today) : null;
+            int currentDay = studentService != null ? studentService.getCurrentDayNumber(student, today) : 1;
+
+            if (StringUtils.hasText(todayTask)) {
+                String text = String.format(
+                        "🌸 %s, доброе утро!\n\n" +
+                        "Твой персональный фокус на сегодня (День %d):\n" +
+                        "🎯 %s\n\n" +
+                        "Не забывай сдать отчёт до %s ❤️",
+                        student.getFullName(), currentDay, todayTask, deadlineStr
+                );
+                recordDailyFocus(student, today, todayTask);
+                telegramSenderService.sendCaringReply(student.getTgChatId(), null, text, businessConnectionId);
+            } else {
+                String text = student.getFullName() + ", доброе утро! 🌸\n\n" +
+                        "Напишите свой главный фокус на сегодня и не забывайте сдать отчёт до " + deadlineStr + " ❤️";
+                telegramSenderService.sendMorningFocusPoll(student.getTgChatId(), student.getId(), text, businessConnectionId);
+            }
+
             if (rateLimitMs > 0) {
                 try {
                     Thread.sleep(rateLimitMs);
@@ -171,6 +207,31 @@ public class DailyReminderScheduler {
                     break;
                 }
             }
+        }
+    }
+
+    private void recordDailyFocus(Student student, LocalDate today, String todayTask) {
+        try {
+            DailyReport report = dailyReportRepository.findByStudentIdAndReportDate(student.getId(), today)
+                    .orElseGet(() -> DailyReport.builder()
+                            .student(student)
+                            .reportDate(today)
+                            .submittedAt(Instant.now())
+                            .isOnTime(true)
+                            .status("PENDING")
+                            .mailingsCount(0)
+                            .salesTotal(BigDecimal.ZERO)
+                            .newClientsCount(0)
+                            .contentDrafts(new ArrayList<>())
+                            .reelSubmissions(new ArrayList<>())
+                            .salesEntries(new ArrayList<>())
+                            .build());
+            if (!StringUtils.hasText(report.getReflectionActions())) {
+                report.setReflectionActions("🎯 Фокус дня: " + todayTask);
+                dailyReportRepository.save(report);
+            }
+        } catch (Exception ex) {
+            log.warn("Could not auto-record morning focus in daily report for student #{}: {}", student.getId(), ex.getMessage());
         }
     }
 }

@@ -65,6 +65,9 @@ export interface ApiStudent {
   nextZoomDate?: string;
   completedZoomsCount: number;
   contractZoomQuota?: number;
+  taskPlanRaw?: string;
+  currentTaskDay?: number;
+  todayTask?: string;
   weekDays: DayInfo[];
   zoomSessions?: ApiZoomSession[];
 }

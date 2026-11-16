@@ -182,6 +182,44 @@ export const EditStudentModal = ({
             </div>
           </div>
 
+          {/* Individual Multi-day Task Plan */}
+          <section className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wide">
+                  📋 Индивидуальный план задач (по дням)
+                </h4>
+                <p className="text-[11px] text-indigo-800/70 mt-0.5">
+                  Бот автоматически отправляет задачу текущего дня в утреннем пуше (09:00)
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-indigo-900 whitespace-nowrap">Текущий день:</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={student.currentTaskDay ?? 1}
+                  onChange={e => updateEditingStudent({ ...student, currentTaskDay: Math.max(1, Number(e.target.value) || 1) })}
+                  className="w-16 text-xs px-2 py-1 rounded-lg border border-indigo-200 bg-white text-center font-bold text-indigo-900 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <textarea
+                rows={4}
+                value={student.taskPlanRaw ?? ''}
+                onChange={e => updateEditingStudent({ ...student, taskPlanRaw: e.target.value })}
+                placeholder={`1 день - сторис челлендж + 7 тредс + прогрев\n2 день - сторис челлендж + 5 тредс + прогрев + рилс\n3 день - пост + сторис челлендж\n4 день - рилс + пост`}
+                className="w-full text-xs px-3 py-2.5 rounded-xl border border-indigo-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-mono"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                💡 Вставляйте список прямо из заметок (1 день - ..., 2 день - ...). В Telegram-чате группы наставник может отправить: <span className="font-semibold text-indigo-600">/план</span>
+              </p>
+            </div>
+          </section>
+
           <section className="space-y-3 border-t border-slate-100 pt-4" aria-labelledby="zoom-session-settings-title">
             <div className="flex items-center justify-between gap-3">
               <div>

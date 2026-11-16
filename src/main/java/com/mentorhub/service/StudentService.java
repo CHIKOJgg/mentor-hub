@@ -19,8 +19,11 @@ import org.springframework.util.StringUtils;
 import java.math.BigDecimal;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -132,6 +135,14 @@ public class StudentService {
         if (request.isActive() != null) student.setIsActive(request.isActive());
         if (request.isPaused() != null) student.setIsPaused(request.isPaused());
         if (request.pauseReason() != null) student.setPauseReason(request.pauseReason());
+        if (request.taskPlanRaw() != null) {
+            student.setTaskPlanRaw(request.taskPlanRaw());
+            student.setTaskPlanStartDate(LocalDate.now(MINSK_ZONE));
+        }
+        if (request.currentTaskDay() != null) {
+            student.setCurrentTaskDay(request.currentTaskDay());
+            student.setTaskPlanStartDate(LocalDate.now(MINSK_ZONE));
+        }
 
         Student updated = studentRepository.save(student);
         log.info("Updated student '{}' with id #{}", updated.getFullName(), updated.getId());
@@ -309,6 +320,10 @@ public class StudentService {
         String rawTariff = student.getTariff() != null ? student.getTariff() : "STANDARD";
         String tariff = "VIP".equalsIgnoreCase(rawTariff) ? "VIP" : "Стандарт";
 
+        LocalDate today = LocalDate.now(MINSK_ZONE);
+        String todayTask = getTodayTask(student, today);
+        int currentDay = getCurrentDayNumber(student, today);
+
         return new StudentDisciplineResponse(
                 "st-" + student.getId(),
                 student.getFullName(),
@@ -353,8 +368,79 @@ public class StudentService {
                                 meeting.getCompletedAt(),
                                 meeting.getIsCompleted(),
                                 meeting.getMeetingNotes()
-                        )).toList()
+                        )).toList(),
+                student.getTaskPlanRaw(),
+                currentDay,
+                todayTask
         );
+    }
+
+    public static Map<Integer, String> parseTaskPlan(String raw) {
+        Map<Integer, String> plan = new LinkedHashMap<>();
+        if (!StringUtils.hasText(raw)) {
+            return plan;
+        }
+        String[] lines = raw.split("\\r?\\n");
+        Pattern dayPattern = Pattern.compile("^(?:день\\s*(\\d+)|(\\d+)\\s*день|(\\d+)\\s*[\\.\\)])\\s*[-:—]?\\s*(.+)$", Pattern.CASE_INSENSITIVE);
+        int implicitDayCounter = 1;
+        boolean anyExplicitDays = false;
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) continue;
+            Matcher matcher = dayPattern.matcher(trimmed);
+            if (matcher.find()) {
+                String dayStr = matcher.group(1);
+                if (dayStr == null) dayStr = matcher.group(2);
+                if (dayStr == null) dayStr = matcher.group(3);
+                String task = matcher.group(4);
+                if (dayStr != null && task != null && !task.isBlank()) {
+                    try {
+                        int dayNum = Integer.parseInt(dayStr);
+                        plan.put(dayNum, task.trim());
+                        anyExplicitDays = true;
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+        }
+        if (!anyExplicitDays) {
+            for (String line : lines) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty() || trimmed.startsWith("+") || trimmed.toLowerCase(Locale.ROOT).startsWith("задача")) continue;
+                plan.put(implicitDayCounter++, trimmed.replaceFirst("^[-*•]\\s*", ""));
+            }
+            if (plan.isEmpty() && StringUtils.hasText(raw)) {
+                plan.put(1, raw.trim());
+            }
+        }
+        return plan;
+    }
+
+    public int getCurrentDayNumber(Student student, LocalDate today) {
+        if (student == null) return 1;
+        int baseDay = student.getCurrentTaskDay() != null ? student.getCurrentTaskDay() : 1;
+        LocalDate startDate = student.getTaskPlanStartDate() != null ? student.getTaskPlanStartDate() : today;
+        if (today == null || startDate == null || today.isBefore(startDate)) {
+            return baseDay;
+        }
+        long daysDiff = ChronoUnit.DAYS.between(startDate, today);
+        return baseDay + (int) daysDiff;
+    }
+
+    public String getTodayTask(Student student, LocalDate today) {
+        if (student == null || !StringUtils.hasText(student.getTaskPlanRaw())) {
+            return null;
+        }
+        Map<Integer, String> plan = parseTaskPlan(student.getTaskPlanRaw());
+        if (plan.isEmpty()) return null;
+        int dayNum = getCurrentDayNumber(student, today);
+        if (plan.containsKey(dayNum)) {
+            return plan.get(dayNum);
+        }
+        int maxDay = plan.keySet().stream().max(Integer::compareTo).orElse(1);
+        if (dayNum <= maxDay) {
+            return plan.get(dayNum);
+        }
+        return null;
     }
 
     private ZoomMeetingDto mapZoomMeeting(Student student, ZoomMeeting meeting) {

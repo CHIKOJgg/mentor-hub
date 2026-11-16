@@ -136,6 +136,9 @@ export interface StudentDiscipline {
   completedZoomsCount: number;
   zoomSessions?: ZoomSessionRecord[];
   contractZoomQuota?: number; // Базовый объем по договору (по умолчанию 8)
+  taskPlanRaw?: string;
+  currentTaskDay?: number;
+  todayTask?: string;
   periodStats?: {
     week: StudentPeriodMetrics;
     month: StudentPeriodMetrics;

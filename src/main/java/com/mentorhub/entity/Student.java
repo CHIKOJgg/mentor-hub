@@ -106,6 +106,17 @@ public class Student {
     @Builder.Default
     private Integer totalNewClients = 0;
 
+    @Column(name = "task_plan_raw", columnDefinition = "TEXT")
+    private String taskPlanRaw;
+
+    @Column(name = "current_task_day")
+    @Builder.Default
+    private Integer currentTaskDay = 1;
+
+    @Column(name = "task_plan_start_date")
+    @Builder.Default
+    private LocalDate taskPlanStartDate = LocalDate.now();
+
     @Column(name = "created_at")
     private Instant createdAt;
 

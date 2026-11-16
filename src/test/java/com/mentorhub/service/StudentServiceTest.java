@@ -254,4 +254,52 @@ class StudentServiceTest {
         assertThatThrownBy(() -> studentService.getStudentById(999999L))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
+
+    @Test
+    @DisplayName("parseTaskPlan accurately parses Ksenia's multi-day note into structured days")
+    void testParseTaskPlanKseniaNote() {
+        String note = """
+                6 до \\ после + добиваем последние
+                + тредс тикток тг тгк чаты
+                Задача записать 5 человек
+                + анализ ЦА и позиционирование
+
+                1 день - сторис челлендж + 7 тредс + прогрев
+                2 день - сторис челлендж + 5 тредс + прогрев + рилс
+                3 день - пост + сторис челлендж
+                4 день - рилс + пост
+                """;
+
+        java.util.Map<Integer, String> plan = StudentService.parseTaskPlan(note);
+        assertThat(plan).hasSize(4);
+        assertThat(plan.get(1)).isEqualTo("сторис челлендж + 7 тредс + прогрев");
+        assertThat(plan.get(2)).isEqualTo("сторис челлендж + 5 тредс + прогрев + рилс");
+        assertThat(plan.get(3)).isEqualTo("пост + сторис челлендж");
+        assertThat(plan.get(4)).isEqualTo("рилс + пост");
+    }
+
+    @Test
+    @DisplayName("Student task plan calculates todayTask and currentTaskDay progression")
+    void testStudentTaskPlanProgression() {
+        Student student = Student.builder()
+                .fullName("Валерия Панкова")
+                .avatarText("ВП")
+                .niche("Бьюти")
+                .taskPlanRaw("1 день - челлендж\n2 день - рилс\n3 день - продажа")
+                .currentTaskDay(1)
+                .taskPlanStartDate(LocalDate.now())
+                .build();
+
+        LocalDate today = LocalDate.now();
+        assertThat(studentService.getCurrentDayNumber(student, today)).isEqualTo(1);
+        assertThat(studentService.getTodayTask(student, today)).isEqualTo("челлендж");
+
+        LocalDate tomorrow = today.plusDays(1);
+        assertThat(studentService.getCurrentDayNumber(student, tomorrow)).isEqualTo(2);
+        assertThat(studentService.getTodayTask(student, tomorrow)).isEqualTo("рилс");
+
+        LocalDate dayAfterTomorrow = today.plusDays(2);
+        assertThat(studentService.getCurrentDayNumber(student, dayAfterTomorrow)).isEqualTo(3);
+        assertThat(studentService.getTodayTask(student, dayAfterTomorrow)).isEqualTo("продажа");
+    }
 }
