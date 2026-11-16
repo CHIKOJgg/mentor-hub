@@ -203,9 +203,9 @@ export const EditStudentModal = ({
                 Этапов пока нет. Добавьте первый этап сопровождения.
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
                 {(student.zoomSessions ?? []).map((session, index) => (
-                  <div key={`${student.id}-editing-session-${index}`} className="space-y-3 rounded-xl border border-slate-200 p-4">
+                  <div key={`${student.id}-editing-session-${index}`} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-xs font-semibold uppercase tracking-wide">Этап {index + 1}</span>
                       <button

@@ -107,27 +107,34 @@ export function AccessibleModal({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-[2px] sm:p-5 ${overlayClassName}`}
+      className={`fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 p-3 sm:p-6 backdrop-blur-sm ${overlayClassName}`}
       onMouseDown={event => {
         if (event.target === event.currentTarget) requestClose();
       }}
     >
-      <section
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        tabIndex={-1}
-        onInputCapture={() => {
-          isDomDirtyRef.current = true;
+      <div
+        className="flex min-h-full items-center justify-center p-1 sm:p-2"
+        onMouseDown={event => {
+          if (event.target === event.currentTarget) requestClose();
         }}
-        onChangeCapture={() => {
-          isDomDirtyRef.current = true;
-        }}
-        className="max-h-[calc(100dvh-1.5rem)] w-full flex justify-center overflow-y-auto overscroll-contain rounded-2xl outline-none sm:max-h-[calc(100dvh-2.5rem)]"
       >
-        {children}
-      </section>
+        <section
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={title}
+          tabIndex={-1}
+          onInputCapture={() => {
+            isDomDirtyRef.current = true;
+          }}
+          onChangeCapture={() => {
+            isDomDirtyRef.current = true;
+          }}
+          className="w-full flex justify-center items-start outline-none my-auto py-2"
+        >
+          {children}
+        </section>
+      </div>
     </div>
   );
 }

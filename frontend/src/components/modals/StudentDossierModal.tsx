@@ -230,7 +230,7 @@ export const StudentDossierModal = ({
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {(student.zoomSessions || []).map(sess => (
                 <div
                   key={sess.callNumber}
