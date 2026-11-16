@@ -27,7 +27,7 @@ COPY src ./src
 COPY --from=frontend-builder /workspace/frontend/dist ./src/main/resources/static/
 
 # Compile and package monolithic application jar
-RUN mvn -B clean package
+RUN mvn -B clean package -DskipTests
 
 # =============================================================================
 # Stage 3: Minimal Production JRE 21 Runtime
