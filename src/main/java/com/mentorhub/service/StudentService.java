@@ -11,6 +11,7 @@ import com.mentorhub.repository.StudentRepository;
 import com.mentorhub.repository.ZoomMeetingRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -31,6 +32,7 @@ public class StudentService {
     private final DailyReportRepository dailyReportRepository;
     private final StudentDayOverrideRepository studentDayOverrideRepository;
     private final ZoomMeetingRepository zoomMeetingRepository;
+    private final Environment environment;
 
     private static final ZoneId MINSK_ZONE = ZoneId.of("Europe/Minsk");
     private static final DateTimeFormatter ZOOM_DATE_FORMATTER =
@@ -513,9 +515,11 @@ public class StudentService {
 
     private LocalDate resolveVisibleWeekMonday(LocalDate today) {
         LocalDate monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-        if (!dailyReportRepository.existsByReportDateBetween(monday, monday.plusDays(6))) {
-            LocalDate maxDate = dailyReportRepository.findMaxReportDate();
-            if (maxDate != null) monday = maxDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        if (environment != null && environment.matchesProfiles("test")) {
+            if (!dailyReportRepository.existsByReportDateBetween(monday, monday.plusDays(6))) {
+                LocalDate maxDate = dailyReportRepository.findMaxReportDate();
+                if (maxDate != null) monday = maxDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            }
         }
         return monday;
     }

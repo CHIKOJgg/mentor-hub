@@ -447,6 +447,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('inbox');
   const [inboxView, setInboxView] = useState<'pending' | 'approved'>('pending');
   const [reports, setReports] = useState<DailyReport[]>(() => readPersisted('reports', []));
+  const todayIso = getTodayIsoDate();
   const [allReports, setAllReports] = useState<DailyReport[]>(() => readPersisted('all-reports', []));
   const [students, setStudents] = useState<StudentDiscipline[]>(() =>
     readPersisted<StudentDiscipline[]>('students', [])
@@ -1575,10 +1576,21 @@ export default function App() {
     const todayIso = getTodayIsoDate();
 
     const updatedWeekDays = student.weekDays.map(d => {
-      const isTodayOrFuture = d.isoDate ? d.isoDate >= todayIso : false;
+      let isTodayOrFuture = false;
+      if (d.isoDate) {
+        isTodayOrFuture = d.isoDate >= todayIso;
+      } else if (d.date) {
+        const [dayStr, monthStr] = d.date.split('.');
+        const curYear = new Date().getFullYear();
+        const dIso = `${curYear}-${monthStr.padStart(2, '0')}-${dayStr.padStart(2, '0')}`;
+        isTodayOrFuture = dIso >= todayIso;
+      }
       if (d.day === 'Вс') return d;
       if (nextState && isTodayOrFuture) {
         return { ...d, status: 'PAUSED' as const, missedDetails: 'Режим паузы: болезнь, стрик заморожен ☕' };
+      }
+      if (!nextState && isTodayOrFuture && d.status === 'PAUSED') {
+        return { ...d, status: 'PENDING' as const, missedDetails: undefined };
       }
       return d;
     });
@@ -2558,12 +2570,18 @@ export default function App() {
                           <thead>
                             <tr className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-100 bg-slate-50/50">
                               <th className="py-4 px-6 min-w-[280px]">Ученица</th>
-                              {['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d => (
-                                <th key={d} className={`py-4 px-1 text-center w-12 min-w-[48px] max-w-[48px] ${d === 'Сб' ? 'text-indigo-600 font-bold' : ''}`}>
-                                  {d}
-                                  {d === 'Сб' && saturdayDateLabel && <span className="block text-xs text-indigo-400 font-normal">{saturdayDateLabel}</span>}
-                                </th>
-                              ))}
+                              {['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map((d, i) => {
+                                const dayDate = students[0]?.weekDays?.[i]?.date;
+                                const dayIso = students[0]?.weekDays?.[i]?.isoDate;
+                                const isToday = dayIso ? dayIso === todayIso : false;
+                                return (
+                                  <th key={d} className={`py-3.5 px-1 text-center w-12 min-w-[48px] max-w-[48px] ${d === 'Сб' ? 'text-indigo-600 font-bold' : ''} ${isToday ? 'bg-indigo-50/70 rounded-t-lg' : ''}`}>
+                                    <span className={isToday ? 'text-indigo-700 font-bold' : ''}>{d}</span>
+                                    {d === 'Сб' && saturdayDateLabel && <span className="block text-xs text-indigo-400 font-normal">{saturdayDateLabel}</span>}
+                                    {d !== 'Сб' && dayDate && <span className={`block text-xs font-normal ${isToday ? 'text-indigo-600 font-medium' : 'text-slate-400'}`}>{dayDate}</span>}
+                                  </th>
+                                );
+                              })}
                               <th className="py-4 px-4 text-center w-36 min-w-[144px]">Статус</th>
                               <th className="py-4 px-6 text-right w-28 min-w-[112px]">Дисциплина</th>
                             </tr>
