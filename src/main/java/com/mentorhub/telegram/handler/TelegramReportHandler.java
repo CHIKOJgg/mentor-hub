@@ -891,30 +891,36 @@ public class TelegramReportHandler {
             studentRepository.save(student);
         }
 
-        // Send caring confirmation to the group chat
+        // Send caring confirmation to the group chat only when reportAckEnabled is true; otherwise react quietly
         if (telegramSenderService != null && chatId != null) {
-            String businessConnectionId = settings != null && Boolean.TRUE.equals(settings.getIsBusinessConnected())
-                    ? settings.getBusinessConnectionId()
-                    : null;
-            if (recordingLink) {
-                String reply = "📼 Запись созвона для " + student.getFullName() + " сохранена в карточку! 🌸";
-                telegramSenderService.sendCaringReply(chatId, messageId, reply, businessConnectionId);
-            } else if (scheduledAt != null) {
-                DateTimeFormatter df = DateTimeFormatter.ofPattern("dd.MM (EE)", new Locale("ru"));
-                DateTimeFormatter tf = DateTimeFormatter.ofPattern("HH:mm");
-                LocalDateTime ldt = LocalDateTime.ofInstant(scheduledAt, studentZone);
-                String linkPart = capturedLink != null ? "\n🔗 Ссылка: " + capturedLink : "";
-                String reply = String.format(
-                        "📅 Созвон с %s назначен на %s в %s! 🌸\nДобавила в график и карточку ученицы.%s",
-                        student.getFullName(),
-                        df.format(ldt),
-                        tf.format(ldt),
-                        linkPart
-                );
-                telegramSenderService.sendCaringReply(chatId, messageId, reply, businessConnectionId);
-            } else if (capturedLink != null) {
-                String reply = "🔗 Ссылка на созвон для " + student.getFullName() + " сохранена в карточку! 🌸\n" + capturedLink;
-                telegramSenderService.sendCaringReply(chatId, messageId, reply, businessConnectionId);
+            boolean reportAckEnabled = settings != null && Boolean.TRUE.equals(settings.getReportAckEnabled());
+            if (!reportAckEnabled) {
+                telegramSenderService.setMessageReaction(chatId, messageId, "📅");
+                log.info("Meeting confirmation text skipped (reportAckEnabled=false), reaction set for student '{}'", student.getFullName());
+            } else {
+                String businessConnectionId = settings != null && Boolean.TRUE.equals(settings.getIsBusinessConnected())
+                        ? settings.getBusinessConnectionId()
+                        : null;
+                if (recordingLink) {
+                    String reply = "📼 Запись созвона для " + student.getFullName() + " сохранена в карточку! 🌸";
+                    telegramSenderService.sendCaringReply(chatId, messageId, reply, businessConnectionId);
+                } else if (scheduledAt != null) {
+                    DateTimeFormatter df = DateTimeFormatter.ofPattern("dd.MM (EE)", new Locale("ru"));
+                    DateTimeFormatter tf = DateTimeFormatter.ofPattern("HH:mm");
+                    LocalDateTime ldt = LocalDateTime.ofInstant(scheduledAt, studentZone);
+                    String linkPart = capturedLink != null ? "\n🔗 Ссылка: " + capturedLink : "";
+                    String reply = String.format(
+                            "📅 Созвон с %s назначен на %s в %s! 🌸\nДобавила в график и карточку ученицы.%s",
+                            student.getFullName(),
+                            df.format(ldt),
+                            tf.format(ldt),
+                            linkPart
+                    );
+                    telegramSenderService.sendCaringReply(chatId, messageId, reply, businessConnectionId);
+                } else if (capturedLink != null) {
+                    String reply = "🔗 Ссылка на созвон для " + student.getFullName() + " сохранена в карточку! 🌸\n" + capturedLink;
+                    telegramSenderService.sendCaringReply(chatId, messageId, reply, businessConnectionId);
+                }
             }
         }
 
