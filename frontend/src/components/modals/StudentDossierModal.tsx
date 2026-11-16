@@ -1,12 +1,12 @@
-import type React from 'react';
-import { X, Send, Video, Check, ExternalLink } from 'lucide-react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
+import { X, Send, Video, Check, ExternalLink, Target, CheckCheck } from 'lucide-react';
 import type { StudentDiscipline, DailyReport } from '../../types';
 import { AccessibleModal } from '../common/AccessibleModal';
 
 interface StudentDossierModalProps {
   student: StudentDiscipline | null;
   inspectingTab: 'profile' | 'reports' | 'zooms';
-  setInspectingTab: React.Dispatch<React.SetStateAction<'profile' | 'reports' | 'zooms'>>;
+  setInspectingTab: Dispatch<SetStateAction<'profile' | 'reports' | 'zooms'>>;
   allReports: DailyReport[];
   onClose: () => void;
   onSendMessage: (student: StudentDiscipline, message: string) => void;
@@ -24,6 +24,10 @@ export const StudentDossierModal = ({
   onManageZooms,
   onToggleZoomCompleted,
 }: StudentDossierModalProps) => {
+  const [customMessage, setCustomMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [sentSuccess, setSentSuccess] = useState(false);
+
   if (!student) return null;
 
   const targetIncome = student.portalData?.targetIncome ?? student.initialIncome * 2;
@@ -31,6 +35,18 @@ export const StudentDossierModal = ({
   const goalProgress = hasTargetIncome
     ? Math.min(100, Math.round((student.currentIncome / targetIncome) * 100))
     : null;
+
+  const handleSend = () => {
+    const text = customMessage.trim();
+    if (!text) return;
+    setIsSending(true);
+    onSendMessage(student, text);
+    setSentSuccess(true);
+    setIsSending(false);
+    setTimeout(() => {
+      setSentSuccess(false);
+    }, 3000);
+  };
 
   return (
     <AccessibleModal title={`Досье ученицы ${student.fullName}`} onClose={onClose}>
@@ -145,18 +161,71 @@ export const StudentDossierModal = ({
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs">
-              <div>
-                <span className="font-semibold text-slate-900 block">Telegram мини-группа:</span>
-                <span className="text-slate-500">{student.telegramChatId ? `Chat ID: ${student.telegramChatId}` : 'Авто-привязка через бота'}</span>
+            {/* Task assignment & Telegram Messaging */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Target className="w-4 h-4 text-indigo-600" />
+                  <span className="text-xs font-bold text-slate-900">Поставить задачу или написать в Telegram</span>
+                </div>
+                <span className="text-[11px] text-slate-500 font-mono">
+                  {student.telegramChatId ? `Чат ID: ${student.telegramChatId}` : 'Авто-привязка бота'}
+                </span>
               </div>
-              <button
-                onClick={() => onSendMessage(student, `Привет, ${student.fullName}! Как продвигается выполнение заданий?`)}
-                className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Send className="w-3 h-3" />
-                <span>Написать</span>
-              </button>
+
+              {/* Quick Preset Chips */}
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: '🎯 1 Reels', text: '🎯 Задача на сегодня: Снять и смонтировать 1 Reels до 19:00' },
+                  { label: '🎯 25 рассылок', text: '🎯 Задача на сегодня: Сделать 25 рассылок в Direct потенциальным клиентам' },
+                  { label: '🎯 Сторис с кейсом', text: '🎯 Задача на сегодня: Выложить сторителлинг с разбором кейса или отзывом' },
+                  { label: '⏰ Напомнить об отчёте', text: `Привет, ${student.fullName}! Не забудь сдать отчёт сегодня до 21:00 🌸` },
+                ].map(preset => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => setCustomMessage(preset.text)}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-indigo-400 hover:text-indigo-600 transition cursor-pointer font-medium"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Input & Send */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={customMessage}
+                  onChange={e => {
+                    setCustomMessage(e.target.value);
+                    if (sentSuccess) setSentSuccess(false);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && customMessage.trim()) {
+                      handleSend();
+                    }
+                  }}
+                  placeholder="Введите задачу на день или сообщение ученице..."
+                  className="flex-1 text-xs px-3.5 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-500 transition"
+                />
+                <button
+                  type="button"
+                  disabled={!customMessage.trim() || isSending}
+                  onClick={handleSend}
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer flex items-center gap-1.5 shrink-0"
+                >
+                  {sentSuccess ? <CheckCheck className="w-3.5 h-3.5 text-emerald-400" /> : <Send className="w-3.5 h-3.5" />}
+                  <span>{sentSuccess ? 'Отправлено!' : 'Отправить'}</span>
+                </button>
+              </div>
+
+              <div className="text-[11px] text-slate-500 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-100 flex items-start gap-1.5 leading-relaxed">
+                <span className="text-indigo-600 font-bold shrink-0">💡</span>
+                <span>
+                  <strong>В Telegram:</strong> Ксения и Катя могут в любой момент написать прямо в группе ученицы: <code className="text-indigo-700 bg-indigo-100/70 px-1 py-0.5 rounded font-mono font-bold">/задание [текст]</code> или <code className="text-indigo-700 bg-indigo-100/70 px-1 py-0.5 rounded font-mono font-bold">/задача [текст]</code> — бот автоматически примет его и зафиксирует цель в отчёте.
+                </span>
+              </div>
             </div>
           </div>
         )}

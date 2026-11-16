@@ -474,4 +474,66 @@ class TelegramMessageRouterTest {
         verify(studentRepository, never()).save(requestedStudent);
         verify(sender).sendCaringReply(eq(groupId), eq(21), contains("уже привязана к другой ученице"));
     }
+
+    @Test
+    @DisplayName("Mentor Ksenia identified by @sidarenka_ks can set task via /задача")
+    void routeIncomingMessage_mentorSetsTaskWithZadacha() {
+        User ksenia = User.builder().id(999000111L).firstName("KSENIA SIDARENKA | БЬЮТИ НАСТАВНИК").isBot(false).userName("sidarenka_ks").build();
+        Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("Настав | Вероничка").build();
+        Message message = Message.builder().messageId(22).from(ksenia).chat(chat).text("/задача Сделать 30 рассылок и выложить сторис").build();
+
+        Student student = Student.builder().id(5L).fullName("Вероника").tgChatId(-1003279128599L).build();
+        when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 110L, "MINI_GROUP");
+
+        assertThat(recordedStudent).isEqualTo(student);
+        assertThat(recordedFocusText).contains("Задача от наставника Ксения: Сделать 30 рассылок и выложить сторис");
+        verify(sender).sendCaringReply(eq(-1003279128599L), eq(22), contains("Наставник Ксения поставила задачу на сегодня"));
+    }
+
+    @Test
+    @DisplayName("Casual greeting 'Привет бот' in mini-group receives friendly guidance reply")
+    void routeIncomingMessage_casualGreeting_sendsFriendlyReply() {
+        User studentUser = User.builder().id(55443322L).firstName("Вероничка").isBot(false).userName("veronika_beauty").build();
+        Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("Настав | Вероничка").build();
+        Message message = Message.builder().messageId(23).from(studentUser).chat(chat).text("Привет бот").build();
+
+        Student student = Student.builder().id(5L).fullName("Вероника").tgChatId(-1003279128599L).build();
+        when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 111L, "MINI_GROUP");
+
+        verify(sender).sendCaringReply(eq(-1003279128599L), eq(23), argThat(s -> s.contains("Я на связи") && s.contains("21:00")));
+    }
+
+    @Test
+    @DisplayName("Group title 'Настав | Вероничка' matches student named 'Вероника'")
+    void routeIncomingMessage_groupTitleDiminutiveMatch() {
+        User studentUser = User.builder().id(55443322L).firstName("Вероничка").isBot(false).userName("veronika_beauty").build();
+        Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("Настав | Вероничка").build();
+        Message message = Message.builder().messageId(24).from(studentUser).chat(chat).text("#отчет 10 рассылок").build();
+
+        Student student = Student.builder().id(5L).fullName("Вероника").build(); // not yet bound to chat ID
+        when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.empty());
+        when(studentRepository.findByTgUsername("veronika_beauty")).thenReturn(Optional.empty());
+        when(studentRepository.findAll()).thenReturn(List.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 112L, "MINI_GROUP");
+
+        assertThat(student.getTgChatId()).isEqualTo(-1003279128599L);
+        verify(studentRepository).save(student);
+    }
 }

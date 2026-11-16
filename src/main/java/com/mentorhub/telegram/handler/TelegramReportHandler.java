@@ -33,6 +33,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -142,9 +143,18 @@ public class TelegramReportHandler {
                         || initialDraftsCount > 0
                         || initialReelsCount > 0);
 
-        // In mini-groups, bind the active group chatId to the student automatically
+        // In mini-groups, bind the active group chatId to the student safely
         if (message.getChat() != null && (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat())) {
-            student.setTgChatId(message.getChat().getId());
+            Long currentChatId = message.getChat().getId();
+            if (student.getTgChatId() == null) {
+                Optional<Student> existingStudentWithChat = studentRepository.findByTgChatId(currentChatId);
+                if (existingStudentWithChat.isEmpty() || Objects.equals(existingStudentWithChat.get().getId(), student.getId())) {
+                    student.setTgChatId(currentChatId);
+                } else {
+                    log.warn("Telegram group {} is already assigned to student #{} ({}); avoiding duplicate key error for student #{}",
+                            currentChatId, existingStudentWithChat.get().getId(), existingStudentWithChat.get().getFullName(), student.getId());
+                }
+            }
         }
 
         String text = message.getText();

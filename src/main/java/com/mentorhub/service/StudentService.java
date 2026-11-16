@@ -143,8 +143,9 @@ public class StudentService {
         Student student = studentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + id));
         student.setIsActive(false);
+        student.setTgChatId(null);
         studentRepository.save(student);
-        log.info("Soft deleted student id #{}", id);
+        log.info("Soft deleted student id #{} and released tgChatId", id);
     }
 
     @Transactional
