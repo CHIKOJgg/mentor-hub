@@ -93,6 +93,10 @@ public class MentorSetting {
     @Builder.Default
     private Boolean zoomAutoDetectEnabled = true;
 
+    @Column(name = "report_ack_enabled", nullable = false)
+    @Builder.Default
+    private Boolean reportAckEnabled = false;
+
     @Column(name = "saturday_poll_cron", length = 50)
     @Builder.Default
     private String saturdayPollCron = "0 0 18 * * SAT";

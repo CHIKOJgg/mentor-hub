@@ -631,6 +631,7 @@ export const defaultSystemSettings: import('./types').SystemSettings = {
   aiSummaryEnabled: true,
   antiFraudDedupEnabled: true,
   zoomAutoDetectEnabled: true,
+  reportAckEnabled: false,
 };
 
 export const defaultCheatsheets: import('./types').CheatsheetItem[] = [

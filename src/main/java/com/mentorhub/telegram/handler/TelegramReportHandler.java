@@ -113,6 +113,7 @@ public class TelegramReportHandler {
         LocalTime deadline = settings != null && settings.getDeadlineTime() != null ? settings.getDeadlineTime() : LocalTime.of(21, 0);
         boolean isOnTime = !strictDeadlineEnabled || nowTime.isBefore(deadline);
         boolean deduplicationEnabled = settings == null || Boolean.TRUE.equals(settings.getAntiFraudDedupEnabled());
+        boolean reportAckEnabled = settings != null && Boolean.TRUE.equals(settings.getReportAckEnabled());
 
         DailyReport report = dailyReportRepository.findByStudentIdAndReportDate(student.getId(), today)
                 .orElseGet(() -> {
@@ -391,17 +392,21 @@ public class TelegramReportHandler {
             report.setStatus("PENDING");
             report.setLastTgMessageId(message.getMessageId());
 
-            // 10. Send caring acknowledgment reply in mini-group only when actual report submitted
-            Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
-            String timeStr = TIME_FORMATTER.format(report.getSubmittedAt());
-            String acknowledgement = wasAlreadySubmitted
-                    ? "Принято на проверку (" + timeStr + ")! ✍️ Черновик обновлён."
-                    : "Принято на проверку (" + timeStr + ")! ✍️ Черновик сохранён.";
-            String businessConnectionId = message.getBusinessConnectionId();
-            if (StringUtils.hasText(businessConnectionId)) {
-                telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement, businessConnectionId);
+            // 10. Send caring acknowledgment reply in mini-group only when actual report submitted and reportAckEnabled is true
+            if (reportAckEnabled) {
+                Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
+                String timeStr = TIME_FORMATTER.format(report.getSubmittedAt());
+                String acknowledgement = wasAlreadySubmitted
+                        ? "Принято на проверку (" + timeStr + ")! ✍️ Черновик обновлён."
+                        : "Принято на проверку (" + timeStr + ")! ✍️ Черновик сохранён.";
+                String businessConnectionId = message.getBusinessConnectionId();
+                if (StringUtils.hasText(businessConnectionId)) {
+                    telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement, businessConnectionId);
+                } else {
+                    telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement);
+                }
             } else {
-                telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement);
+                log.info("Report acknowledgment reply skipped (reportAckEnabled=false) for student '{}'", student.getFullName());
             }
         } else {
             log.info("Message from student '{}' scanned silently (not a homework/report submission): '{}'",

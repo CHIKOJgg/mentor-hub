@@ -2,6 +2,7 @@ package com.mentorhub.service;
 
 import com.mentorhub.dto.ScheduleZoomRequest;
 import com.mentorhub.dto.SyncTelegramResponse;
+import com.mentorhub.dto.SystemSettingsDto;
 import com.mentorhub.dto.SystemStatusResponse;
 import com.mentorhub.dto.ZoomMeetingDto;
 import com.mentorhub.dto.ZoomTrackerResponse;
@@ -101,5 +102,41 @@ class SystemServiceTest {
         );
         assertThatThrownBy(() -> systemService.scheduleZoom(request))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("getSettings returns default settings with reportAckEnabled = false")
+    void testGetSettings() {
+        SystemSettingsDto settings = systemService.getSettings();
+        assertThat(settings).isNotNull();
+        assertThat(settings.reportAckEnabled()).isFalse();
+    }
+
+    @Test
+    @DisplayName("updateSettings updates reportAckEnabled toggle")
+    void testUpdateSettings() {
+        SystemSettingsDto current = systemService.getSettings();
+        SystemSettingsDto updated = new SystemSettingsDto(
+                current.morningPushEnabled(),
+                current.morningPushTime(),
+                current.eveningReminderEnabled(),
+                current.eveningReminderTime(),
+                current.dailyDeadlineTime(),
+                current.strictDeadlineEnabled(),
+                current.saturdayPollEnabled(),
+                current.saturdayPollTime(),
+                current.sundayRestEnabled(),
+                current.aiWhisperEnabled(),
+                current.aiSummaryEnabled(),
+                current.antiFraudDedupEnabled(),
+                current.zoomAutoDetectEnabled(),
+                true
+        );
+
+        SystemSettingsDto result = systemService.updateSettings(updated);
+        assertThat(result.reportAckEnabled()).isTrue();
+
+        SystemSettingsDto refetched = systemService.getSettings();
+        assertThat(refetched.reportAckEnabled()).isTrue();
     }
 }

@@ -119,6 +119,7 @@ public class SystemService {
         setting.setAiSummaryEnabled(request.aiSummaryEnabled());
         setting.setAntiFraudDedupEnabled(request.antiFraudDedupEnabled());
         setting.setZoomAutoDetectEnabled(request.zoomAutoDetectEnabled());
+        setting.setReportAckEnabled(request.reportAckEnabled());
         setting.setAutoRemindersEnabled(request.eveningReminderEnabled());
         java.time.LocalTime eveningTime = request.eveningReminderTime() != null ? request.eveningReminderTime() : setting.getEveningReminderTime();
         if (eveningTime != null) setting.setReminderCron("0 " + eveningTime.getMinute() + " " + eveningTime.getHour() + " * * MON-SAT");
@@ -251,7 +252,8 @@ public class SystemService {
                 Boolean.TRUE.equals(setting.getAiWhisperEnabled()),
                 Boolean.TRUE.equals(setting.getAiSummaryEnabled()),
                 Boolean.TRUE.equals(setting.getAntiFraudDedupEnabled()),
-                Boolean.TRUE.equals(setting.getZoomAutoDetectEnabled())
+                Boolean.TRUE.equals(setting.getZoomAutoDetectEnabled()),
+                Boolean.TRUE.equals(setting.getReportAckEnabled())
         );
     }
 

@@ -168,6 +168,7 @@ export interface SystemSettings {
   aiSummaryEnabled: boolean;
   antiFraudDedupEnabled: boolean;
   zoomAutoDetectEnabled: boolean;
+  reportAckEnabled: boolean;
 }
 
 export type TabType = 'inbox' | 'students' | 'analytics' | 'promotion' | 'settings' | 'tasks';

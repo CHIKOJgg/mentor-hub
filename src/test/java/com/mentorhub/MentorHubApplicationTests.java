@@ -101,5 +101,6 @@ class MentorHubApplicationTests {
         var settings = mentorSettingRepository.findAll().get(0);
         assertThat(settings.getMentorName()).isEqualTo("Ксения");
         assertThat(settings.getIsBusinessConnected()).isTrue();
+        assertThat(settings.getReportAckEnabled()).isFalse();
     }
 }

@@ -617,9 +617,9 @@ public class AdversarialEmpiricalChallengeTest {
                     .anyMatch(d -> d.getLabel().contains("ФРОД: ролик сдан ученицей Милана Горохова"));
             assertThat(hasFraudDraft).isTrue();
 
-            // Caring reply was sent
-            assertThat(repliedChatId.get()).isEqualTo(-100888999111L);
-            assertThat(replyMessage.get()).contains("Принято на проверку (").contains(")! ✍️ Черновик сохранён.");
+            // Caring reply is not sent because reportAckEnabled is false by default (silent report intake)
+            assertThat(repliedChatId.get()).isNull();
+            assertThat(replyMessage.get()).isNull();
         }
     }
 }

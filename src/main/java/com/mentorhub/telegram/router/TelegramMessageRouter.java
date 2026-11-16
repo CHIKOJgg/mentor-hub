@@ -237,6 +237,10 @@ public class TelegramMessageRouter {
                 handleMentorSetTask(chatId, message, rawText, isMentor ? "Ксения" : "Катя");
                 return;
             }
+            if (lower.equals("/тишина") || lower.startsWith("/тишина") || lower.startsWith("/ack") || lower.startsWith("/silent")) {
+                handleToggleAckCommand(chatId, message, lower, isMentor ? "Ксения" : "Катя");
+                return;
+            }
             if (telegramReportHandler.containsVideoMeetingLink(message)) {
                 Optional<Student> studentForMeeting = identifyStudent(chatId, fromId, from.getUserName(), message);
                 if (studentForMeeting.isPresent() && telegramReportHandler.captureZoomLinkFromMessage(studentForMeeting.get(), message)) {
@@ -1176,6 +1180,46 @@ public class TelegramMessageRouter {
         } else if (telegramSenderService != null) {
             telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
                     "Ученица «" + query + "» не найдена в списке потока. Проверьте имя или Telegram-ник в панели наставника.");
+        }
+    }
+
+    private void handleToggleAckCommand(Long chatId, Message message, String lower, String actorName) {
+        if (chatId == null) return;
+        MentorSetting setting = mentorSettingRepository != null
+                ? mentorSettingRepository.findFirstByOrderByIdAsc().orElse(null)
+                : null;
+        if (setting == null) {
+            setting = MentorSetting.builder().reportAckEnabled(false).build();
+        }
+
+        boolean targetState;
+        if (lower.startsWith("/тишина") || lower.startsWith("/silent")) {
+            if (lower.contains("выкл") || lower.contains("off") || lower.contains("false") || lower.contains("disable")) {
+                targetState = true;
+            } else {
+                targetState = false;
+            }
+        } else if (lower.startsWith("/ack")) {
+            if (lower.contains("on") || lower.contains("вкл") || lower.contains("true") || lower.contains("enable")) {
+                targetState = true;
+            } else if (lower.contains("off") || lower.contains("выкл") || lower.contains("false") || lower.contains("disable")) {
+                targetState = false;
+            } else {
+                targetState = !Boolean.TRUE.equals(setting.getReportAckEnabled());
+            }
+        } else {
+            targetState = false;
+        }
+
+        setting.setReportAckEnabled(targetState);
+        mentorSettingRepository.save(setting);
+        log.info("Actor {} updated reportAckEnabled to {} via command: {}", actorName, targetState, lower);
+
+        if (telegramSenderService != null) {
+            String reply = targetState
+                    ? "✍️ Уведомления «Принято на проверку» включены. Бот будет отправлять подтверждения в чат при сдаче отчётов."
+                    : "🤫 Тихий режим включён! Бот молча принимает и сохраняет все отчёты, черновики и продажи без сообщений «Принято на проверку» в чате.";
+            telegramSenderService.sendCaringReply(chatId, message.getMessageId(), reply);
         }
     }
 }

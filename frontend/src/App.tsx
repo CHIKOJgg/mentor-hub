@@ -354,6 +354,7 @@ const defaultSystemSettings: SystemSettings = {
   aiSummaryEnabled: true,
   antiFraudDedupEnabled: true,
   zoomAutoDetectEnabled: true,
+  reportAckEnabled: false,
 };
 
 const mapApiReport = (report: ApiDailyReport): DailyReport => ({
@@ -407,6 +408,7 @@ const mapApiTaskRule = (rule: ApiTaskRule): TaskRule => ({ ...rule, enabled: rul
 
 const mapApiSettings = (settings: ApiSystemSettings): SystemSettings => ({
   ...settings,
+  reportAckEnabled: settings.reportAckEnabled ?? false,
   morningPushTime: settings.morningPushTime.slice(0, 5),
   eveningReminderTime: settings.eveningReminderTime.slice(0, 5),
   dailyDeadlineTime: settings.dailyDeadlineTime.slice(0, 5),
@@ -3924,6 +3926,15 @@ export default function App() {
                         <div className="text-xs text-slate-500">Записывает ссылку, время отправки и сообщение-источник; приглашение не засчитывается как проведённый созвон</div>
                       </div>
                       <AccessibleToggle checked={systemSettings.zoomAutoDetectEnabled} label="Автоматически находить ссылки на созвоны" onChange={() => toggleSystemSetting('zoomAutoDetectEnabled', 'Авто-определение Zoom-созвонов')} />
+                    </div>
+
+                    {/* Setting 10: Report Acknowledgment */}
+                    <div className="py-3.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Уведомления «Принято на проверку» в чате</div>
+                        <div className="text-xs text-slate-500">По умолчанию бот принимает отчёты в тихом режиме без спама в групповой чат</div>
+                      </div>
+                      <AccessibleToggle checked={systemSettings.reportAckEnabled} label="Уведомления «Принято на проверку» в чате" onChange={() => toggleSystemSetting('reportAckEnabled', 'Уведомления «Принято на проверку» в чате')} />
                     </div>
                   </div>
                 </div>

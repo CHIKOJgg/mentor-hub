@@ -5,6 +5,7 @@ import com.mentorhub.ai.service.DeterministicAiFallbackService;
 import com.mentorhub.ai.service.SpringAiReportExtractor;
 import com.mentorhub.dto.ReflectionSummaryDto;
 import com.mentorhub.entity.DailyReport;
+import com.mentorhub.entity.MentorSetting;
 import com.mentorhub.entity.Student;
 import com.mentorhub.entity.ZoomMeeting;
 import com.mentorhub.repository.ContentDraftRepository;
@@ -123,7 +124,7 @@ class TelegramReportHandlerTest {
     }
 
     @Test
-    @DisplayName("Accumulator upsert handles first message of day and sends caring acknowledgment reply")
+    @DisplayName("Accumulator upsert handles first message of day and saves report silently by default (reportAckEnabled = false)")
     void handleStudentMessage_initialMessage() {
         Student student = Student.builder()
                 .id(1L)
@@ -153,6 +154,38 @@ class TelegramReportHandlerTest {
         // Student stats updated
         assertThat(student.getTotalMailings()).isEqualTo(125);
         assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("215500.00"));
+
+        // Caring acknowledgment reply is NOT sent when reportAckEnabled is false (default)
+        assertThat(sentReplyCount).isZero();
+        assertThat(sentReplyText).isNull();
+        assertThat(result.getLastTgMessageId()).isEqualTo(501);
+    }
+
+    @Test
+    @DisplayName("Accumulator upsert sends caring acknowledgment reply when reportAckEnabled is true")
+    void handleStudentMessage_withReportAckEnabled_sendsReply() {
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(true).build()));
+
+        Student student = Student.builder()
+                .id(1L)
+                .fullName("Милана Горохова")
+                .tgChatId(71010101L)
+                .currentIncome(new BigDecimal("180000.00"))
+                .totalMailings(100)
+                .build();
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder()
+                .messageId(501)
+                .chat(chat)
+                .text("#рассылки 25\n#продажи 35.500 руб\n#вопрос Как составить оферту?")
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.empty());
+
+        DailyReport result = handler.handleStudentMessage(student, message);
 
         // Caring acknowledgment reply sent
         assertThat(sentChatId).isEqualTo(-10071010101L);
@@ -246,6 +279,8 @@ class TelegramReportHandlerTest {
 
         when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
                 .thenReturn(Optional.of(existingReport));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(true).build()));
 
         Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
         Message message = Message.builder()
@@ -291,6 +326,8 @@ class TelegramReportHandlerTest {
 
         when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
                 .thenReturn(Optional.of(existingReport));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(true).build()));
 
         sentReplyText = null;
 
@@ -369,6 +406,8 @@ class TelegramReportHandlerTest {
 
         when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
                 .thenReturn(Optional.of(report));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(true).build()));
 
         Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
         Message msg1 = Message.builder()
@@ -436,6 +475,8 @@ class TelegramReportHandlerTest {
 
         when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
                 .thenReturn(Optional.of(existingReport));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(true).build()));
 
         sentReplyText = null;
         Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
@@ -492,6 +533,8 @@ class TelegramReportHandlerTest {
                 .build();
         when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
                 .thenReturn(Optional.of(existingReport));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(true).build()));
 
         Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
         Message transcribedVoice = Message.builder()
@@ -524,6 +567,8 @@ class TelegramReportHandlerTest {
                 .build();
         when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
                 .thenReturn(Optional.of(report));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(true).build()));
         Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
 
         org.telegram.telegrambots.meta.api.objects.Video originalVideo = new org.telegram.telegrambots.meta.api.objects.Video();

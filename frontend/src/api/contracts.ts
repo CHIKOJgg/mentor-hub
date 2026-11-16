@@ -111,6 +111,7 @@ export interface ApiSystemSettings {
   aiSummaryEnabled: boolean;
   antiFraudDedupEnabled: boolean;
   zoomAutoDetectEnabled: boolean;
+  reportAckEnabled: boolean;
 }
 
 export interface ApiCuratorScript {
