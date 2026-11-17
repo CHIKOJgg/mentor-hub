@@ -985,12 +985,10 @@ public class TelegramMessageRouter {
         appendRulesSummary(sb);
         sb.append("\n⏰ Дедлайн сдачи отчёта: ежедневно до 21:00\n");
         sb.append("Все отчёты мгновенно попадают на проверку наставнику Ксении и куратору Кате 🌸\n\n");
-        sb.append("💡 Чтобы зафиксировать фокус на сегодня, выберите кнопку ниже или отправьте:\n");
-        sb.append("«Сегодня я буду [ваша цель]» или /task [цель]");
+        sb.append("💡 Чтобы зафиксировать фокус на сегодня, отправьте в чат:\n");
+        sb.append("#фокус [ваша цель на день]");
 
-        Optional<Student> studentOpt = studentRepository.findByTgChatId(chatId);
-        Long studentId = studentOpt.map(Student::getId).orElse(0L);
-        telegramSenderService.sendMorningFocusPoll(chatId, studentId, sb.toString());
+        telegramSenderService.sendCaringReply(chatId, message.getMessageId(), sb.toString());
     }
 
     private void appendRulesSummary(StringBuilder sb) {

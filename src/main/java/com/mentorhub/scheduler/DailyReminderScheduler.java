@@ -236,9 +236,12 @@ public class DailyReminderScheduler {
             recordDailyFocus(student, studentDate, todayTask);
             telegramSenderService.sendCaringReply(student.getTgChatId(), null, text, businessConnectionId);
         } else {
-            String text = student.getFullName() + ", доброе утро! 🌸\n\n" +
-                    "Напишите свой главный фокус на сегодня и не забывайте сдать отчёт до " + deadlineStr + " ❤️";
-            telegramSenderService.sendMorningFocusPoll(student.getTgChatId(), student.getId(), text, businessConnectionId);
+            String text = String.format(
+                    "🌸 %s, доброе утро!\n\n" +
+                    "Продуктивного дня! Не забывай сдать отчёт до %s ❤️",
+                    student.getFullName(), deadlineStr
+            );
+            telegramSenderService.sendCaringReply(student.getTgChatId(), null, text, businessConnectionId);
         }
     }
 

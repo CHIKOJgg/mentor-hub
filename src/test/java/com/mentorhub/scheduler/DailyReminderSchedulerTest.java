@@ -1,6 +1,7 @@
 package com.mentorhub.scheduler;
 
 import com.mentorhub.entity.DailyReport;
+import com.mentorhub.entity.MentorSetting;
 import com.mentorhub.entity.Student;
 import com.mentorhub.repository.DailyReportRepository;
 import com.mentorhub.repository.MentorSettingRepository;
@@ -28,6 +29,8 @@ class DailyReminderSchedulerTest {
 
     private Long reminderChatId;
     private String reminderText;
+    private Long caringReplyChatId;
+    private String caringReplyText;
 
     private TelegramSenderService stubSenderService;
     private DailyReminderScheduler scheduler;
@@ -43,6 +46,13 @@ class DailyReminderSchedulerTest {
             public boolean sendReminder(Long chatId, String text) {
                 reminderChatId = chatId;
                 reminderText = text;
+                return true;
+            }
+
+            @Override
+            public boolean sendCaringReply(Long chatId, Integer replyToMessageId, String text, String businessConnectionId) {
+                caringReplyChatId = chatId;
+                caringReplyText = text;
                 return true;
             }
         };
@@ -140,5 +150,25 @@ class DailyReminderSchedulerTest {
 
         Student invalid = Student.builder().timezone("Invalid/Timezone").build();
         assertThat(scheduler.resolveStudentZone(invalid).getId()).isEqualTo("Europe/Minsk");
+    }
+
+    @Test
+    @DisplayName("sendMorningFocusToSingleStudent sends clean greeting without poll buttons when no plan set")
+    void sendMorningFocus_noPlan_sendsCleanGreetingWithoutPoll() {
+        Student student = Student.builder()
+                .id(10L)
+                .fullName("Лиза")
+                .tgChatId(998877L)
+                .build();
+
+        MentorSetting settings = MentorSetting.builder()
+                .deadlineTime(java.time.LocalTime.of(21, 0))
+                .build();
+
+        scheduler.sendMorningFocusToSingleStudent(student, settings, java.time.LocalDate.of(2026, 11, 17));
+
+        assertThat(caringReplyChatId).isEqualTo(998877L);
+        assertThat(caringReplyText).contains("Лиза, доброе утро!").contains("до 21:00");
+        assertThat(caringReplyText).doesNotContain("кнопку");
     }
 }
