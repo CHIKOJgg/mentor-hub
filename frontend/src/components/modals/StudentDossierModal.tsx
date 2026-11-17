@@ -266,7 +266,10 @@ export const StudentDossierModal = ({
                     {r.reflectionSummary && (
                       <div className="text-xs text-slate-600 bg-white p-2.5 rounded-lg border border-slate-100 space-y-1">
                         <div><strong>Действия:</strong> {r.reflectionSummary.actions}</div>
-                        {r.reflectionSummary.questionToMentor && (
+                        {r.reflectionSummary.questionToMentor &&
+                         r.reflectionSummary.questionToMentor !== 'null' &&
+                         r.reflectionSummary.questionToMentor !== 'undefined' &&
+                         r.reflectionSummary.questionToMentor !== 'None' && (
                           <div className="text-indigo-900 font-medium"><strong>Вопрос наставнику:</strong> {r.reflectionSummary.questionToMentor}</div>
                         )}
                       </div>

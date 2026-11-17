@@ -302,7 +302,7 @@ public class TelegramReportHandler {
 
         // 7. Question recognition (#вопрос, direct address "Ксения, ...", and AI extraction)
         String extractedQuestion = deterministicAiFallbackService.extractQuestion(rawContent);
-        if (StringUtils.hasText(extractedQuestion)) {
+        if (isValidQuestion(extractedQuestion)) {
             appendQuestion(report, extractedQuestion);
         }
 
@@ -334,17 +334,21 @@ public class TelegramReportHandler {
                 String currentActions = report.getReflectionActions();
                 String aiActions = aiFacts.reflectionSummary().actions();
                 if (StringUtils.hasText(aiActions)) {
-                    if (StringUtils.hasText(currentActions) && currentActions.startsWith("🎯 Фокус дня:")) {
-                        report.setReflectionActions(currentActions + "\n✅ Факт: " + aiActions);
+                    String cleanAiActions = aiActions.trim().replaceFirst("^✅\\s*Факт:\\s*", "");
+                    String focusLine = extractFocusLine(currentActions);
+                    if (StringUtils.hasText(focusLine)) {
+                        report.setReflectionActions(focusLine + "\n✅ Факт: " + cleanAiActions);
                     } else {
-                        report.setReflectionActions(aiActions);
+                        report.setReflectionActions("✅ Факт: " + cleanAiActions);
                     }
                 }
 
-                if (StringUtils.hasText(aiFacts.reflectionSummary().questionToMentor())) {
-                    report.setReflectionQuestion(aiFacts.reflectionSummary().questionToMentor());
+                if (aiFacts.reflectionSummary().questionToMentor() != null
+                        && isValidQuestion(aiFacts.reflectionSummary().questionToMentor())) {
+                    String cleanQ = aiFacts.reflectionSummary().questionToMentor().trim();
+                    report.setReflectionQuestion(cleanQ);
                     if (!StringUtils.hasText(extractedQuestion)) {
-                        appendQuestion(report, aiFacts.reflectionSummary().questionToMentor());
+                        appendQuestion(report, cleanQ);
                     }
                 }
             }
@@ -1070,7 +1074,29 @@ public class TelegramReportHandler {
         return null;
     }
 
+    private boolean isValidQuestion(String question) {
+        if (!StringUtils.hasText(question)) return false;
+        String q = question.trim().toLowerCase();
+        return !q.equals("null") && !q.equals("none") && !q.equals("nil") && !q.equals("нет")
+                && !q.equals("нет вопросов") && !q.equals("вопросов нет") && !q.equals("n/a")
+                && !q.equals("undefined") && !q.equals("-");
+    }
+
+    private String extractFocusLine(String currentActions) {
+        if (!StringUtils.hasText(currentActions)) return null;
+        for (String line : currentActions.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("🎯 Фокус дня:") || trimmed.startsWith("🎯")) {
+                return trimmed;
+            }
+        }
+        return null;
+    }
+
     private void appendQuestion(DailyReport report, String questionText) {
+        if (!isValidQuestion(questionText)) {
+            return;
+        }
         String cleanQuestion = questionText.trim();
         String existingQuestions = report.getMentorQuestion();
         if (StringUtils.hasText(existingQuestions) && existingQuestions.contains(cleanQuestion)) {

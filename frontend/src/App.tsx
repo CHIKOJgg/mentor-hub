@@ -2219,7 +2219,11 @@ export default function App() {
                                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 shrink-0"></span>
                                   <span><strong className="text-slate-900 font-semibold">Действия:</strong> {r.reflectionSummary.actions}</span>
                                 </div>
-                                {r.reflectionSummary.questionToMentor && (
+                                {r.reflectionSummary.questionToMentor &&
+                                 r.reflectionSummary.questionToMentor !== 'null' &&
+                                 r.reflectionSummary.questionToMentor !== 'undefined' &&
+                                 r.reflectionSummary.questionToMentor !== 'None' &&
+                                 r.reflectionSummary.questionToMentor !== 'нет' && (
                                   <div className="flex items-start gap-2.5 bg-indigo-50/80 border border-indigo-100 p-3 rounded-lg mt-2 text-indigo-950 font-medium">
                                     <HelpCircle className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" strokeWidth={1.8} />
                                     <span>{r.reflectionSummary.questionToMentor}</span>
@@ -2230,7 +2234,9 @@ export default function App() {
                           )}
 
                           {/* Mentor Question (Direct) */}
-                          {r.mentorQuestion && !r.reflectionSummary && (
+                          {r.mentorQuestion && !r.reflectionSummary &&
+                            r.mentorQuestion !== 'null' &&
+                            r.mentorQuestion !== 'undefined' && (
                             <div className="py-3 px-4 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-800 space-y-1">
                               <span className="text-slate-700 font-semibold block text-xs uppercase tracking-wider">Вопрос:</span>
                               <p className="leading-relaxed">{r.mentorQuestion}</p>

@@ -130,4 +130,33 @@ class ReportServiceTest {
         assertThatThrownBy(() -> reportService.getReportById(999999L))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
+
+    @Test
+    @DisplayName("cleanReflectionActions deduplicates repeated fact lines and keeps focus line")
+    void testCleanReflectionActions() {
+        String repeated = "🎯 Фокус дня: продажи и созвоны с клиентами.\n" +
+                "✅ Факт: Вчера не предпринимала действий из-за плохого самочувствия.\n" +
+                "✅ Факт: Обработано рассылок: 0, сумма продаж: 0.00 ₽\n" +
+                "✅ Факт: Создан черновик контента: сторителлинг для прогрева после конкурса.\n" +
+                "✅ Факт: Вчера ничего не делала. Сегодня: #сторителл прогрев после конкурса.\n" +
+                "✅ Факт: Вчера не выполняла задачи из-за плохого самочувствия. Сегодня запланировала создание сторителла для прогрева после конкурса.";
+
+        String cleaned = reportService.cleanReflectionActions(repeated);
+        assertThat(cleaned).startsWith("🎯 Фокус дня: продажи и созвоны с клиентами.\n✅ Факт:");
+        // Should only contain "✅ Факт:" once
+        int factCount = cleaned.split("✅ Факт:").length - 1;
+        assertThat(factCount).isEqualTo(1);
+        assertThat(cleaned).contains("Сегодня запланировала создание сторителла для прогрева после конкурса.");
+    }
+
+    @Test
+    @DisplayName("cleanQuestionText returns null for 'null', 'none', 'нет', '[12:00] null'")
+    void testCleanQuestionText() {
+        assertThat(reportService.cleanQuestionText("null")).isNull();
+        assertThat(reportService.cleanQuestionText("NULL")).isNull();
+        assertThat(reportService.cleanQuestionText("none")).isNull();
+        assertThat(reportService.cleanQuestionText("нет")).isNull();
+        assertThat(reportService.cleanQuestionText("[15:47] null")).isNull();
+        assertThat(reportService.cleanQuestionText("Как закрыть клиента на 50к?")).isEqualTo("Как закрыть клиента на 50к?");
+    }
 }

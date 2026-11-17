@@ -167,14 +167,18 @@ public class ReportService {
                 ? report.getReelSubmissions().stream().map(this::mapReelToDto).toList()
                 : List.of();
 
+        String question = cleanQuestionText(report.getReflectionQuestion());
+        String mentorQuestion = cleanQuestionText(report.getMentorQuestion());
+        String reflectionActions = cleanReflectionActions(report.getReflectionActions());
+
         ReflectionSummaryDto reflection = null;
         if (StringUtils.hasText(report.getReflectionEmotions()) ||
-            StringUtils.hasText(report.getReflectionActions()) ||
-            StringUtils.hasText(report.getReflectionQuestion())) {
+            StringUtils.hasText(reflectionActions) ||
+            StringUtils.hasText(question)) {
             reflection = new ReflectionSummaryDto(
                     report.getReflectionEmotions() != null ? report.getReflectionEmotions() : "",
-                    report.getReflectionActions() != null ? report.getReflectionActions() : "",
-                    report.getReflectionQuestion()
+                    reflectionActions,
+                    question
             );
         }
 
@@ -195,7 +199,7 @@ public class ReportService {
                 report.getSalesTotal(),
                 report.getMailingsCount() != null ? report.getMailingsCount() : 0,
                 report.getNewClientsCount() != null ? report.getNewClientsCount() : 0,
-                report.getMentorQuestion(),
+                mentorQuestion,
                 report.getVoiceTranscript(),
                 reflection,
                 report.getAiSummary() != null ? report.getAiSummary() : ""
@@ -240,5 +244,44 @@ public class ReportService {
         }
         String timePart = submittedAt != null ? " (сдан в " + TIME_FORMATTER.format(submittedAt) + ")" : "";
         return prefix + timePart + ":\n\n" + content;
+    }
+
+    public String cleanReflectionActions(String rawActions) {
+        if (!StringUtils.hasText(rawActions)) return "";
+        String focusLine = null;
+        String latestFact = null;
+        for (String line : rawActions.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("🎯 Фокус дня:") || (focusLine == null && trimmed.startsWith("🎯"))) {
+                focusLine = trimmed;
+            } else if (trimmed.startsWith("✅ Факт:")) {
+                latestFact = trimmed;
+            } else if (trimmed.startsWith("✅")) {
+                latestFact = "✅ Факт: " + trimmed.substring(1).trim();
+            } else if (StringUtils.hasText(trimmed)) {
+                latestFact = "✅ Факт: " + trimmed;
+            }
+        }
+        if (focusLine != null && latestFact != null) {
+            return focusLine + "\n" + latestFact;
+        } else if (focusLine != null) {
+            return focusLine;
+        } else if (latestFact != null) {
+            return latestFact;
+        }
+        return rawActions.trim();
+    }
+
+    public String cleanQuestionText(String q) {
+        if (!StringUtils.hasText(q)) return null;
+        String trimmed = q.trim();
+        String lower = trimmed.toLowerCase();
+        if (lower.equals("null") || lower.equals("none") || lower.equals("nil") ||
+            lower.equals("нет") || lower.equals("нет вопросов") || lower.equals("вопросов нет") ||
+            lower.equals("n/a") || lower.equals("undefined") || lower.equals("-") ||
+            lower.matches("^\\[\\d{2}:\\d{2}\\]\\s*(null|none|нет|n/a|undefined|-)$")) {
+            return null;
+        }
+        return trimmed;
     }
 }

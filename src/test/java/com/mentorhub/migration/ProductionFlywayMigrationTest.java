@@ -35,7 +35,7 @@ class ProductionFlywayMigrationTest {
         Flyway production = productionFlyway();
         production.migrate();
 
-        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("17");
+        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("18");
         assertThat(count("students")).isZero();
         assertThat(count("daily_reports")).isZero();
         assertThat(count("task_rules")).isZero();
@@ -69,7 +69,7 @@ class ProductionFlywayMigrationTest {
         Flyway production = productionFlyway();
         production.migrate();
 
-        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("17");
+        assertThat(production.info().current().getVersion().getVersion()).isEqualTo("18");
         assertThat(count("daily_reports")).isEqualTo(seededReports);
         assertThat(count("information_schema.columns WHERE lower(table_name) = 'content_drafts' AND lower(column_name) = 'file_unique_id'"))
                 .isEqualTo(1);
