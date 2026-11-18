@@ -829,4 +829,42 @@ class TelegramMessageRouterTest {
         verify(sender).sendSilentReply(eq(-10071010101L), eq(62), replyCaptor.capture());
         assertThat(replyCaptor.getValue()).contains("🎯 Наставник Ксения поставила задачу на сегодня");
     }
+
+    @Test
+    @DisplayName("Mentor Ksenia sets calendar dated multi-day plan with gap days (e.g. Сегодня сторител, 20.11 пост, 24.11 рилс)")
+    void routeIncomingMessage_mentorKseniaSetsCalendarDatedPlanWithGaps() {
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().mentorTgId(11223344L).reportAckEnabled(true).build()));
+
+        User ksenia = User.builder().id(11223344L).firstName("Ксения").isBot(false).userName("sidarenka_ks").build();
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder()
+                .messageId(63)
+                .from(ksenia)
+                .chat(chat)
+                .text("/план\nСегодня сторител\n20.11 пост\n24.11 рилс")
+                .build();
+
+        Student student = Student.builder().id(1L).fullName("Даша").tgChatId(-10071010101L).build();
+        when(studentRepository.findByTgChatId(-10071010101L)).thenReturn(Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 143L, "MINI_GROUP");
+
+        assertThat(recordedFocusText).contains("План от Наставник Ксения (День 1): сторител");
+        assertThat(student.getTaskPlanRaw()).contains("1 день: сторител");
+        assertThat(student.getTaskPlanRaw()).contains("пост");
+        assertThat(student.getTaskPlanRaw()).contains("рилс");
+
+        ArgumentCaptor<String> replyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(sender).sendSilentReply(eq(-10071010101L), eq(63), replyCaptor.capture());
+        String reply = replyCaptor.getValue();
+        assertThat(reply).contains("📋 Наставник Ксения сохранила персональный план для Даша (3 задач до 24.11, старт: сегодня):");
+        assertThat(reply).contains("*День 1 (сегодня)*: сторител");
+        assertThat(reply).contains("День 3 (пт, 20.11): пост");
+        assertThat(reply).contains("День 7 (вт, 24.11): рилс");
+    }
 }

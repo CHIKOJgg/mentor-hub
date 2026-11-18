@@ -1187,7 +1187,7 @@ public class TelegramMessageRouter {
                     LocalDate startDate = student.getTaskPlanStartDate() != null ? student.getTaskPlanStartDate() : studentToday;
                     StringBuilder sb = new StringBuilder();
                     sb.append("📋 Персональный план для ").append(student.getFullName());
-                    sb.append(" (на ").append(plan.size()).append(" дн., старт: ").append(formatStartLabel(startDate, studentToday)).append("):\n\n");
+                    sb.append(formatPlanHeaderSpan(plan, startDate, studentToday)).append(":\n\n");
                     for (Map.Entry<Integer, String> entry : plan.entrySet()) {
                         int dayNum = entry.getKey();
                         LocalDate dayDate = startDate.plusDays(dayNum - 1);
@@ -1363,6 +1363,19 @@ public class TelegramMessageRouter {
         return "Наставник Ксения";
     }
 
+    private static String formatPlanHeaderSpan(Map<Integer, String> plan, LocalDate startDate, LocalDate today) {
+        if (plan == null || plan.isEmpty()) return "";
+        int maxDay = plan.keySet().stream().max(Integer::compareTo).orElse(plan.size());
+        LocalDate effectiveStart = startDate != null ? startDate : today;
+        String startLabel = formatStartLabel(effectiveStart, today);
+        if (plan.size() == maxDay) {
+            return " (на " + plan.size() + " дн., старт: " + startLabel + ")";
+        } else {
+            LocalDate endDate = effectiveStart.plusDays(maxDay - 1);
+            return " (" + plan.size() + " задач до " + endDate.format(DateTimeFormatter.ofPattern("dd.MM")) + ", старт: " + startLabel + ")";
+        }
+    }
+
     private static String formatPlanOverview(
             String mentorName,
             Student student,
@@ -1375,7 +1388,7 @@ public class TelegramMessageRouter {
         if (plan == null || plan.isEmpty()) {
             return sb.append(".\n").toString();
         }
-        sb.append(" (на ").append(plan.size()).append(" дн., старт: ").append(formatStartLabel(startDate, today)).append("):\n\n");
+        sb.append(formatPlanHeaderSpan(plan, startDate, today)).append(":\n\n");
         for (Map.Entry<Integer, String> entry : plan.entrySet()) {
             int dayNum = entry.getKey();
             LocalDate dayDate = startDate != null ? startDate.plusDays(dayNum - 1) : today.plusDays(dayNum - 1);
