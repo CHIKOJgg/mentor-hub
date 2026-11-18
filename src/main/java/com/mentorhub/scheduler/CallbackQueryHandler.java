@@ -80,12 +80,15 @@ public class CallbackQueryHandler {
                         .build()
                 );
 
+        int previousCount = report.getNewClientsCount() != null ? report.getNewClientsCount() : 0;
+        int delta = count - previousCount;
+
         report.setNewClientsCount(count);
         report.setSubmittedAt(Instant.now());
         dailyReportRepository.save(report);
 
         int currentTotal = student.getTotalNewClients() != null ? student.getTotalNewClients() : 0;
-        student.setTotalNewClients(currentTotal + count);
+        student.setTotalNewClients(Math.max(0, currentTotal + delta));
         studentRepository.save(student);
 
         log.info("Recorded Saturday survey response for student '{}' (#{}): +{} new clients. Total: {}",

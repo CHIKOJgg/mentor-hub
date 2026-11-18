@@ -506,8 +506,11 @@ class TelegramMessageRouterTest {
     }
 
     @Test
-    @DisplayName("Casual greeting 'Привет бот' in mini-group receives friendly guidance reply")
+    @DisplayName("Explicit bot query 'Привет бот' in mini-group receives friendly guidance reply when reportAckEnabled is true")
     void routeIncomingMessage_casualGreeting_sendsFriendlyReply() {
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().mentorTgId(11223344L).reportAckEnabled(true).build()));
+
         User studentUser = User.builder().id(55443322L).firstName("Вероничка").isBot(false).userName("veronika_beauty").build();
         Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("Настав | Вероничка").build();
         Message message = Message.builder().messageId(23).from(studentUser).chat(chat).text("Привет бот").build();
@@ -522,6 +525,109 @@ class TelegramMessageRouterTest {
         router.routeIncomingMessage(message, 111L, "MINI_GROUP");
 
         verify(sender).sendCaringReply(eq(-1003279128599L), eq(23), argThat(s -> s.contains("Я на связи") && s.contains("21:00")));
+    }
+
+    @Test
+    @DisplayName("Explicit bot query 'Привет бот' in quiet mode (!reportAckEnabled) reacts with wave emoji")
+    void routeIncomingMessage_casualGreeting_quietMode_reactsWithWave() {
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().mentorTgId(11223344L).reportAckEnabled(false).build()));
+
+        User studentUser = User.builder().id(55443322L).firstName("Вероничка").isBot(false).userName("veronika_beauty").build();
+        Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("Настав | Вероничка").build();
+        Message message = Message.builder().messageId(23).from(studentUser).chat(chat).text("Привет бот").build();
+
+        Student student = Student.builder().id(5L).fullName("Вероника").tgChatId(-1003279128599L).build();
+        when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 111L, "MINI_GROUP");
+
+        verify(sender).setMessageReaction(eq(-1003279128599L), eq(23), eq("👋"));
+        verify(sender, never()).sendCaringReply(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Conversational greetings ('Привет) хорошо', 'привет девочки', 'доброе утро') in bound group do not send 15-line wall of text")
+    void routeIncomingMessage_conversationalGreetings_doNotTriggerHelpReply() {
+        Student student = Student.builder().id(5L).fullName("Вероника").tgChatId(-1003279128599L).build();
+        when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        User studentUser = User.builder().id(55443322L).firstName("Вероничка").isBot(false).userName("veronika_beauty").build();
+        Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("Настав | Вероничка").build();
+
+        List<String> conversationalTexts = List.of(
+                "Привет) хорошо",
+                "привет девочки",
+                "доброе утро",
+                "привет всем",
+                "Привет девочки! Как настроение?"
+        );
+
+        int msgId = 100;
+        for (String text : conversationalTexts) {
+            Message msg = Message.builder().messageId(msgId++).from(studentUser).chat(chat).text(text).build();
+            router.routeIncomingMessage(msg, (long) msgId, "MINI_GROUP");
+        }
+
+        verify(sender, never()).sendCaringReply(any(), any(), any());
+        verify(sender, never()).setMessageReaction(any(), any(), eq("👋"));
+    }
+
+    @Test
+    @DisplayName("Auto-binding on student's first casual message sends exactly one welcome message without double greeting fallthrough")
+    void routeIncomingMessage_autoBinding_sendsSingleWelcomeWithoutSecondGreeting() {
+        User studentUser = User.builder().id(55443322L).firstName("Вероничка").lastName("Красота").isBot(false).userName("veronika_beauty").build();
+        Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("VIP — Вероника").build();
+        Message message = Message.builder().messageId(50).from(studentUser).chat(chat).text("Всем привет девочки!").build();
+
+        when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.empty());
+        when(studentRepository.findByTgUsername("veronika_beauty")).thenReturn(Optional.empty());
+        when(studentRepository.findAll()).thenReturn(List.of());
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 120L, "MINI_GROUP");
+
+        // Verify EXACTLY 1 caring reply was sent (welcomeMsg only, no second greeting fallthrough)
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(sender, times(1)).sendCaringReply(eq(-1003279128599L), eq(50), captor.capture());
+        assertThat(captor.getValue()).contains("Я автоматически подключила твою рабочую группу к системе!");
+        assertThat(captor.getValue()).doesNotContain("Я на связи и готова принимать твои отчёты.");
+    }
+
+    @Test
+    @DisplayName("Auto-binding on student's first report message sends welcome message and continues to process report")
+    void routeIncomingMessage_autoBinding_reportProcessedSilently() {
+        User studentUser = User.builder().id(55443322L).firstName("Вероничка").lastName("Красота").isBot(false).userName("veronika_beauty").build();
+        Chat chat = Chat.builder().id(-1003279128599L).type("supergroup").title("VIP — Вероника").build();
+        Message message = Message.builder().messageId(51).from(studentUser).chat(chat).text("#рилс черновик видео готов").build();
+
+        when(studentRepository.findByTgChatId(-1003279128599L)).thenReturn(Optional.empty());
+        when(studentRepository.findByTgUsername("veronika_beauty")).thenReturn(Optional.empty());
+        when(studentRepository.findAll()).thenReturn(List.of());
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 121L, "MINI_GROUP");
+
+        // Welcome message sent once
+        verify(sender, times(1)).sendCaringReply(eq(-1003279128599L), eq(51), contains("Я автоматически подключила"));
+        // And report was processed
+        assertThat(recordedStudent).isNotNull();
+        assertThat(recordedStudent.getFullName()).isEqualTo("Вероничка Красота");
+        assertThat(recordedMessage).isEqualTo(message);
     }
 
     @Test

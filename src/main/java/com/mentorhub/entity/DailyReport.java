@@ -98,6 +98,46 @@ public class DailyReport {
     @Builder.Default
     private List<ContentDraft> contentDrafts = new ArrayList<>();
 
+    public boolean hasActualSubmission() {
+        if ("APPROVED".equalsIgnoreCase(status)) {
+            return true;
+        }
+        if (lastTgMessageId != null) {
+            return true;
+        }
+        if (mailingsCount != null && mailingsCount > 0) {
+            return true;
+        }
+        if (salesTotal != null && salesTotal.compareTo(BigDecimal.ZERO) > 0) {
+            return true;
+        }
+        if (newClientsCount != null && newClientsCount > 0) {
+            return true;
+        }
+        if (contentDrafts != null && !contentDrafts.isEmpty()) {
+            return true;
+        }
+        if (reelSubmissions != null && !reelSubmissions.isEmpty()) {
+            return true;
+        }
+        if (salesEntries != null && !salesEntries.isEmpty()) {
+            return true;
+        }
+        if (mentorQuestion != null && !mentorQuestion.trim().isEmpty()) {
+            return true;
+        }
+        if (voiceTranscript != null && !voiceTranscript.trim().isEmpty()) {
+            return true;
+        }
+        if (rawMessageText != null && !rawMessageText.trim().isEmpty()) {
+            String stripped = rawMessageText.replaceAll("(?m)^\\[Фокус дня\\].*$", "").trim();
+            if (!stripped.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ReelSubmission> reelSubmissions = new ArrayList<>();

@@ -106,6 +106,40 @@ class CallbackQueryHandlerTest {
     }
 
     @Test
+    @DisplayName("Handles survey callback idempotently on double-click / retry without multiplying totals")
+    void handleCallbackQuery_surveyClients_idempotentOnRetry() {
+        Student student = Student.builder()
+                .id(1L)
+                .fullName("Милана Горохова")
+                .tgChatId(71010101L)
+                .totalNewClients(10)
+                .build();
+
+        DailyReport existingReport = DailyReport.builder()
+                .student(student)
+                .newClientsCount(3)
+                .build();
+
+        when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.of(existingReport));
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder().messageId(777).chat(chat).build();
+
+        CallbackQuery query = new CallbackQuery();
+        query.setId("cb_retry");
+        query.setData("survey:clients:1:3");
+        query.setMessage(message);
+
+        boolean handled = handler.handleCallbackQuery(query);
+
+        assertThat(handled).isTrue();
+        // Delta is 3 - 3 = 0, total should remain 10!
+        assertThat(student.getTotalNewClients()).isEqualTo(10);
+    }
+
+    @Test
     @DisplayName("Non-survey callback data is gracefully ignored")
     void handleCallbackQuery_nonMatchingData() {
         CallbackQuery query = new CallbackQuery();

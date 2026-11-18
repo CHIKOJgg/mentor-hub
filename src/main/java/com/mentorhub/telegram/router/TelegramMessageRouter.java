@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Component
@@ -57,6 +58,11 @@ public class TelegramMessageRouter {
     private StudentService studentService;
 
     private static final ZoneId MINSK_ZONE = ZoneId.of("Europe/Minsk");
+
+    private static final Pattern BOT_QUERY_PATTERN =
+            Pattern.compile("(?ui)(?:^|[^\\p{L}\\p{N}_])(бот|bot)(?:[^\\p{L}\\p{N}_]|$)");
+    private static final Pattern GREETING_WORDS_PATTERN =
+            Pattern.compile("(?ui)(привет|приветик|здравствуй|здравствуйте|добрый день|доброе утро|добрый вечер|ку|хай|йоу|хэй|хеллоу|hello|hi)");
 
     public TelegramMessageRouter(
             StudentRepository studentRepository,
@@ -356,6 +362,10 @@ public class TelegramMessageRouter {
                     telegramSenderService.sendCaringReply(chatId, message.getMessageId(), welcomeMsg);
                 }
 
+                if (!isReportMessage(message, rawText)) {
+                    return;
+                }
+
                 studentOpt = Optional.of(student);
             } else {
                 log.warn("Unmatched user encountered in private chat: chat_id={}, user_id={}, username='{}'",
@@ -393,20 +403,29 @@ public class TelegramMessageRouter {
             log.info("Reactivated inactive student '{}' (#{}), tgChatId={}", student.getFullName(), student.getId(), chatId);
         }
 
-        // Check if message is a friendly casual greeting ("Привет бот", "Привет", etc.)
+        // Check if message is a friendly casual greeting ("Привет бот", "Бот привет", etc.)
         if (rawText != null && isCasualGreeting(rawText)) {
+            MentorSetting settings = mentorSettingRepository != null
+                    ? mentorSettingRepository.findFirstByOrderByIdAsc().orElse(null)
+                    : null;
+            boolean reportAckEnabled = settings != null && Boolean.TRUE.equals(settings.getReportAckEnabled());
+
             if (telegramSenderService != null && chatId != null) {
-                String greetingReply = "🌸 Привет, " + student.getFullName() + "! Я на связи и готова принимать твои отчёты.\n\n" +
-                        "⏰ Дедлайн сдачи отчётов: ежедневно до 21:00\n" +
-                        "📌 Хэштеги для сдачи отчёта:\n" +
-                        "• #рилс — видео или черновик Reels на проверку\n" +
-                        "• #карусель — текст слайдов или PDF\n" +
-                        "• #сторителл — сценарий историй\n" +
-                        "• #рассылки [число] — количество отправок в Direct\n" +
-                        "• #продажи [сумма] — сумма сделки\n" +
-                        "• #вопрос — вопрос или рефлексия для Ксении и Кати\n\n" +
-                        "Также можешь присылать голосовые или кружочки — я всё расшифрую и передам наставникам! 🚀";
-                telegramSenderService.sendCaringReply(chatId, message.getMessageId(), greetingReply);
+                if (!reportAckEnabled) {
+                    telegramSenderService.setMessageReaction(chatId, message.getMessageId(), "👋");
+                } else {
+                    String greetingReply = "🌸 Привет, " + student.getFullName() + "! Я на связи и готова принимать твои отчёты.\n\n" +
+                            "⏰ Дедлайн сдачи отчётов: ежедневно до 21:00\n" +
+                            "📌 Хэштеги для сдачи отчёта:\n" +
+                            "• #рилс — видео или черновик Reels на проверку\n" +
+                            "• #карусель — текст слайдов или PDF\n" +
+                            "• #сторителл — сценарий историй\n" +
+                            "• #рассылки [число] — количество отправок в Direct\n" +
+                            "• #продажи [сумма] — сумма сделки\n" +
+                            "• #вопрос — вопрос или рефлексия для Ксении и Кати\n\n" +
+                            "Также можешь присылать голосовые или кружочки — я всё расшифрую и передам наставникам! 🚀";
+                    telegramSenderService.sendCaringReply(chatId, message.getMessageId(), greetingReply);
+                }
             }
             return;
         }
@@ -615,11 +634,40 @@ public class TelegramMessageRouter {
         return name == null ? "" : name.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 
+    public static boolean isReportMessage(Message message, String rawText) {
+        if (message != null && (message.hasVideo() || message.hasDocument() || message.hasPhoto())) {
+            return true;
+        }
+        if (StringUtils.hasText(rawText)) {
+            String lower = rawText.trim().toLowerCase(Locale.ROOT);
+            if (lower.contains("#рилс") || lower.contains("#видео") || lower.contains("#карусель")
+                    || lower.contains("#пост") || lower.contains("#сторителл") || lower.contains("#сторис")
+                    || lower.contains("#контент") || lower.contains("#рассылки") || lower.contains("#рассылка")
+                    || lower.contains("#трафик") || lower.contains("#продажи") || lower.contains("#продажа")
+                    || lower.contains("#диалоги") || lower.contains("#вопрос") || lower.contains("#клиенты")
+                    || lower.contains("#отчет") || lower.contains("#отчёт") || lower.contains("#дз")
+                    || lower.contains("#задание") || lower.contains("#reels") || lower.contains("#reel")
+                    || lower.contains("#stories") || lower.contains("#story")) {
+                return true;
+            }
+            if (lower.startsWith("отчет") || lower.startsWith("отчёт") || lower.startsWith("дз")
+                    || lower.startsWith("задание") || lower.startsWith("домашка") || lower.startsWith("выполнила")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean isCasualGreeting(String rawText) {
         if (!StringUtils.hasText(rawText)) return false;
         String lower = rawText.trim().toLowerCase(Locale.ROOT);
         if (lower.startsWith("/") || lower.contains("#")) return false;
-        return lower.matches("^(привет|приветик|здравствуй|здравствуйте|добрый день|доброе утро|добрый вечер|ку|хай|йоу|хэй|хеллоу|hello|hi|привет бот|бот привет)(\\s.*|[!.,🌸✨👋❤️]*)$");
+
+        boolean mentionsBot = BOT_QUERY_PATTERN.matcher(lower).find() || lower.contains("@");
+        if (!mentionsBot) {
+            return false;
+        }
+        return GREETING_WORDS_PATTERN.matcher(lower).find();
     }
 
     public static boolean isMorningFocusMessage(Message message, String rawContent) {

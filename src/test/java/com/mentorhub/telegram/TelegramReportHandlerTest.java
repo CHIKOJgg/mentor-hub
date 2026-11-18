@@ -24,10 +24,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.telegram.telegrambots.meta.api.objects.chat.Chat;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
+import org.telegram.telegrambots.meta.api.objects.photo.PhotoSize;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -662,5 +664,58 @@ class TelegramReportHandlerTest {
         assertThat(meeting.getScheduledAt()).isNotNull();
         verify(zoomMeetingRepository).save(meeting);
         verify(studentRepository).save(argThat(s -> s.getNextZoomAt() != null));
+    }
+
+    @Test
+    @DisplayName("Media group album sends single acknowledgment/reaction across multiple album photos")
+    void handleStudentMessage_mediaGroupAlbum_deduplicatesAcknowledgments() {
+        Student student = Student.builder()
+                .id(1L)
+                .fullName("Лиза")
+                .tgChatId(71010101L)
+                .build();
+
+        DailyReport report = DailyReport.builder()
+                .student(student)
+                .reportDate(LocalDate.now(ZoneId.of("Europe/Minsk")))
+                .status("PENDING")
+                .contentDrafts(new ArrayList<>())
+                .reelSubmissions(new ArrayList<>())
+                .salesEntries(new ArrayList<>())
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.of(report));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(true).build()));
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        String albumId = "media_group_album_999";
+
+        Message photo1 = Message.builder()
+                .messageId(801)
+                .chat(chat)
+                .mediaGroupId(albumId)
+                .photo(List.of(PhotoSize.builder().fileId("ph_1").width(100).height(100).fileSize(1000).build()))
+                .caption("#отчет сделала сторис и карусель")
+                .build();
+
+        Message photo2 = Message.builder()
+                .messageId(802)
+                .chat(chat)
+                .mediaGroupId(albumId)
+                .photo(List.of(PhotoSize.builder().fileId("ph_2").width(100).height(100).fileSize(1000).build()))
+                .build();
+
+        int initialReplies = sentReplyCount;
+
+        handler.handleStudentMessage(student, photo1);
+        int afterFirstPhotoReplies = sentReplyCount;
+        assertThat(afterFirstPhotoReplies).isEqualTo(initialReplies + 1);
+
+        handler.handleStudentMessage(student, photo2);
+        int afterSecondPhotoReplies = sentReplyCount;
+        // Should NOT have sent another reply for the 2nd photo in the same album!
+        assertThat(afterSecondPhotoReplies).isEqualTo(afterFirstPhotoReplies);
     }
 }

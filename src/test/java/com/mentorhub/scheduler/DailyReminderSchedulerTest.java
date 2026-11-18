@@ -107,9 +107,9 @@ class DailyReminderSchedulerTest {
         // activeDebtor has no report
         when(dailyReportRepository.findByStudentIdAndReportDate(1L, monday)).thenReturn(Optional.empty());
 
-        // submittedStudent has report with status PENDING
+        // submittedStudent has report with actual submission
         when(dailyReportRepository.findByStudentIdAndReportDate(3L, monday)).thenReturn(Optional.of(
-                DailyReport.builder().status("PENDING").build()
+                DailyReport.builder().status("PENDING").lastTgMessageId(101).mailingsCount(15).build()
         ));
 
         List<Student> debtors = scheduler.findDebtors(monday);
@@ -118,6 +118,36 @@ class DailyReminderSchedulerTest {
         assertThat(debtors).hasSize(1);
         assertThat(debtors.get(0).getId()).isEqualTo(1L);
         assertThat(debtors.get(0).getFullName()).isEqualTo("Милана Горохова");
+    }
+
+    @Test
+    @DisplayName("findDebtors includes student who received morning focus but did not submit homework")
+    void findDebtors_includesMorningFocusOnlyStudent() {
+        LocalDate tuesday = LocalDate.of(2026, 11, 17);
+        Student focusOnlyStudent = Student.builder()
+                .id(5L)
+                .fullName("Лиза")
+                .tgChatId(71050505L)
+                .isActive(true)
+                .isPaused(false)
+                .build();
+
+        when(studentRepository.findByIsActiveTrue()).thenReturn(List.of(focusOnlyStudent));
+        // Report created by morning focus has reflectionActions but 0 submissions and no lastTgMessageId
+        when(dailyReportRepository.findByStudentIdAndReportDate(5L, tuesday)).thenReturn(Optional.of(
+                DailyReport.builder()
+                        .status("PENDING")
+                        .reflectionActions("🎯 Фокус дня: Продажи и созвоны")
+                        .mailingsCount(0)
+                        .salesTotal(java.math.BigDecimal.ZERO)
+                        .newClientsCount(0)
+                        .build()
+        ));
+
+        List<Student> debtors = scheduler.findDebtors(tuesday);
+        assertThat(debtors).hasSize(1);
+        assertThat(debtors.get(0).getId()).isEqualTo(5L);
+        assertThat(debtors.get(0).getFullName()).isEqualTo("Лиза");
     }
 
     @Test

@@ -23,6 +23,7 @@ import org.telegram.telegrambots.meta.api.objects.message.Message;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.time.Duration;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -37,6 +38,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -90,6 +92,12 @@ public class TelegramReportHandler {
     private final SpringAiReportExtractor springAiReportExtractor;
     private final DeterministicAiFallbackService deterministicAiFallbackService;
     private final TelegramSenderService telegramSenderService;
+    private final Map<String, Instant> processedMediaGroups = new ConcurrentHashMap<>();
+
+    private void cleanupMediaGroups() {
+        Instant cutoff = Instant.now().minus(Duration.ofMinutes(10));
+        processedMediaGroups.entrySet().removeIf(entry -> entry.getValue().isBefore(cutoff));
+    }
 
     @Autowired
     public TelegramReportHandler(
@@ -420,31 +428,43 @@ public class TelegramReportHandler {
         boolean isReport = !isDuplicateMediaSubmission &&
                 isReportSubmission(message, rawContent, newDraftsAdded, newReelsAdded, hasSales, hasMailings, hasClients, hasQuestion);
 
+        String mediaGroupId = message != null ? message.getMediaGroupId() : null;
+        boolean isAlbumFollowup = false;
+        if (StringUtils.hasText(mediaGroupId)) {
+            cleanupMediaGroups();
+            isAlbumFollowup = processedMediaGroups.putIfAbsent(mediaGroupId, Instant.now()) != null;
+        }
+
         if (isReport) {
             report.setSubmittedAt(Instant.now());
             report.setIsOnTime(isOnTime);
             report.setStatus("PENDING");
             report.setLastTgMessageId(message.getMessageId());
 
-            // 10. Send caring acknowledgment reply in mini-group only when actual report submitted and reportAckEnabled is true
-            if (reportAckEnabled) {
-                Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
-                String timeStr = TIME_FORMATTER.format(report.getSubmittedAt());
-                String acknowledgement = wasAlreadySubmitted
-                        ? "Принято на проверку (" + timeStr + ")! ✍️ Черновик обновлён."
-                        : "Принято на проверку (" + timeStr + ")! ✍️ Черновик сохранён.";
-                String businessConnectionId = message.getBusinessConnectionId();
-                if (StringUtils.hasText(businessConnectionId)) {
-                    telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement, businessConnectionId);
+            if (!isAlbumFollowup) {
+                // 10. Send caring acknowledgment reply in mini-group only when actual report submitted and reportAckEnabled is true
+                if (reportAckEnabled) {
+                    Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
+                    String timeStr = TIME_FORMATTER.format(report.getSubmittedAt());
+                    String acknowledgement = wasAlreadySubmitted
+                            ? "Принято на проверку (" + timeStr + ")! ✍️ Черновик обновлён."
+                            : "Принято на проверку (" + timeStr + ")! ✍️ Черновик сохранён.";
+                    String businessConnectionId = message.getBusinessConnectionId();
+                    if (StringUtils.hasText(businessConnectionId)) {
+                        telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement, businessConnectionId);
+                    } else {
+                        telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement);
+                    }
                 } else {
-                    telegramSenderService.sendCaringReply(chatId, message.getMessageId(), acknowledgement);
+                    Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
+                    if (telegramSenderService != null && message.getMessageId() != null) {
+                        telegramSenderService.setMessageReaction(chatId, message.getMessageId(), "👍");
+                    }
+                    log.info("Report acknowledgment reply skipped (reportAckEnabled=false) for student '{}'", student.getFullName());
                 }
             } else {
-                Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
-                if (telegramSenderService != null && message.getMessageId() != null) {
-                    telegramSenderService.setMessageReaction(chatId, message.getMessageId(), "👍");
-                }
-                log.info("Report acknowledgment reply skipped (reportAckEnabled=false) for student '{}'", student.getFullName());
+                log.info("Media group update {} for student '{}' merged silently into report without duplicate ack/reaction",
+                        mediaGroupId, student.getFullName());
             }
         } else {
             log.info("Message from student '{}' scanned silently (not a homework/report submission): '{}'",
@@ -498,7 +518,11 @@ public class TelegramReportHandler {
         String cleanFocus = rawContent != null ? rawContent.trim() : "";
 
         Long chatId = message.getChat() != null ? message.getChat().getId() : student.getTgChatId();
-        MentorSetting settings = mentorSettingRepository.findAll().stream().findFirst().orElse(null);
+        MentorSetting settings = mentorSettingRepository != null
+                ? mentorSettingRepository.findFirstByOrderByIdAsc()
+                        .or(() -> mentorSettingRepository.findAll().stream().findFirst())
+                        .orElse(null)
+                : null;
         boolean reportAckEnabled = settings != null && Boolean.TRUE.equals(settings.getReportAckEnabled());
 
         if (reportAckEnabled) {
@@ -543,10 +567,13 @@ public class TelegramReportHandler {
         }
         if (StringUtils.hasText(rawContent)) {
             String lower = rawContent.trim().toLowerCase(java.util.Locale.ROOT);
-            if (lower.contains("#рилс") || lower.contains("#карусель") || lower.contains("#сторителл")
-                    || lower.contains("#контент") || lower.contains("#рассылки") || lower.contains("#продажи")
-                    || lower.contains("#вопрос") || lower.contains("#клиенты") || lower.contains("#отчет")
-                    || lower.contains("#отчёт") || lower.contains("#дз") || lower.contains("#задание")) {
+            if (lower.contains("#рилс") || lower.contains("#видео") || lower.contains("#карусель")
+                    || lower.contains("#пост") || lower.contains("#сторителл") || lower.contains("#сторис")
+                    || lower.contains("#контент") || lower.contains("#рассылки") || lower.contains("#рассылка")
+                    || lower.contains("#трафик") || lower.contains("#продажи") || lower.contains("#продажа")
+                    || lower.contains("#диалоги") || lower.contains("#вопрос") || lower.contains("#клиенты")
+                    || lower.contains("#отчет") || lower.contains("#отчёт") || lower.contains("#дз")
+                    || lower.contains("#задание") || lower.contains("#reels") || lower.contains("#stories")) {
                 return true;
             }
             if (lower.startsWith("отчет") || lower.startsWith("отчёт") || lower.startsWith("дз")
@@ -788,7 +815,9 @@ public class TelegramReportHandler {
     public boolean processMeetingMessage(Student student, Message message) {
         if (zoomMeetingRepository == null || student == null || message == null) return false;
         MentorSetting settings = mentorSettingRepository != null
-                ? mentorSettingRepository.findFirstByOrderByIdAsc().orElse(null)
+                ? mentorSettingRepository.findFirstByOrderByIdAsc()
+                        .or(() -> mentorSettingRepository.findAll().stream().findFirst())
+                        .orElse(null)
                 : null;
         if (settings != null && !Boolean.TRUE.equals(settings.getZoomAutoDetectEnabled())) return false;
         String rawContent = message.getText() != null ? message.getText() : message.getCaption();

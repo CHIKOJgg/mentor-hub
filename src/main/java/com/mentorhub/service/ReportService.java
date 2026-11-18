@@ -53,7 +53,10 @@ public class ReportService {
             }
         }
 
-        return reports.stream().map(this::mapToResponse).toList();
+        return reports.stream()
+                .filter(r -> !"PENDING".equalsIgnoreCase(filterStatus) || r.hasActualSubmission())
+                .map(this::mapToResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)

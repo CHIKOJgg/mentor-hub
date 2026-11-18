@@ -61,15 +61,28 @@ public class DailyReminderScheduler {
                 continue;
             }
 
+            boolean sentAny = false;
             if (Boolean.TRUE.equals(settings.getMorningPushEnabled())
                     && localTime.equals(settings.getMorningPushTime())) {
                 sendMorningFocusToSingleStudent(student, settings, localDate);
+                sentAny = true;
             }
 
             if (Boolean.TRUE.equals(settings.getEveningReminderEnabled())
                     && Boolean.TRUE.equals(settings.getAutoRemindersEnabled())
                     && localTime.equals(settings.getEveningReminderTime())) {
                 sendEveningReminderIfDebtor(student, settings, localDate);
+                sentAny = true;
+            }
+
+            if (sentAny && rateLimitMs > 0) {
+                try {
+                    Thread.sleep(rateLimitMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Reminder polling loop interrupted");
+                    break;
+                }
             }
         }
     }
@@ -140,7 +153,7 @@ public class DailyReminderScheduler {
         java.util.Set<Long> submittedStudentIds;
         if (batchReports != null && !batchReports.isEmpty()) {
             submittedStudentIds = batchReports.stream()
-                    .filter(r -> "PENDING".equalsIgnoreCase(r.getStatus()) || "APPROVED".equalsIgnoreCase(r.getStatus()))
+                    .filter(DailyReport::hasActualSubmission)
                     .filter(r -> r.getStudent() != null && r.getStudent().getId() != null)
                     .map(r -> r.getStudent().getId())
                     .collect(java.util.stream.Collectors.toSet());
@@ -148,7 +161,7 @@ public class DailyReminderScheduler {
             // Fallback for isolated mocks or environments where findByReportDate is not populated
             submittedStudentIds = activeStudents.stream()
                     .filter(s -> dailyReportRepository.findByStudentIdAndReportDate(s.getId(), date)
-                            .map(r -> "PENDING".equalsIgnoreCase(r.getStatus()) || "APPROVED".equalsIgnoreCase(r.getStatus()))
+                            .map(DailyReport::hasActualSubmission)
                             .orElse(false))
                     .map(Student::getId)
                     .collect(java.util.stream.Collectors.toSet());
@@ -247,7 +260,7 @@ public class DailyReminderScheduler {
 
     public void sendEveningReminderIfDebtor(Student student, MentorSetting settings, LocalDate studentDate) {
         boolean hasSubmitted = dailyReportRepository.findByStudentIdAndReportDate(student.getId(), studentDate)
-                .map(r -> "PENDING".equalsIgnoreCase(r.getStatus()) || "APPROVED".equalsIgnoreCase(r.getStatus()))
+                .map(DailyReport::hasActualSubmission)
                 .orElse(false);
         if (!hasSubmitted) {
             sendReminderToStudent(student, studentDate);
