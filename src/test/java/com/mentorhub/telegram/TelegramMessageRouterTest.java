@@ -411,7 +411,7 @@ class TelegramMessageRouterTest {
         router.routeIncomingMessage(message, 105L, "MINI_GROUP");
 
         assertThat(recordedStudent).isEqualTo(student);
-        assertThat(recordedFocusText).contains("Задача от наставника Ксения: Снять 2 рилса и сделать 20 рассылок");
+        assertThat(recordedFocusText).contains("Задача от Наставник Ксения: Снять 2 рилса и сделать 20 рассылок");
     }
 
     @Test
@@ -501,7 +501,7 @@ class TelegramMessageRouterTest {
         router.routeIncomingMessage(message, 110L, "MINI_GROUP");
 
         assertThat(recordedStudent).isEqualTo(student);
-        assertThat(recordedFocusText).contains("Задача от наставника Ксения: Сделать 30 рассылок и выложить сторис");
+        assertThat(recordedFocusText).contains("Задача от Наставник Ксения: Сделать 30 рассылок и выложить сторис");
         verify(sender).setMessageReaction(eq(-1003279128599L), eq(22), eq("🎯"));
     }
 
@@ -740,5 +740,93 @@ class TelegramMessageRouterTest {
         assertThat(student.getCurrentTaskDay()).isEqualTo(2);
         verify(studentRepository).save(student);
         verify(sender).setMessageReaction(eq(-1003279128599L), eq(31), eq("👍"));
+    }
+
+    @Test
+    @DisplayName("Curator Katya setting task via /задание is recorded as 'Куратор Катя' and NEVER 'Наставник'")
+    void routeIncomingMessage_curatorKatyaSetsTask_usesCuratorTitleNeverMentor() {
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().mentorTgId(11223344L).reportAckEnabled(true).build()));
+
+        User katya = User.builder().id(22334455L).firstName("Катя").isBot(false).userName("katya_curator").build();
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder().messageId(60).from(katya).chat(chat).text("/задание Сделать 15 рассылок").build();
+
+        Student student = Student.builder().id(1L).fullName("Милана Горохова").tgChatId(-10071010101L).build();
+        when(studentRepository.findByTgChatId(-10071010101L)).thenReturn(Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 140L, "MINI_GROUP");
+
+        assertThat(recordedStudent).isEqualTo(student);
+        assertThat(recordedFocusText).contains("Задача от Куратор Катя: Сделать 15 рассылок");
+        assertThat(recordedFocusText).doesNotContain("Наставник Катя");
+
+        ArgumentCaptor<String> replyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(sender).sendSilentReply(eq(-10071010101L), eq(60), replyCaptor.capture());
+        assertThat(replyCaptor.getValue()).contains("🎯 Куратор Катя поставила задачу");
+        assertThat(replyCaptor.getValue()).doesNotContain("Наставник Катя");
+    }
+
+    @Test
+    @DisplayName("Curator Katya setting plan via /план is formatted as 'Куратор Катя' and NEVER 'Наставник'")
+    void routeIncomingMessage_curatorKatyaSetsPlan_usesCuratorTitleNeverMentor() {
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().mentorTgId(11223344L).reportAckEnabled(true).build()));
+
+        User katya = User.builder().id(22334455L).firstName("Катя").isBot(false).userName("katya_curator").build();
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        String planText = """
+                /план сегодня
+                1 день - рилс + сторис
+                2 день - пост
+                """;
+        Message message = Message.builder().messageId(61).from(katya).chat(chat).text(planText).build();
+
+        Student student = Student.builder().id(1L).fullName("Милана Горохова").tgChatId(-10071010101L).build();
+        when(studentRepository.findByTgChatId(-10071010101L)).thenReturn(Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 141L, "MINI_GROUP");
+
+        assertThat(recordedFocusText).contains("План от Куратор Катя (День 1): рилс + сторис");
+        assertThat(recordedFocusText).doesNotContain("Наставник Катя");
+
+        ArgumentCaptor<String> replyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(sender).sendSilentReply(eq(-10071010101L), eq(61), replyCaptor.capture());
+        assertThat(replyCaptor.getValue()).contains("📋 Куратор Катя сохранила персональный план");
+        assertThat(replyCaptor.getValue()).doesNotContain("Наставник Катя");
+    }
+
+    @Test
+    @DisplayName("Mentor Ksenia setting task with reportAckEnabled=true uses 'Наставник Ксения'")
+    void routeIncomingMessage_mentorKseniaSetsTask_withAckEnabled_usesMentorTitle() {
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().mentorTgId(11223344L).reportAckEnabled(true).build()));
+
+        User ksenia = User.builder().id(11223344L).firstName("Ксения").isBot(false).userName("ksenia_mentor").build();
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message message = Message.builder().messageId(62).from(ksenia).chat(chat).text("/задание Снять 1 рилс").build();
+
+        Student student = Student.builder().id(1L).fullName("Милана Горохова").tgChatId(-10071010101L).build();
+        when(studentRepository.findByTgChatId(-10071010101L)).thenReturn(Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        router.routeIncomingMessage(message, 142L, "MINI_GROUP");
+
+        assertThat(recordedFocusText).contains("Задача от Наставник Ксения: Снять 1 рилс");
+
+        ArgumentCaptor<String> replyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(sender).sendSilentReply(eq(-10071010101L), eq(62), replyCaptor.capture());
+        assertThat(replyCaptor.getValue()).contains("🎯 Наставник Ксения поставила задачу на сегодня");
     }
 }

@@ -350,7 +350,7 @@ public class TelegramMessageRouter {
                         .build());
 
                 if (telegramSenderService != null) {
-                    String welcomeMsg = "🌸 Привет, " + student.getFullName() + "! Я бот-помощник платформы наставничества для Ксении и Кати.\n\n" +
+                    String welcomeMsg = "🌸 Привет, " + student.getFullName() + "! Я бот-помощник наставника Ксении.\n\n" +
                             "Я автоматически подключила твою рабочую группу к системе! Жду твои ежедневные отчеты с хэштегами:\n" +
                             "• #рилс / #видео\n" +
                             "• #карусель / #пост\n" +
@@ -358,7 +358,7 @@ public class TelegramMessageRouter {
                             "• #рассылки / #трафик\n" +
                             "• #продажи / #диалоги\n" +
                             "• #вопрос (для срочной помощи)\n\n" +
-                            "Также можешь присылать голосовые или кружочки — я всё расшифрую и передам Ксении и Кате 🚀";
+                            "Также можешь присылать голосовые или кружочки — я всё расшифрую и передам наставнику Ксении 🚀";
                     telegramSenderService.sendCaringReply(chatId, message.getMessageId(), welcomeMsg);
                 }
 
@@ -388,7 +388,7 @@ public class TelegramMessageRouter {
                     if (hasExplicitTrigger || hasMedia) {
                         String uName = from.getUserName() != null ? "@" + from.getUserName() : "ID: " + fromId;
                         String guidance = "Здравствуйте! Ваш Telegram (" + uName + ") пока не привязан к списку учениц в системе.\n\n" +
-                                "Добавьте меня в вашу рабочую мини-группу с Ксенией и Катей, и чат подключится автоматически!";
+                                "Добавьте меня в вашу рабочую мини-группу с наставником Ксенией, и чат подключится автоматически!";
                         telegramSenderService.sendCaringReply(chatId, message.getMessageId(), guidance);
                     }
                 }
@@ -422,8 +422,8 @@ public class TelegramMessageRouter {
                             "• #сторителл — сценарий историй\n" +
                             "• #рассылки [число] — количество отправок в Direct\n" +
                             "• #продажи [сумма] — сумма сделки\n" +
-                            "• #вопрос — вопрос или рефлексия для Ксении и Кати\n\n" +
-                            "Также можешь присылать голосовые или кружочки — я всё расшифрую и передам наставникам! 🚀";
+                            "• #вопрос — вопрос или рефлексия для наставника Ксении\n\n" +
+                            "Также можешь присылать голосовые или кружочки — я всё расшифрую и передам наставнику Ксении! 🚀";
                     telegramSenderService.sendCaringReply(chatId, message.getMessageId(), greetingReply);
                 }
             }
@@ -889,7 +889,7 @@ public class TelegramMessageRouter {
                     log.info("Bound student '{}' to chat {} via /bind command", st.getFullName(), chatId);
                     if (telegramSenderService != null && chatId != null) {
                         telegramSenderService.sendCaringReply(chatId, message.getMessageId(),
-                                "✅ Группа успешно привязана к ученице " + st.getFullName() + "! Теперь все отчёты с хэштегами будут автоматически попадать на проверку Ксении и Кате 🌸");
+                                "✅ Группа успешно привязана к ученице " + st.getFullName() + "! Теперь все отчёты с хэштегами будут автоматически попадать на проверку наставнику Ксении 🌸");
                     }
                     return Optional.of(st);
                 }
@@ -991,7 +991,7 @@ public class TelegramMessageRouter {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("🌸 Всем привет! Я бот-помощник платформы «Mentor Hub» для наставничества Ксении (@sidarenka_ks) и куратора Кати!\n\n");
+        sb.append("🌸 Всем привет! Я бот-помощник платформы «Mentor Hub» наставника Ксении (@sidarenka_ks)!\n\n");
 
         if (matched.isPresent()) {
             Student st = matched.get();
@@ -1014,13 +1014,13 @@ public class TelegramMessageRouter {
     private void handleWelcomeCommand(Long chatId, Long fromId, User from, Message message) {
         if (telegramSenderService == null || chatId == null) return;
         StringBuilder welcome = new StringBuilder();
-        welcome.append("Здравствуйте! Я бот-помощник платформы «Mentor Hub» для наставничества Ксении и куратора Кати 🌸\n\n");
-        welcome.append("Я работаю в мини-группах («Ксения + Катя + Ученица + Бот») и принимаю ежедневные отчёты с хэштегами:\n");
+        welcome.append("Здравствуйте! Я бот-помощник платформы «Mentor Hub» наставника Ксении 🌸\n\n");
+        welcome.append("Я работаю в рабочих группах («Ксения + Катя + Ученица + Бот») и принимаю ежедневные отчёты с хэштегами:\n");
         appendRulesSummary(welcome);
         welcome.append("\nКоманды бота:\n");
         welcome.append("• /tasks или /задания — посмотреть регламент и выбрать фокус\n");
         welcome.append("• /task [цель] — зафиксировать свой фокус на сегодня\n");
-        welcome.append("• /задание [цель] — наставнику/куратору поставить задачу ученице\n\n");
+        welcome.append("• /задание [цель] — наставнику поставить задачу ученице\n\n");
         welcome.append("Ваш Telegram ID: ").append(fromId).append("\n");
         welcome.append("Ваш Username: @").append(from != null && from.getUserName() != null ? from.getUserName() : "не указан");
         telegramSenderService.sendCaringReply(chatId, message.getMessageId(), welcome.toString());
@@ -1032,7 +1032,7 @@ public class TelegramMessageRouter {
         sb.append("📋 Регламент отчётов и задания для учениц:\n\n");
         appendRulesSummary(sb);
         sb.append("\n⏰ Дедлайн сдачи отчёта: ежедневно до 21:00\n");
-        sb.append("Все отчёты мгновенно попадают на проверку наставнику Ксении и куратору Кате 🌸\n\n");
+        sb.append("Все отчёты мгновенно попадают на проверку наставнику Ксении 🌸\n\n");
         sb.append("💡 Чтобы зафиксировать фокус на сегодня, отправьте в чат:\n");
         sb.append("#фокус [ваша цель на день]");
 
@@ -1113,7 +1113,8 @@ public class TelegramMessageRouter {
         }
 
         Student student = studentOpt.get();
-        telegramReportHandler.recordDailyFocusSilently(student, "Задача от наставника " + mentorName + ": " + cleanTask);
+        String mentorTitle = resolveMentorTitle(mentorName);
+        telegramReportHandler.recordDailyFocusSilently(student, "Задача от " + mentorTitle + ": " + cleanTask);
 
         log.info("Mentor {} set task for student '{}' (#{}): {}",
                 mentorName, student.getFullName(), student.getId(), cleanTask);
@@ -1131,7 +1132,7 @@ public class TelegramMessageRouter {
                     telegramSenderService.sendSilentReply(chatId, message.getMessageId(), shortAck);
                 }
             } else {
-                String reply = "🎯 Наставник " + mentorName + " поставила задачу на сегодня для " + student.getFullName() + ":\n" +
+                String reply = "🎯 " + mentorTitle + " поставила задачу на сегодня для " + student.getFullName() + ":\n" +
                         "«" + cleanTask + "»\n\n" +
                         "⏰ Ждём выполнение в отчёте до 21:00 🌸";
                 telegramSenderService.sendSilentReply(chatId, message.getMessageId(), reply);
@@ -1229,7 +1230,8 @@ public class TelegramMessageRouter {
 
         if (startDate.equals(studentToday)) {
             String day1Task = parsed.getOrDefault(1, finalPlanText.lines().findFirst().orElse(finalPlanText));
-            telegramReportHandler.recordDailyFocusSilently(student, "План от наставника " + mentorName + " (День 1): " + day1Task);
+            String mentorTitle = resolveMentorTitle(mentorName);
+            telegramReportHandler.recordDailyFocusSilently(student, "План от " + mentorTitle + " (День 1): " + day1Task);
         }
 
         log.info("Mentor {} set multi-day task plan for student '{}' (#{}): {} days parsed, starting {}",
@@ -1354,14 +1356,22 @@ public class TelegramMessageRouter {
         };
     }
 
+    private static String resolveMentorTitle(String mentorName) {
+        if (mentorName != null && mentorName.trim().equalsIgnoreCase("Катя")) {
+            return "Куратор Катя";
+        }
+        return "Наставник Ксения";
+    }
+
     private static String formatPlanOverview(
             String mentorName,
             Student student,
             LocalDate startDate,
             Map<Integer, String> plan,
             LocalDate today) {
+        String mentorTitle = resolveMentorTitle(mentorName);
         StringBuilder sb = new StringBuilder();
-        sb.append("📋 Наставник ").append(mentorName).append(" сохранила персональный план для ").append(student.getFullName());
+        sb.append("📋 ").append(mentorTitle).append(" сохранила персональный план для ").append(student.getFullName());
         if (plan == null || plan.isEmpty()) {
             return sb.append(".\n").toString();
         }

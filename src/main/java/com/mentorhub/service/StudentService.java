@@ -437,6 +437,13 @@ public class StudentService {
         }
 
         String trimmed = raw.trim();
+
+        // 1. Check if the plan is written with calendar dates (e.g. "Сегодня сторител\n20.11 пост\n24.11 рилс")
+        PlanSchedule datedSchedule = tryParseDatedPlan(trimmed, today);
+        if (datedSchedule != null) {
+            return datedSchedule;
+        }
+
         List<String> lines = trimmed.lines().toList();
         if (lines.isEmpty()) {
             return new PlanSchedule(defaultStart, "", Collections.emptyMap());
@@ -473,6 +480,137 @@ public class StudentService {
         return new PlanSchedule(defaultStart, trimmed, days);
     }
 
+    private record DatedLine(LocalDate date, String task) {}
+
+    private static DatedLine parseDatedLine(String line, LocalDate today) {
+        if (!StringUtils.hasText(line)) return null;
+        String trimmed = line.trim();
+        String lower = trimmed.toLowerCase(Locale.ROOT)
+                .replaceAll("^[\\s🗓📅👉*•\\-]+", "");
+
+        LocalDate targetDate = null;
+        String task = null;
+
+        if (lower.startsWith("сегодня")) {
+            targetDate = today;
+            task = lower.substring("сегодня".length()).trim();
+        } else if (lower.startsWith("завтра")) {
+            targetDate = today.plusDays(1);
+            task = lower.substring("завтра".length()).trim();
+        } else if (lower.startsWith("послезавтра")) {
+            targetDate = today.plusDays(2);
+            task = lower.substring("послезавтра".length()).trim();
+        } else {
+            // Check day of week
+            for (String dowName : List.of("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье",
+                    "пн", "вт", "ср", "чт", "пт", "сб", "вс")) {
+                if (lower.startsWith(dowName) && (lower.length() == dowName.length() || !Character.isLetter(lower.charAt(dowName.length())))) {
+                    DayOfWeek targetDow = parseDayOfWeek(dowName);
+                    if (targetDow != null) {
+                        int diff = (targetDow.getValue() - today.getDayOfWeek().getValue() + 7) % 7;
+                        if (diff == 0) diff = 7;
+                        targetDate = today.plusDays(diff);
+                        task = lower.substring(dowName.length()).trim();
+                        break;
+                    }
+                }
+            }
+            if (targetDate == null) {
+                // Check DD.MM or DD.MM.YYYY
+                Matcher dateMatcher = Pattern.compile("^(\\d{1,2})[./](\\d{1,2})(?:[./](\\d{2,4}))?(.*)$").matcher(lower);
+                if (dateMatcher.matches()) {
+                    try {
+                        int day = Integer.parseInt(dateMatcher.group(1));
+                        int month = Integer.parseInt(dateMatcher.group(2));
+                        int year = dateMatcher.group(3) != null
+                                ? (dateMatcher.group(3).length() == 2 ? 2000 + Integer.parseInt(dateMatcher.group(3)) : Integer.parseInt(dateMatcher.group(3)))
+                                : today.getYear();
+                        targetDate = LocalDate.of(year, month, day);
+                        if (dateMatcher.group(3) == null && targetDate.isBefore(today.minusDays(7))) {
+                            targetDate = targetDate.plusYears(1);
+                        }
+                        task = dateMatcher.group(4).trim();
+                    } catch (Exception ignored) {
+                        return null;
+                    }
+                }
+            }
+        }
+
+        if (targetDate == null || task == null) return null;
+
+        // Strip optional "день", "года", "г." and separators ":", "-", "—"
+        task = task.replaceFirst("^(день|года|г\\.?)\\b", "").trim();
+        task = task.replaceFirst("^[-:—]\\s*", "").trim();
+        if (task.isEmpty()) return null;
+
+        // Preserve original case for task from the end of trimmed
+        int taskIndex = trimmed.toLowerCase(Locale.ROOT).lastIndexOf(task);
+        if (taskIndex >= 0) {
+            String rawExtracted = trimmed.substring(taskIndex).trim();
+            task = rawExtracted.replaceFirst("^[-:—]\\s*", "").trim();
+        }
+
+        return new DatedLine(targetDate, task);
+    }
+
+    public static PlanSchedule tryParseDatedPlan(String raw, LocalDate today) {
+        if (!StringUtils.hasText(raw) || today == null) return null;
+        List<String> lines = raw.lines()
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+        if (lines.isEmpty()) return null;
+
+        Map<LocalDate, String> datedTasks = new TreeMap<>();
+        int matchedLinesCount = 0;
+
+        for (String line : lines) {
+            DatedLine parsed = parseDatedLine(line, today);
+            if (parsed != null && StringUtils.hasText(parsed.task())) {
+                datedTasks.put(parsed.date(), parsed.task());
+                matchedLinesCount++;
+            }
+        }
+
+        if (datedTasks.isEmpty() || matchedLinesCount == 0) {
+            return null;
+        }
+
+        boolean hasExplicitCalendarDate = datedTasks.keySet().stream()
+                .anyMatch(d -> !d.equals(today) && !d.equals(today.plusDays(1)));
+        if (!hasExplicitCalendarDate && matchedLinesCount < lines.size()) {
+            return null;
+        }
+
+        LocalDate startDate = datedTasks.keySet().iterator().next();
+        Map<Integer, String> days = new LinkedHashMap<>();
+        StringBuilder cleanBody = new StringBuilder();
+
+        for (Map.Entry<LocalDate, String> entry : datedTasks.entrySet()) {
+            LocalDate taskDate = entry.getKey();
+            int dayNum = (int) ChronoUnit.DAYS.between(startDate, taskDate) + 1;
+            days.put(dayNum, entry.getValue());
+            if (cleanBody.length() > 0) cleanBody.append("\n");
+            cleanBody.append(dayNum).append(" день: ").append(entry.getValue());
+        }
+
+        return new PlanSchedule(startDate, cleanBody.toString(), days);
+    }
+
+    public static DayOfWeek parseDayOfWeek(String text) {
+        if (!StringUtils.hasText(text)) return null;
+        String clean = text.trim().toLowerCase(Locale.ROOT);
+        if (clean.startsWith("пон") || clean.equals("пн")) return DayOfWeek.MONDAY;
+        if (clean.startsWith("вто") || clean.equals("вт")) return DayOfWeek.TUESDAY;
+        if (clean.startsWith("сре") || clean.equals("ср")) return DayOfWeek.WEDNESDAY;
+        if (clean.startsWith("чет") || clean.equals("чт")) return DayOfWeek.THURSDAY;
+        if (clean.startsWith("пят") || clean.equals("пт")) return DayOfWeek.FRIDAY;
+        if (clean.startsWith("суб") || clean.equals("сб")) return DayOfWeek.SATURDAY;
+        if (clean.startsWith("вос") || clean.equals("вс")) return DayOfWeek.SUNDAY;
+        return null;
+    }
+
     private static LocalDate tryParseDateModifier(String text, LocalDate today) {
         if (!StringUtils.hasText(text)) return null;
         String clean = text.trim().toLowerCase(Locale.ROOT)
@@ -503,15 +641,7 @@ public class StudentService {
                 return today.plusDays(days);
             }
         }
-        DayOfWeek targetDow = null;
-        if (clean.startsWith("пон") || clean.equals("пн")) targetDow = DayOfWeek.MONDAY;
-        else if (clean.startsWith("вто") || clean.equals("вт")) targetDow = DayOfWeek.TUESDAY;
-        else if (clean.startsWith("сре") || clean.equals("ср")) targetDow = DayOfWeek.WEDNESDAY;
-        else if (clean.startsWith("чет") || clean.equals("чт")) targetDow = DayOfWeek.THURSDAY;
-        else if (clean.startsWith("пят") || clean.equals("пт")) targetDow = DayOfWeek.FRIDAY;
-        else if (clean.startsWith("суб") || clean.equals("сб")) targetDow = DayOfWeek.SATURDAY;
-        else if (clean.startsWith("вос") || clean.equals("вс")) targetDow = DayOfWeek.SUNDAY;
-
+        DayOfWeek targetDow = parseDayOfWeek(clean);
         if (targetDow != null) {
             int diff = (targetDow.getValue() - today.getDayOfWeek().getValue() + 7) % 7;
             if (diff == 0) diff = 7;

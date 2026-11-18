@@ -361,6 +361,22 @@ class StudentServiceTest {
     }
 
     @Test
+    @DisplayName("parsePlanWithSchedule parses natural calendar dates and relative days without numbering")
+    void testParsePlanWithScheduleCalendarDates() {
+        LocalDate today = LocalDate.of(2026, 11, 18); // Wednesday
+        java.time.ZoneId zone = java.time.ZoneId.of("Europe/Minsk");
+
+        String plan = "Сегодня сторител\n20.11 пост\n24.11 рилс";
+        StudentService.PlanSchedule schedule = StudentService.parsePlanWithSchedule(plan, today, zone);
+
+        assertThat(schedule.startDate()).isEqualTo(LocalDate.of(2026, 11, 18));
+        assertThat(schedule.days()).containsEntry(1, "сторител"); // 18.11 (Wednesday)
+        assertThat(schedule.days()).containsEntry(3, "пост");     // 20.11 (Friday, +2 days)
+        assertThat(schedule.days()).containsEntry(7, "рилс");     // 24.11 (Tuesday, +6 days)
+        assertThat(schedule.days()).hasSize(3);
+    }
+
+    @Test
     @DisplayName("Creates and updates student with currency and timezone")
     void testCreateAndUpdateStudentCurrencyAndTimezone() {
         CreateStudentRequest createReq = new CreateStudentRequest(
