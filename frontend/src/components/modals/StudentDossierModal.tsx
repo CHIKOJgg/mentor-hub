@@ -1,5 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
-import { X, Send, Video, Check, ExternalLink, Target, CheckCheck } from 'lucide-react';
+import { X, Send, Video, Check, ExternalLink, Target, CheckCheck, Edit } from 'lucide-react';
 import type { StudentDiscipline, DailyReport } from '../../types';
 import { AccessibleModal } from '../common/AccessibleModal';
 
@@ -12,6 +12,7 @@ interface StudentDossierModalProps {
   onSendMessage: (student: StudentDiscipline, message: string) => void;
   onManageZooms: (student: StudentDiscipline) => void;
   onToggleZoomCompleted: (studentId: string, callNumber: number) => void;
+  onEditStudent?: (student: StudentDiscipline) => void;
 }
 
 const INVALID_Q_SET = new Set([
@@ -41,6 +42,7 @@ export const StudentDossierModal = ({
   onSendMessage,
   onManageZooms,
   onToggleZoomCompleted,
+  onEditStudent,
 }: StudentDossierModalProps) => {
   const [customMessage, setCustomMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -85,14 +87,27 @@ export const StudentDossierModal = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            type="button"
-            aria-label="Закрыть досье"
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onEditStudent && (
+              <button
+                type="button"
+                onClick={() => onEditStudent(student)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                title="Редактировать профиль, валюту и цели"
+              >
+                <Edit className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Редактировать</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              type="button"
+              aria-label="Закрыть досье"
+              className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Dossier Tabs */}

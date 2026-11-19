@@ -4190,6 +4190,10 @@ export default function App() {
           setInspectingStudent(null);
         }}
         onToggleZoomCompleted={toggleZoomSessionCompleted}
+        onEditStudent={s => {
+          setInspectingStudent(null);
+          setEditingStudent(s);
+        }}
       />
 
       {/* ─── MODAL 7: ZOOM MANAGEMENT MODAL ─── */}
