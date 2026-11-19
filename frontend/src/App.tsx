@@ -378,7 +378,7 @@ const INVALID_Q_SET = new Set([
 
 function isInvalidQuestionText(q?: string): boolean {
   if (!q) return true;
-  const trimmed = q.trim().replace(/^["'«»\[\(]+|["'»\]\).!?,—\-]+$/g, '').trim();
+  const trimmed = q.trim().replace(/^["'«»[(]+|["'»\].!?,—-]+$/g, '').trim();
   if (!trimmed) return true;
   const lower = trimmed.toLowerCase();
   if (INVALID_Q_SET.has(lower)) return true;

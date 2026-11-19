@@ -33,6 +33,11 @@ public class DeterministicAiFallbackService {
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
 
+    private static final Pattern NATURAL_SALES_PATTERN = Pattern.compile(
+            "(?:^|\\s)(?:на\\s+)?([0-9\\s.,kк]+)\\s*(?:бун|byn|бел\\.?\\s*руб|руб(?:лей|ля)?|р\\.?|[$€₽])(?:\\s|$)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
     private static final Pattern REELS_COUNT_PATTERN = Pattern.compile(
             "(\\d+)\\s*(?:рилс|рилса|рилсов|reels)|(?:#?(?:рилс|reels))[:\\s]*(\\d+)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
@@ -194,6 +199,10 @@ public class DeterministicAiFallbackService {
         Matcher m = SALES_PATTERN.matcher(text);
         if (m.find()) {
             return normalizeSalesAmount(m.group(1));
+        }
+        Matcher mNat = NATURAL_SALES_PATTERN.matcher(text);
+        if (mNat.find()) {
+            return normalizeSalesAmount(mNat.group(1));
         }
         return BigDecimal.ZERO;
     }

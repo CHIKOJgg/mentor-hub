@@ -145,6 +145,20 @@ class DeterministicAiFallbackServiceTest {
         // Decimals with comma
         assertThat(fallbackService.extractSalesAmount("#продажа 50,00 BYN"))
                 .isEqualByComparingTo(new BigDecimal("50.00"));
+
+        // Prompt audited natural and hashtag variations: 70 бун, 270BYN, 45, 60000, 50000 руб
+        assertThat(fallbackService.extractSalesAmount("#продажа 70 бун"))
+                .isEqualByComparingTo(new BigDecimal("70.00"));
+        assertThat(fallbackService.extractSalesAmount("#продажа 270BYN"))
+                .isEqualByComparingTo(new BigDecimal("270.00"));
+        assertThat(fallbackService.extractSalesAmount("#продажа 45"))
+                .isEqualByComparingTo(new BigDecimal("45.00"));
+        assertThat(fallbackService.extractSalesAmount("#продажи 60000"))
+                .isEqualByComparingTo(new BigDecimal("60000.00"));
+        assertThat(fallbackService.extractSalesAmount("70 бун"))
+                .isEqualByComparingTo(new BigDecimal("70.00"));
+        assertThat(fallbackService.extractSalesAmount("50000 руб"))
+                .isEqualByComparingTo(new BigDecimal("50000.00"));
     }
 
     @Test
