@@ -120,8 +120,8 @@ class AnalyticsServiceTest {
         String copy = storyCase.generatedStoryCopy();
         assertThat(copy).contains("🔥 КЕЙС ПОТОКА: Милана Горохова");
         assertThat(copy).contains("Ниша: Стилист-имиджмейкер");
-        assertThat(copy).contains("🚀 Точка А: 30 000 ₽ ➡️ Точка Б: 180 000 ₽ (РОСТ x6.0!)");
-        assertThat(copy).contains("📈 Средний чек: вырос с 3 000 ₽ до 45 000 ₽");
+        assertThat(copy).contains("🚀 Точка А: 30 000 BYN ➡️ Точка Б: 180 000 BYN (РОСТ x6.0!)");
+        assertThat(copy).contains("📈 Средний чек: вырос с 3 000 BYN до 45 000 BYN");
         assertThat(copy).contains("🎬 Контент: 14 проверенных Reels за 3 недели");
         assertThat(copy).contains("✉️ Исходящий трафик: 145 рассылок по скрипту");
         assertThat(copy).contains("💎 Дисциплина сдачи отчетов: 95%");

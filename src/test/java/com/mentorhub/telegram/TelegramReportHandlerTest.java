@@ -761,4 +761,123 @@ class TelegramReportHandlerTest {
         // Should NOT have sent another reply for the 2nd photo in the same album!
         assertThat(afterSecondPhotoReplies).isEqualTo(afterFirstPhotoReplies);
     }
+
+    @Test
+    @DisplayName("Handles #чек and #предоплата: records individual sales and accumulates total")
+    void handleStudentMessage_individualCheckAndPrepayment_recordsSales() {
+        Student student = Student.builder().id(1L).fullName("Мария").currentIncome(BigDecimal.ZERO).build();
+        DailyReport report = DailyReport.builder()
+                .student(student)
+                .reportDate(LocalDate.now(ZoneId.of("Europe/Minsk")))
+                .salesTotal(BigDecimal.ZERO)
+                .salesEntries(new ArrayList<>())
+                .contentDrafts(new ArrayList<>())
+                .reelSubmissions(new ArrayList<>())
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.of(report));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(false).build()));
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+
+        // 1. #чек 50 BYN
+        Message checkMsg = Message.builder()
+                .messageId(901)
+                .chat(chat)
+                .text("#чек 50 BYN")
+                .build();
+        handler.handleStudentMessage(student, checkMsg);
+        assertThat(report.getSalesTotal()).isEqualByComparingTo(new BigDecimal("50.00"));
+        assertThat(report.getSalesEntries()).hasSize(1);
+        assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("50.00"));
+
+        // 2. #предоплата 100 BYN
+        Message prepayMsg = Message.builder()
+                .messageId(902)
+                .chat(chat)
+                .text("#предоплата 100 BYN")
+                .build();
+        handler.handleStudentMessage(student, prepayMsg);
+        assertThat(report.getSalesTotal()).isEqualByComparingTo(new BigDecimal("150.00"));
+        assertThat(report.getSalesEntries()).hasSize(2);
+        assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("150.00"));
+    }
+
+    @Test
+    @DisplayName("Handles #трафик and #диалоги: extracts and updates mailings count")
+    void handleStudentMessage_trafficAndDialogs_updatesMailingsCount() {
+        Student student = Student.builder().id(1L).fullName("Мария").totalMailings(0).build();
+        DailyReport report = DailyReport.builder()
+                .student(student)
+                .reportDate(LocalDate.now(ZoneId.of("Europe/Minsk")))
+                .mailingsCount(0)
+                .salesEntries(new ArrayList<>())
+                .contentDrafts(new ArrayList<>())
+                .reelSubmissions(new ArrayList<>())
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.of(report));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(false).build()));
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+
+        // 1. #трафик 30
+        Message trafficMsg = Message.builder()
+                .messageId(903)
+                .chat(chat)
+                .text("#трафик 30")
+                .build();
+        handler.handleStudentMessage(student, trafficMsg);
+        assertThat(report.getMailingsCount()).isEqualTo(30);
+        assertThat(student.getTotalMailings()).isEqualTo(30);
+
+        // 2. #диалоги 45
+        Message dialogMsg = Message.builder()
+                .messageId(904)
+                .chat(chat)
+                .text("#диалоги 45")
+                .build();
+        handler.handleStudentMessage(student, dialogMsg);
+        assertThat(report.getMailingsCount()).isEqualTo(45);
+        assertThat(student.getTotalMailings()).isEqualTo(45);
+    }
+
+    @Test
+    @DisplayName("Photo with #чек caption records sale and does NOT create a carousel draft")
+    void handleStudentMessage_photoWithCheck_doesNotCreateCarouselDraft() {
+        Student student = Student.builder().id(1L).fullName("Мария").totalCarousels(0).currentIncome(BigDecimal.ZERO).build();
+        DailyReport report = DailyReport.builder()
+                .student(student)
+                .reportDate(LocalDate.now(ZoneId.of("Europe/Minsk")))
+                .salesTotal(BigDecimal.ZERO)
+                .salesEntries(new ArrayList<>())
+                .contentDrafts(new ArrayList<>())
+                .reelSubmissions(new ArrayList<>())
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.of(report));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(false).build()));
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message checkPhoto = Message.builder()
+                .messageId(905)
+                .chat(chat)
+                .photo(List.of(PhotoSize.builder().fileId("ph_check").width(100).height(100).fileSize(1000).build()))
+                .caption("#чек 75 BYN")
+                .build();
+
+        handler.handleStudentMessage(student, checkPhoto);
+
+        // Sale should be recorded
+        assertThat(report.getSalesTotal()).isEqualByComparingTo(new BigDecimal("75.00"));
+        // Carousel draft should NOT be created
+        assertThat(report.getContentDrafts()).isEmpty();
+        assertThat(student.getTotalCarousels()).isEqualTo(0);
+    }
 }

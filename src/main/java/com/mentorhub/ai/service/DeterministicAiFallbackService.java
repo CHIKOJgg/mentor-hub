@@ -19,17 +19,17 @@ import java.util.regex.Pattern;
 public class DeterministicAiFallbackService {
 
     private static final Pattern MAILINGS_PATTERN_AFTER = Pattern.compile(
-            "(?:#(?:рассылки|рассылка|рассылок|директ|direct)[:\\s]*|(?:рассылки|рассылка|директ|direct)[:\\s-]+)(\\d+)",
+            "(?:#(?:рассылки|рассылка|рассылок|трафик|диалоги|диалогов|директ|direct)[:\\s-]*|(?:рассылки|рассылка|трафик|диалоги|диалогов|директ|direct)[:\\s-]+)(\\d+)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
 
     private static final Pattern MAILINGS_PATTERN_BEFORE = Pattern.compile(
-            "(\\d+)\\s*(?:рассылки|рассылка|рассылок|рассылочек|директ|диалогов)",
+            "(\\d+)\\s*(?:рассылки|рассылка|рассылок|рассылочек|трафик|трафика|директ|диалог|диалога|диалогов)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
 
     private static final Pattern SALES_PATTERN = Pattern.compile(
-            "(?:#?(?:продажи|продажа|оплата|продано|чек))[:\\s]*([0-9\\s.,kк]+)",
+            "(?:#?(?:продажи|продажа|предоплата|предоплаты|оплата|продано|чек))[:\\s-]*(?:на\\s+)?[$€₽]?\\s*([0-9\\s.,kк]+)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
 

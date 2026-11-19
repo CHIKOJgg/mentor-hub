@@ -205,10 +205,14 @@ public class TelegramReportHandler {
             String voiceFileId = message.getVoice().getFileId();
             byte[] audioBytes = telegramSenderService.downloadFileBytes(voiceFileId, 20 * 1024 * 1024);
             String voiceTranscript = audioBytes == null ? "" : springAiReportExtractor.transcribeAudio(audioBytes, "voice.ogg");
-            if (StringUtils.hasText(voiceTranscript) && !voiceTranscript.startsWith("[")) {
-                report.setVoiceTranscript(StringUtils.hasText(report.getVoiceTranscript())
-                        ? report.getVoiceTranscript() + "\n" + voiceTranscript
-                        : voiceTranscript);
+            boolean isErrorStatus = voiceTranscript.startsWith("[Сбой") || voiceTranscript.startsWith("[Таймаут");
+            if (StringUtils.hasText(voiceTranscript) && !isErrorStatus) {
+                String existing = report.getVoiceTranscript();
+                if (existing == null || !existing.contains(voiceTranscript)) {
+                    report.setVoiceTranscript(StringUtils.hasText(existing)
+                            ? existing + "\n" + voiceTranscript
+                            : voiceTranscript);
+                }
                 rawContent = (StringUtils.hasText(rawContent) ? rawContent + "\n" : "") + voiceTranscript;
             }
         }
@@ -217,10 +221,14 @@ public class TelegramReportHandler {
             String audioFileId = message.getAudio().getFileId();
             byte[] audioBytes = telegramSenderService.downloadFileBytes(audioFileId, 25 * 1024 * 1024);
             String audioTranscript = audioBytes == null ? "" : springAiReportExtractor.transcribeAudio(audioBytes, "audio.mp3");
-            if (StringUtils.hasText(audioTranscript) && !audioTranscript.startsWith("[")) {
-                report.setVoiceTranscript(StringUtils.hasText(report.getVoiceTranscript())
-                        ? report.getVoiceTranscript() + "\n" + audioTranscript
-                        : audioTranscript);
+            boolean isErrorStatus = audioTranscript.startsWith("[Сбой") || audioTranscript.startsWith("[Таймаут");
+            if (StringUtils.hasText(audioTranscript) && !isErrorStatus) {
+                String existing = report.getVoiceTranscript();
+                if (existing == null || !existing.contains(audioTranscript)) {
+                    report.setVoiceTranscript(StringUtils.hasText(existing)
+                            ? existing + "\n" + audioTranscript
+                            : audioTranscript);
+                }
                 rawContent = (StringUtils.hasText(rawContent) ? rawContent + "\n" : "") + audioTranscript;
             }
         }
@@ -229,10 +237,14 @@ public class TelegramReportHandler {
             String videoFileId = message.getVideoNote().getFileId();
             byte[] videoBytes = telegramSenderService.downloadFileBytes(videoFileId, 25 * 1024 * 1024);
             String videoTranscript = videoBytes == null ? "" : springAiReportExtractor.transcribeAudio(videoBytes, "videonote.mp4");
-            if (StringUtils.hasText(videoTranscript) && !videoTranscript.startsWith("[")) {
-                report.setVoiceTranscript(StringUtils.hasText(report.getVoiceTranscript())
-                        ? report.getVoiceTranscript() + "\n" + videoTranscript
-                        : videoTranscript);
+            boolean isErrorStatus = videoTranscript.startsWith("[Сбой") || videoTranscript.startsWith("[Таймаут");
+            if (StringUtils.hasText(videoTranscript) && !isErrorStatus) {
+                String existing = report.getVoiceTranscript();
+                if (existing == null || !existing.contains(videoTranscript)) {
+                    report.setVoiceTranscript(StringUtils.hasText(existing)
+                            ? existing + "\n" + videoTranscript
+                            : videoTranscript);
+                }
                 rawContent = (StringUtils.hasText(rawContent) ? rawContent + "\n" : "") + videoTranscript;
             }
         }
@@ -243,15 +255,18 @@ public class TelegramReportHandler {
         // 3. Process Instagram Reels with Anti-Fraud (SHA-256 deduplication & accessibility)
         processReelsAntiFraud(report, student, rawContent, deduplicationEnabled);
 
-        // 4. Sales amount normalization (#продажи 60000 vs #продажа 50BYN, #оплата 100)
+        // 4. Sales amount normalization (#продажи 60000 vs #продажа 50BYN, #оплата 100, #предоплата 50, #чек 50)
         boolean hasSalesTag = StringUtils.hasText(rawContent) &&
-                (rawContent.contains("#продажи") || rawContent.contains("#продажа") || rawContent.contains("#оплата") || rawContent.toLowerCase(java.util.Locale.ROOT).contains("продаж"));
+                (rawContent.contains("#продажи") || rawContent.contains("#продажа")
+                        || rawContent.contains("#оплата") || rawContent.contains("#предоплата")
+                        || rawContent.contains("#чек") || rawContent.toLowerCase(java.util.Locale.ROOT).contains("продаж"));
         BigDecimal salesAmount = hasSalesTag ? deterministicAiFallbackService.extractSalesAmount(rawContent) : null;
         if (hasSalesTag && salesAmount != null && salesAmount.compareTo(BigDecimal.ZERO) > 0) {
             String entryDesc = rawContent.length() > 200 ? rawContent.substring(0, 200) : rawContent;
             String lowerContent = rawContent.toLowerCase(java.util.Locale.ROOT);
             boolean isPluralSnapshot = lowerContent.contains("#продажи") || lowerContent.contains("#отчет") || lowerContent.contains("#отчёт");
-            boolean isIndividualSale = !isPluralSnapshot && (lowerContent.contains("#продажа") || lowerContent.contains("#оплата") || lowerContent.contains("#чек"));
+            boolean isIndividualSale = !isPluralSnapshot && (lowerContent.contains("#продажа") || lowerContent.contains("#оплата")
+                    || lowerContent.contains("#предоплата") || lowerContent.contains("#чек"));
 
             if (report.getSalesEntries() == null) {
                 report.setSalesEntries(new ArrayList<>());
@@ -302,9 +317,12 @@ public class TelegramReportHandler {
             }
         }
 
-        // 5. Mailings / Outreach count (#рассылки 40 or #отчет 10 рассылок)
+        // 5. Mailings / Outreach count (#рассылки 40 or #отчет 10 рассылок, #трафик 20, #диалоги 10)
         boolean hasMailingsTag = StringUtils.hasText(rawContent) &&
-                (rawContent.contains("#рассылки") || rawContent.contains("#рассылка") || rawContent.toLowerCase(java.util.Locale.ROOT).contains("рассыл") || rawContent.contains("#отчет") || rawContent.contains("#отчёт"));
+                (rawContent.contains("#рассылки") || rawContent.contains("#рассылка")
+                        || rawContent.contains("#трафик") || rawContent.contains("#диалоги")
+                        || rawContent.toLowerCase(java.util.Locale.ROOT).contains("рассыл")
+                        || rawContent.contains("#отчет") || rawContent.contains("#отчёт"));
         Integer mailings = hasMailingsTag ? deterministicAiFallbackService.extractMailingsCount(rawContent) : null;
         if (hasMailingsTag && mailings != null && mailings >= 0) {
             int prevMailings = report.getMailingsCount() != null ? report.getMailingsCount() : 0;
@@ -593,8 +611,9 @@ public class TelegramReportHandler {
             if (lower.contains("#рилс") || lower.contains("#видео") || lower.contains("#карусель")
                     || lower.contains("#пост") || lower.contains("#сторителл") || lower.contains("#сторис")
                     || lower.contains("#контент") || lower.contains("#рассылки") || lower.contains("#рассылка")
-                    || lower.contains("#трафик") || lower.contains("#продажи") || lower.contains("#продажа")
-                    || lower.contains("#диалоги") || lower.contains("#вопрос") || lower.contains("#клиенты")
+                    || lower.contains("#трафик") || lower.contains("#диалоги") || lower.contains("#продажи")
+                    || lower.contains("#продажа") || lower.contains("#оплата") || lower.contains("#предоплата")
+                    || lower.contains("#чек") || lower.contains("#вопрос") || lower.contains("#клиенты")
                     || lower.contains("#отчет") || lower.contains("#отчёт") || lower.contains("#дз")
                     || lower.contains("#задание") || lower.contains("#reels") || lower.contains("#stories")) {
                 return true;
@@ -633,13 +652,24 @@ public class TelegramReportHandler {
             }
         }
 
-        // Photos attachment -> Carousel draft
+        // Photos attachment -> Carousel draft (exclude sales check/receipt photos and standalone question screenshots)
         if (message.hasPhoto() && !message.getPhoto().isEmpty()) {
-            List<PhotoSize> photos = message.getPhoto();
-            PhotoSize largest = photos.stream().max(Comparator.comparing(PhotoSize::getFileSize)).orElse(photos.get(photos.size() - 1));
-            boolean added = createOrUpdateDraft(report, student, "CAROUSEL", "Черновик карусели (фото)", null, largest.getFileId(), largest.getFileUniqueId(), deduplicationEnabled);
-            if (added) {
-                student.setTotalCarousels((student.getTotalCarousels() != null ? student.getTotalCarousels() : 0) + 1);
+            String lower = rawContent != null ? rawContent.toLowerCase(java.util.Locale.ROOT) : "";
+            boolean isSalesProofOrQuestion = (lower.contains("#чек") || lower.contains("#оплата") || lower.contains("#предоплата")
+                    || lower.contains("#продажа") || lower.contains("#продажи") || lower.contains("#вопрос"))
+                    && !lower.contains("#карусель") && !lower.contains("#пост") && !lower.contains("#контент");
+            if (!isSalesProofOrQuestion) {
+                List<PhotoSize> photos = message.getPhoto();
+                PhotoSize largest = photos.stream().max(Comparator.comparing(PhotoSize::getFileSize)).orElse(photos.get(photos.size() - 1));
+                boolean added = createOrUpdateDraft(report, student, "CAROUSEL", "Черновик карусели (фото)", null, largest.getFileId(), largest.getFileUniqueId(), deduplicationEnabled);
+                if (added) {
+                    boolean isSubsequentAlbumPhoto = message.getMediaGroupId() != null
+                            && report.getContentDrafts() != null
+                            && report.getContentDrafts().stream().filter(d -> "CAROUSEL".equals(d.getDraftType())).count() > 1;
+                    if (!isSubsequentAlbumPhoto) {
+                        student.setTotalCarousels((student.getTotalCarousels() != null ? student.getTotalCarousels() : 0) + 1);
+                    }
+                }
             }
         }
 

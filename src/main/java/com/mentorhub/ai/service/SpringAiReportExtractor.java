@@ -239,7 +239,7 @@ public class SpringAiReportExtractor {
             }
         }
 
-        return fallbackService.extractFacts(rawMessage, studentName);
+        return fallbackService.extractFacts(rawMessage, studentName, currency);
     }
 
     private ExtractedReportDto tryOpenRouterBonus(String systemPrompt, String rawMessage, String studentName) {

@@ -66,7 +66,7 @@ class AnalyticsControllerTest {
                 .andExpect(jsonPath("$.growthPercent", is("+500%")))
                 .andExpect(jsonPath("$.disciplineRate", is(95)))
                 .andExpect(jsonPath("$.generatedStoryCopy", containsString("🔥 КЕЙС ПОТОКА: Милана Горохова")))
-                .andExpect(jsonPath("$.generatedStoryCopy", containsString("Точка А: 30 000 ₽ ➡️ Точка Б: 180 000 ₽ (РОСТ x6.0!)")))
-                .andExpect(jsonPath("$.generatedStoryCopy", containsString("Средний чек: вырос с 3 000 ₽ до 45 000 ₽")));
+                .andExpect(jsonPath("$.generatedStoryCopy", containsString("Точка А: 30 000 BYN ➡️ Точка Б: 180 000 BYN (РОСТ x6.0!)")))
+                .andExpect(jsonPath("$.generatedStoryCopy", containsString("Средний чек: вырос с 3 000 BYN до 45 000 BYN")));
     }
 }

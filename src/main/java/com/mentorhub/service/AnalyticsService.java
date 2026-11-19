@@ -163,14 +163,28 @@ public class AnalyticsService {
     }
 
     private String generateStoryCaseText(Student student, String growth, int disciplineRate) {
+        String cur = student.getCurrency();
         return "🔥 КЕЙС ПОТОКА: " + student.getFullName() + "\n" +
                 "Ниша: " + student.getNiche() + "\n\n" +
-                "🚀 Точка А: " + formatRuCurrency(student.getInitialIncome()) + " ₽ ➡️ Точка Б: " + formatRuCurrency(student.getCurrentIncome()) + " ₽ (РОСТ x" + growth + "!)\n" +
-                "📈 Средний чек: вырос с " + formatRuCurrency(student.getInitialAvgTicket()) + " ₽ до " + formatRuCurrency(student.getCurrentAvgTicket()) + " ₽\n" +
+                "🚀 Точка А: " + formatCurrencyWithSymbol(student.getInitialIncome(), cur) + " ➡️ Точка Б: " + formatCurrencyWithSymbol(student.getCurrentIncome(), cur) + " (РОСТ x" + growth + "!)\n" +
+                "📈 Средний чек: вырос с " + formatCurrencyWithSymbol(student.getInitialAvgTicket(), cur) + " до " + formatCurrencyWithSymbol(student.getCurrentAvgTicket(), cur) + "\n" +
                 "🎬 Контент: " + (student.getTotalReels() != null ? student.getTotalReels() : 0) + " проверенных Reels за 3 недели\n" +
                 "✉️ Исходящий трафик: " + (student.getTotalMailings() != null ? student.getTotalMailings() : 0) + " рассылок по скрипту\n" +
                 "💎 Дисциплина сдачи отчетов: " + disciplineRate + "%\n\n" +
                 "«Она просто перестала сливать дедлайны и внедрила ежедневный трекинг действий»";
+    }
+
+    private String formatCurrencyWithSymbol(BigDecimal amount, String currency) {
+        String formatted = formatRuCurrency(amount);
+        String cur = org.springframework.util.StringUtils.hasText(currency) ? currency.trim().toUpperCase(Locale.ROOT) : "BYN";
+        return switch (cur) {
+            case "RUB", "RUBLE" -> formatted + " ₽";
+            case "USD" -> formatted + " $";
+            case "EUR" -> formatted + " €";
+            case "KZT" -> formatted + " ₸";
+            case "BYN" -> formatted + " BYN";
+            default -> formatted + " " + cur;
+        };
     }
 
     public static String formatRuCurrency(BigDecimal amount) {

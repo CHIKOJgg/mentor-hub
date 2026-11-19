@@ -24,6 +24,7 @@ import org.telegram.telegrambots.meta.api.objects.chat.Chat;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 
@@ -831,10 +832,17 @@ class TelegramMessageRouterTest {
     }
 
     @Test
-    @DisplayName("Mentor Ksenia sets calendar dated multi-day plan with gap days (e.g. Сегодня сторител, 20.11 пост, 24.11 рилс)")
+    @DisplayName("Mentor Ksenia sets calendar dated multi-day plan with gap days (e.g. Сегодня сторител, +2 дня пост, +6 дней рилс)")
     void routeIncomingMessage_mentorKseniaSetsCalendarDatedPlanWithGaps() {
         when(mentorSettingRepository.findFirstByOrderByIdAsc())
                 .thenReturn(Optional.of(MentorSetting.builder().mentorTgId(11223344L).reportAckEnabled(true).build()));
+
+        LocalDate today = LocalDate.now();
+        LocalDate d2 = today.plusDays(2);
+        LocalDate d6 = today.plusDays(6);
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd.MM");
+        String d2Str = d2.format(dtf);
+        String d6Str = d6.format(dtf);
 
         User ksenia = User.builder().id(11223344L).firstName("Ксения").isBot(false).userName("sidarenka_ks").build();
         Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
@@ -842,7 +850,7 @@ class TelegramMessageRouterTest {
                 .messageId(63)
                 .from(ksenia)
                 .chat(chat)
-                .text("/план\nСегодня сторител\n20.11 пост\n24.11 рилс")
+                .text("/план\nСегодня сторител\n" + d2Str + " пост\n" + d6Str + " рилс")
                 .build();
 
         Student student = Student.builder().id(1L).fullName("Даша").tgChatId(-10071010101L).build();
@@ -862,9 +870,47 @@ class TelegramMessageRouterTest {
         ArgumentCaptor<String> replyCaptor = ArgumentCaptor.forClass(String.class);
         verify(sender).sendSilentReply(eq(-10071010101L), eq(63), replyCaptor.capture());
         String reply = replyCaptor.getValue();
-        assertThat(reply).contains("📋 Наставник Ксения сохранила персональный план для Даша (3 задач до 24.11, старт: сегодня):");
+        assertThat(reply).contains("📋 Наставник Ксения сохранила персональный план для Даша (3 задач до " + d6Str + ", старт: сегодня):");
         assertThat(reply).contains("*День 1 (сегодня)*: сторител");
-        assertThat(reply).contains("День 3 (пт, 20.11): пост");
-        assertThat(reply).contains("День 7 (вт, 24.11): рилс");
+        assertThat(reply).contains("День 3 (").contains(d2Str + "): пост");
+        assertThat(reply).contains("День 7 (").contains(d6Str + "): рилс");
+    }
+
+    @Test
+    @DisplayName("isReportMessage recognizes #чек, #предоплата, #оплата, #трафик, and #диалоги as reports")
+    void isReportMessage_recognizesAllReportHashtags() {
+        assertThat(TelegramMessageRouter.isReportMessage(null, "#чек 50 BYN")).isTrue();
+        assertThat(TelegramMessageRouter.isReportMessage(null, "#предоплата 100")).isTrue();
+        assertThat(TelegramMessageRouter.isReportMessage(null, "#оплата 200")).isTrue();
+        assertThat(TelegramMessageRouter.isReportMessage(null, "#трафик 30")).isTrue();
+        assertThat(TelegramMessageRouter.isReportMessage(null, "#диалоги 15")).isTrue();
+        assertThat(TelegramMessageRouter.isReportMessage(null, "#рассылки 25")).isTrue();
+        assertThat(TelegramMessageRouter.isReportMessage(null, "#продажи 50000")).isTrue();
+        assertThat(TelegramMessageRouter.isReportMessage(null, "Привет девочки, как ваши дела?")).isFalse();
+    }
+
+    @Test
+    @DisplayName("Casual chatter between group participants ('Привет девочки', 'Доброе утро') never triggers text replies")
+    void routeIncomingMessage_casualConversationWithoutBot_neverSendsReply() {
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(false).build()));
+
+        Student student = Student.builder().id(1L).fullName("Даша").tgChatId(-10071010101L).build();
+        when(studentRepository.findByTgChatId(-10071010101L)).thenReturn(Optional.of(student));
+
+        TelegramSenderService sender = mock(TelegramSenderService.class);
+        router = new TelegramMessageRouter(studentRepository, mentorSettingRepository, adminTokenRepository,
+                auditMessageLogRepository, stubReportHandler, stubCallbackHandler, sender);
+
+        User dasha = User.builder().id(554433L).firstName("Даша").isBot(false).userName("dasha_stylist").build();
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+
+        Message msg1 = Message.builder().messageId(101).from(dasha).chat(chat).text("Привет девочки! Как настрой?").build();
+        router.routeIncomingMessage(msg1, 143L, "MINI_GROUP");
+
+        Message msg2 = Message.builder().messageId(102).from(dasha).chat(chat).text("Доброе утро всем) Хорошего дня").build();
+        router.routeIncomingMessage(msg2, 143L, "MINI_GROUP");
+
+        verifyNoInteractions(sender);
     }
 }

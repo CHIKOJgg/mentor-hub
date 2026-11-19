@@ -644,6 +644,7 @@ public class TelegramMessageRouter {
                     || lower.contains("#пост") || lower.contains("#сторителл") || lower.contains("#сторис")
                     || lower.contains("#контент") || lower.contains("#рассылки") || lower.contains("#рассылка")
                     || lower.contains("#трафик") || lower.contains("#продажи") || lower.contains("#продажа")
+                    || lower.contains("#оплата") || lower.contains("#предоплата") || lower.contains("#чек")
                     || lower.contains("#диалоги") || lower.contains("#вопрос") || lower.contains("#клиенты")
                     || lower.contains("#отчет") || lower.contains("#отчёт") || lower.contains("#дз")
                     || lower.contains("#задание") || lower.contains("#reels") || lower.contains("#reel")

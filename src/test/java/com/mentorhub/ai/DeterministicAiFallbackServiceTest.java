@@ -112,4 +112,65 @@ class DeterministicAiFallbackServiceTest {
 
         assertThat(dto.aiSummary()).contains("30").contains("45000");
     }
+
+    @Test
+    @DisplayName("Extracts sales amount from #предоплата, #чек, #оплата, #продажа with various currency formats")
+    void extractSalesAmount_variousHashtagsAndCurrencies() {
+        // #предоплата
+        assertThat(fallbackService.extractSalesAmount("#предоплата 50BYN"))
+                .isEqualByComparingTo(new BigDecimal("50.00"));
+        assertThat(fallbackService.extractSalesAmount("#предоплата 15000"))
+                .isEqualByComparingTo(new BigDecimal("15000.00"));
+
+        // #чек
+        assertThat(fallbackService.extractSalesAmount("#чек 100 BYN"))
+                .isEqualByComparingTo(new BigDecimal("100.00"));
+        assertThat(fallbackService.extractSalesAmount("#чек: 25000"))
+                .isEqualByComparingTo(new BigDecimal("25000.00"));
+
+        // Preceding currency symbol ($50, €100, ₽20000)
+        assertThat(fallbackService.extractSalesAmount("#продажа $50"))
+                .isEqualByComparingTo(new BigDecimal("50.00"));
+        assertThat(fallbackService.extractSalesAmount("#оплата €100"))
+                .isEqualByComparingTo(new BigDecimal("100.00"));
+        assertThat(fallbackService.extractSalesAmount("#продажа ₽20000"))
+                .isEqualByComparingTo(new BigDecimal("20000.00"));
+
+        // Hyphenated format and preposition "на"
+        assertThat(fallbackService.extractSalesAmount("#продажа - 50 BYN"))
+                .isEqualByComparingTo(new BigDecimal("50.00"));
+        assertThat(fallbackService.extractSalesAmount("1 продажа на 50 BYN"))
+                .isEqualByComparingTo(new BigDecimal("50.00"));
+
+        // Decimals with comma
+        assertThat(fallbackService.extractSalesAmount("#продажа 50,00 BYN"))
+                .isEqualByComparingTo(new BigDecimal("50.00"));
+    }
+
+    @Test
+    @DisplayName("Extracts mailings count correctly from #трафик, #диалоги, and natural phrases")
+    void extractMailingsCount_trafficAndDialogs() {
+        // #трафик
+        assertThat(fallbackService.extractMailingsCount("#трафик 25"))
+                .isEqualTo(25);
+        assertThat(fallbackService.extractMailingsCount("сегодня 30 трафик по теплой базе"))
+                .isEqualTo(30);
+
+        // #диалоги
+        assertThat(fallbackService.extractMailingsCount("#диалоги 10"))
+                .isEqualTo(10);
+        assertThat(fallbackService.extractMailingsCount("отработано 15 диалогов"))
+                .isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("Extract facts respects student currency parameter")
+    void extractFacts_respectsCurrency() {
+        String msg = "#продажа 100\n#рассылки 20";
+        ExtractedReportDto dtoUsd = fallbackService.extractFacts(msg, "Даша", "USD");
+        assertThat(dtoUsd.aiSummary()).contains("USD");
+
+        ExtractedReportDto dtoByn = fallbackService.extractFacts(msg, "Даша", "BYN");
+        assertThat(dtoByn.aiSummary()).contains("BYN");
+    }
 }

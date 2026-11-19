@@ -201,4 +201,63 @@ class DailyReminderSchedulerTest {
         assertThat(caringReplyText).contains("Лиза, доброе утро!").contains("до 21:00");
         assertThat(caringReplyText).doesNotContain("кнопку");
     }
+
+    @Test
+    @DisplayName("Evening reminder IS sent if student only recorded morning focus but no actual report")
+    void sendEveningReminderIfDebtor_withMorningFocusOnly_sendsReminder() {
+        Student student = Student.builder().id(1L).fullName("Мария").tgChatId(71010101L).build();
+        LocalDate today = LocalDate.of(2026, 11, 19);
+
+        // Report exists but has only morning focus actions (hasActualSubmission == false)
+        DailyReport morningOnlyReport = DailyReport.builder()
+                .student(student)
+                .reportDate(today)
+                .status("PENDING")
+                .reflectionActions("🎯 Фокус дня: 30 рассылок")
+                .mailingsCount(0)
+                .salesTotal(java.math.BigDecimal.ZERO)
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), eq(today)))
+                .thenReturn(Optional.of(morningOnlyReport));
+
+        reminderChatId = null;
+        reminderText = null;
+
+        MentorSetting settings = MentorSetting.builder().deadlineTime(java.time.LocalTime.of(21, 0)).build();
+        scheduler.sendEveningReminderIfDebtor(student, settings, today);
+
+        // Reminder should be sent!
+        assertThat(reminderChatId).isEqualTo(71010101L);
+        assertThat(reminderText).contains("до дедлайна сдачи отчета остался 1 час");
+    }
+
+    @Test
+    @DisplayName("Evening reminder is SKIPPED once student submits actual report")
+    void sendEveningReminderIfDebtor_withActualReportSubmitted_skipsReminder() {
+        Student student = Student.builder().id(1L).fullName("Мария").tgChatId(71010101L).build();
+        LocalDate today = LocalDate.of(2026, 11, 19);
+
+        // Report has actual mailings submitted (hasActualSubmission == true)
+        DailyReport submittedReport = DailyReport.builder()
+                .student(student)
+                .reportDate(today)
+                .status("PENDING")
+                .mailingsCount(40)
+                .salesTotal(java.math.BigDecimal.ZERO)
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), eq(today)))
+                .thenReturn(Optional.of(submittedReport));
+
+        reminderChatId = null;
+        reminderText = null;
+
+        MentorSetting settings = MentorSetting.builder().deadlineTime(java.time.LocalTime.of(21, 0)).build();
+        scheduler.sendEveningReminderIfDebtor(student, settings, today);
+
+        // Reminder should be skipped!
+        assertThat(reminderChatId).isNull();
+        assertThat(reminderText).isNull();
+    }
 }
