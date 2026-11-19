@@ -21,6 +21,7 @@ import java.time.*;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @Slf4j
@@ -239,12 +240,15 @@ public class DailyReminderScheduler {
         int currentDay = studentService != null ? studentService.getCurrentDayNumber(student, studentDate) : 1;
 
         if (StringUtils.hasText(todayTask)) {
+            String dayHeader = studentService != null && studentService.isCalendarDatedPlan(student.getTaskPlanRaw(), studentDate)
+                    ? "Твой персональный фокус на сегодня:"
+                    : String.format(Locale.ROOT, "Твой персональный фокус на сегодня (День %d):", currentDay);
             String text = String.format(
                     "🌸 %s, доброе утро!\n\n" +
-                    "Твой персональный фокус на сегодня (День %d):\n" +
+                    "%s\n" +
                     "🎯 %s\n\n" +
                     "Не забывай сдать отчёт до %s ❤️",
-                    student.getFullName(), currentDay, todayTask, deadlineStr
+                    student.getFullName(), dayHeader, todayTask, deadlineStr
             );
             recordDailyFocus(student, studentDate, todayTask);
             telegramSenderService.sendCaringReply(student.getTgChatId(), null, text, businessConnectionId);

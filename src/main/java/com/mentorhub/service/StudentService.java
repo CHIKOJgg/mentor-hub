@@ -142,7 +142,7 @@ public class StudentService {
             student.setTaskPlanStartDate(LocalDate.now(MINSK_ZONE));
         }
         if (request.currentTaskDay() != null) {
-            student.setCurrentTaskDay(request.currentTaskDay());
+            student.setCurrentTaskDay(Math.max(1, request.currentTaskDay()));
             student.setTaskPlanStartDate(LocalDate.now(MINSK_ZONE));
         }
         if (request.currency() != null) student.setCurrency(request.currency().toUpperCase(Locale.ROOT));
@@ -326,7 +326,7 @@ public class StudentService {
 
         LocalDate today = LocalDate.now(MINSK_ZONE);
         String todayTask = getTodayTask(student, today);
-        int currentDay = getCurrentDayNumber(student, today);
+        int currentDay = Math.max(1, getCurrentDayNumber(student, today));
 
         return new StudentDisciplineResponse(
                 "st-" + student.getId(),
@@ -387,7 +387,7 @@ public class StudentService {
             return plan;
         }
         String[] lines = raw.split("\\r?\\n");
-        Pattern dayPattern = Pattern.compile("^(?:день\\s*(\\d+)|(\\d+)\\s*день|(\\d+)\\s*[\\.\\)])\\s*[-:—]?\\s*(.+)$", Pattern.CASE_INSENSITIVE);
+        Pattern dayPattern = Pattern.compile("^(?:день\\s*(\\d+)|(\\d+)\\s*день|(\\d+)\\s*(?:\\.(?!\\d)|\\)))\\s*[-:—]?\\s*(.+)$", Pattern.CASE_INSENSITIVE);
         int implicitDayCounter = 1;
         boolean anyExplicitDays = false;
         for (String line : lines) {
@@ -409,16 +409,27 @@ public class StudentService {
             }
         }
         if (!anyExplicitDays) {
+            LocalDate now = LocalDate.now();
             for (String line : lines) {
                 String trimmed = line.trim();
                 if (trimmed.isEmpty() || trimmed.startsWith("+") || trimmed.toLowerCase(Locale.ROOT).startsWith("задача")) continue;
+                if (parseDatedLine(trimmed, now) != null) continue;
                 plan.put(implicitDayCounter++, trimmed.replaceFirst("^[-*•]\\s*", ""));
             }
             if (plan.isEmpty() && StringUtils.hasText(raw)) {
-                plan.put(1, raw.trim());
+                boolean hasDatedLines = raw.lines().anyMatch(l -> parseDatedLine(l, now) != null);
+                if (!hasDatedLines) {
+                    plan.put(1, raw.trim());
+                }
             }
         }
         return plan;
+    }
+
+    public boolean isCalendarDatedPlan(String raw, LocalDate today) {
+        if (!StringUtils.hasText(raw)) return false;
+        final LocalDate refDate = today != null ? today : LocalDate.now(MINSK_ZONE);
+        return raw.lines().anyMatch(l -> parseDatedLine(l, refDate) != null);
     }
 
     public record PlanSchedule(
@@ -643,6 +654,10 @@ public class StudentService {
         }
         DayOfWeek targetDow = parseDayOfWeek(clean);
         if (targetDow != null) {
+            LocalDate thisWeekDow = today.with(TemporalAdjusters.previousOrSame(targetDow));
+            if (!thisWeekDow.isBefore(today.minusDays(4))) {
+                return thisWeekDow;
+            }
             int diff = (targetDow.getValue() - today.getDayOfWeek().getValue() + 7) % 7;
             if (diff == 0) diff = 7;
             return today.plusDays(diff);
@@ -657,7 +672,8 @@ public class StudentService {
                         ? (dateMatcher.group(3).length() == 2 ? 2000 + Integer.parseInt(dateMatcher.group(3)) : Integer.parseInt(dateMatcher.group(3)))
                         : today.getYear();
                 LocalDate parsedDate = LocalDate.of(year, month, day);
-                if (dateMatcher.group(3) == null && parsedDate.isBefore(today)) {
+                // Only roll over to next year if the date is more than 6 months in the past
+                if (dateMatcher.group(3) == null && parsedDate.isBefore(today.minusMonths(6))) {
                     parsedDate = parsedDate.plusYears(1);
                 }
                 return parsedDate;
@@ -669,30 +685,69 @@ public class StudentService {
 
     public int getCurrentDayNumber(Student student, LocalDate today) {
         if (student == null) return 1;
-        int baseDay = student.getCurrentTaskDay() != null ? student.getCurrentTaskDay() : 1;
+        int baseDay = student.getCurrentTaskDay() != null && student.getCurrentTaskDay() >= 1
+                ? student.getCurrentTaskDay() : 1;
         LocalDate startDate = student.getTaskPlanStartDate() != null ? student.getTaskPlanStartDate() : today;
         if (today == null || startDate == null) {
             return baseDay;
+        }
+        if (startDate.getYear() > today.getYear()) {
+            startDate = startDate.withYear(today.getYear());
         }
         if (today.isBefore(startDate)) {
             return 0; // Plan has not started yet
         }
         long daysDiff = ChronoUnit.DAYS.between(startDate, today);
-        return baseDay + (int) daysDiff;
+        return Math.max(1, baseDay + (int) daysDiff);
+    }
+
+    public ZoneId resolveStudentZone(Student student) {
+        if (student != null && StringUtils.hasText(student.getTimezone())) {
+            try {
+                return ZoneId.of(student.getTimezone());
+            } catch (Exception ex) {
+                log.warn("Invalid timezone '{}' for student #{}, defaulting to Europe/Minsk", student.getTimezone(), student.getId());
+            }
+        }
+        return MINSK_ZONE;
     }
 
     public String getTodayTask(Student student, LocalDate today) {
         if (student == null || !StringUtils.hasText(student.getTaskPlanRaw())) {
             return null;
         }
+        final LocalDate targetDate = today != null ? today : LocalDate.now(resolveStudentZone(student));
+
+        // 1. Direct calendar date lookup: if plan contains an explicit task for today
+        for (String line : student.getTaskPlanRaw().lines().toList()) {
+            DatedLine dl = parseDatedLine(line, targetDate);
+            if (dl != null && targetDate.equals(dl.date()) && StringUtils.hasText(dl.task())) {
+                return dl.task();
+            }
+        }
+
+        // If this is a calendar-dated plan, but has no scheduled task for today, it's a free day
+        boolean hasAnyDatedLines = student.getTaskPlanRaw().lines()
+                .anyMatch(line -> parseDatedLine(line, targetDate) != null);
+        if (hasAnyDatedLines) {
+            return null;
+        }
+
+        // 2. Schedule-based lookup for day-numbered plans ("1 день - ...", "2 день - ...")
         LocalDate startDate = student.getTaskPlanStartDate();
-        if (today != null && startDate != null && today.isBefore(startDate)) {
+        if (startDate != null && startDate.getYear() > targetDate.getYear()) {
+            startDate = startDate.withYear(targetDate.getYear());
+        }
+        if (startDate != null && targetDate.isBefore(startDate)) {
             return null; // Plan has not started yet
         }
+
         Map<Integer, String> plan = parseTaskPlan(student.getTaskPlanRaw());
         if (plan.isEmpty()) return null;
-        int dayNum = getCurrentDayNumber(student, today);
-        if (dayNum <= 0) return null;
+
+        int dayNum = getCurrentDayNumber(student, targetDate);
+        if (dayNum <= 0) dayNum = 1;
+
         if (plan.containsKey(dayNum)) {
             return plan.get(dayNum);
         }

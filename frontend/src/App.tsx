@@ -407,7 +407,7 @@ const mapApiStudent = (student: ApiStudent): StudentDiscipline => {
     initialAvgTicket: Number(student.initialAvgTicket) || 0,
     currentAvgTicket: Number(student.currentAvgTicket) || 0,
     taskPlanRaw: student.taskPlanRaw,
-    currentTaskDay: student.currentTaskDay ?? 1,
+    currentTaskDay: Math.max(1, student.currentTaskDay || 1),
     todayTask: student.todayTask,
     weekDays: student.weekDays ?? [],
     zoomSessions: student.zoomSessions?.map(mapApiZoomSession),
@@ -433,7 +433,7 @@ const toApiStudentPayload = (student: StudentDiscipline) => ({
   isPaused: student.isOnPause,
   pauseReason: student.pauseReason ?? null,
   taskPlanRaw: student.taskPlanRaw ?? null,
-  currentTaskDay: student.currentTaskDay ?? 1,
+  currentTaskDay: Math.max(1, student.currentTaskDay || 1),
 });
 
 const mapApiTaskRule = (rule: ApiTaskRule): TaskRule => ({ ...rule, enabled: rule.isActive ?? true });

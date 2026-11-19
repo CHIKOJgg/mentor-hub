@@ -229,7 +229,7 @@ export const EditStudentModal = ({
                   type="number"
                   min="1"
                   max="100"
-                  value={student.currentTaskDay ?? 1}
+                  value={Math.max(1, student.currentTaskDay || 1)}
                   onChange={e => updateEditingStudent({ ...student, currentTaskDay: Math.max(1, Number(e.target.value) || 1) })}
                   className="w-16 text-xs px-2 py-1 rounded-lg border border-indigo-200 bg-white text-center font-bold text-indigo-900 focus:outline-none focus:border-indigo-500"
                 />

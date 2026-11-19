@@ -377,6 +377,88 @@ class StudentServiceTest {
     }
 
     @Test
+    @DisplayName("parsePlanWithSchedule starting on recent past date (e.g. с 17.11 when today is 18.11) keeps current year")
+    void testParsePlanWithSchedulePastRecentDateKeepsCurrentYear() {
+        LocalDate today = LocalDate.of(2026, 11, 18);
+        java.time.ZoneId zone = java.time.ZoneId.of("Europe/Minsk");
+
+        String plan = """
+                с 17.11
+                Каждый день сторис-челлендж
+                1 день работа+анонс
+                2 день сторителл оффер
+                3 день сторис про комплекс
+                """;
+        StudentService.PlanSchedule schedule = StudentService.parsePlanWithSchedule(plan, today, zone);
+        assertThat(schedule.startDate()).isEqualTo(LocalDate.of(2026, 11, 17));
+
+        Student student = Student.builder()
+                .taskPlanRaw(schedule.cleanPlan())
+                .currentTaskDay(1)
+                .taskPlanStartDate(schedule.startDate())
+                .build();
+
+        // On 17.11 (start date) -> Day 1
+        assertThat(studentService.getCurrentDayNumber(student, LocalDate.of(2026, 11, 17))).isEqualTo(1);
+        // On 18.11 -> Day 2
+        assertThat(studentService.getCurrentDayNumber(student, LocalDate.of(2026, 11, 18))).isEqualTo(2);
+        assertThat(studentService.getTodayTask(student, LocalDate.of(2026, 11, 18))).isEqualTo("сторителл оффер");
+        // On 19.11 -> Day 3
+        assertThat(studentService.getCurrentDayNumber(student, LocalDate.of(2026, 11, 19))).isEqualTo(3);
+        assertThat(studentService.getTodayTask(student, LocalDate.of(2026, 11, 19))).isEqualTo("сторис про комплекс");
+    }
+
+    @Test
+    @DisplayName("getTodayTask with calendar dated lines returns task for today directly")
+    void testGetTodayTaskCalendarDatesDirectMatch() {
+        String plan = """
+                19.11 сторис ответы на вопросы + пост
+                20.11 показать лайф + прогрев после конкурса
+                """;
+
+        Student student = Student.builder()
+                .taskPlanRaw(plan)
+                .currentTaskDay(3)
+                .taskPlanStartDate(LocalDate.of(2026, 11, 18))
+                .build();
+
+        // On 19.11 -> matches 19.11 line
+        assertThat(studentService.getTodayTask(student, LocalDate.of(2026, 11, 19)))
+                .isEqualTo("сторис ответы на вопросы + пост");
+
+        // On 20.11 -> matches 20.11 line
+        assertThat(studentService.getTodayTask(student, LocalDate.of(2026, 11, 20)))
+                .isEqualTo("показать лайф + прогрев после конкурса");
+
+        // On 21.11 -> dated plan with no task for 21.11 -> returns null (rest day)
+        assertThat(studentService.getTodayTask(student, LocalDate.of(2026, 11, 21))).isNull();
+    }
+
+    @Test
+    @DisplayName("getCurrentDayNumber heals 0 base day and future year corruption")
+    void testCurrentDayNumberHealsZeroAndFutureYear() {
+        Student studentWithZero = Student.builder()
+                .taskPlanRaw("1 день сторис\n2 день рилс")
+                .currentTaskDay(0)
+                .taskPlanStartDate(LocalDate.of(2026, 11, 18))
+                .build();
+
+        // On 19.11, base day 0 is healed to 1, daysDiff is 1 -> returns day 2
+        assertThat(studentService.getCurrentDayNumber(studentWithZero, LocalDate.of(2026, 11, 19))).isEqualTo(2);
+        assertThat(studentService.getTodayTask(studentWithZero, LocalDate.of(2026, 11, 19))).isEqualTo("рилс");
+
+        // Future year corruption (2027 instead of 2026) is auto-healed
+        Student studentWithFutureYear = Student.builder()
+                .taskPlanRaw("1 день сторис\n2 день рилс")
+                .currentTaskDay(1)
+                .taskPlanStartDate(LocalDate.of(2027, 11, 18))
+                .build();
+
+        assertThat(studentService.getCurrentDayNumber(studentWithFutureYear, LocalDate.of(2026, 11, 19))).isEqualTo(2);
+        assertThat(studentService.getTodayTask(studentWithFutureYear, LocalDate.of(2026, 11, 19))).isEqualTo("рилс");
+    }
+
+    @Test
     @DisplayName("Creates and updates student with currency and timezone")
     void testCreateAndUpdateStudentCurrencyAndTimezone() {
         CreateStudentRequest createReq = new CreateStudentRequest(
