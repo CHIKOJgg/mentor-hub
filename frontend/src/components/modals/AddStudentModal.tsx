@@ -106,6 +106,9 @@ export function AddStudentModal({
             >
               <option value="BYN">BYN (Белорусский рубль)</option>
               <option value="RUB">RUB (Российский рубль, ₽)</option>
+              <option value="USD">USD (Доллар США, $)</option>
+              <option value="EUR">EUR (Евро, €)</option>
+              <option value="KZT">KZT (Казахстанский тенге, ₸)</option>
             </select>
           </label>
 
@@ -126,7 +129,7 @@ export function AddStudentModal({
           </label>
 
           <label className="text-xs font-semibold text-slate-600">
-            Доход на старте (Точка А), {newStudent.currency === 'RUB' ? '₽' : 'BYN'}
+            Доход на старте (Точка А), {newStudent.currency === 'RUB' ? '₽' : (newStudent.currency === 'USD' ? '$' : (newStudent.currency === 'EUR' ? '€' : (newStudent.currency === 'KZT' ? '₸' : 'BYN')))}
             <input
               type="number"
               min={0}
@@ -138,7 +141,7 @@ export function AddStudentModal({
           </label>
 
           <label className="text-xs font-semibold text-slate-600">
-            Средний чек на старте, {newStudent.currency === 'RUB' ? '₽' : 'BYN'}
+            Средний чек на старте, {newStudent.currency === 'RUB' ? '₽' : (newStudent.currency === 'USD' ? '$' : (newStudent.currency === 'EUR' ? '€' : (newStudent.currency === 'KZT' ? '₸' : 'BYN')))}
             <input
               type="number"
               min={0}

@@ -6,6 +6,7 @@ import com.mentorhub.ai.service.SpringAiReportExtractor;
 import com.mentorhub.dto.ReflectionSummaryDto;
 import com.mentorhub.entity.DailyReport;
 import com.mentorhub.entity.MentorSetting;
+import com.mentorhub.entity.SalesEntry;
 import com.mentorhub.entity.Student;
 import com.mentorhub.entity.ZoomMeeting;
 import com.mentorhub.repository.ContentDraftRepository;
@@ -348,6 +349,113 @@ class TelegramReportHandlerTest {
         assertThat(r2.getSalesTotal()).isEqualByComparingTo(new BigDecimal("250.00"));
         assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("250.00"));
         assertThat(r2.getSalesEntries()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("Multiple sales of identical price (#продажа 45 and #продажа 45) on different message IDs are both recorded")
+    void handleStudentMessage_allowsMultipleSalesWithIdenticalAmountOnDifferentMessages() {
+        Student student = Student.builder()
+                .id(1L)
+                .fullName("Настя")
+                .tgChatId(71010101L)
+                .currency("BYN")
+                .currentIncome(BigDecimal.ZERO)
+                .build();
+
+        DailyReport existingReport = DailyReport.builder()
+                .id(10L)
+                .student(student)
+                .reportDate(LocalDate.now())
+                .status("PENDING")
+                .salesTotal(BigDecimal.ZERO)
+                .contentDrafts(new ArrayList<>())
+                .reelSubmissions(new ArrayList<>())
+                .salesEntries(new ArrayList<>())
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.of(existingReport));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(false).build()));
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+
+        // Client 1 paid 45
+        Message msg1 = Message.builder().messageId(801).chat(chat).text("#продажа 45").build();
+        DailyReport r1 = handler.handleStudentMessage(student, msg1);
+        assertThat(r1.getSalesTotal()).isEqualByComparingTo(new BigDecimal("45.00"));
+
+        // Client 2 also paid 45 (different messageId)
+        Message msg2 = Message.builder().messageId(802).chat(chat).text("#продажа 45").build();
+        DailyReport r2 = handler.handleStudentMessage(student, msg2);
+        assertThat(r2.getSalesTotal()).isEqualByComparingTo(new BigDecimal("90.00"));
+        assertThat(r2.getSalesEntries()).hasSize(2);
+
+        // Network retry of msg2 should NOT double-count
+        DailyReport r3 = handler.handleStudentMessage(student, msg2);
+        assertThat(r3.getSalesTotal()).isEqualByComparingTo(new BigDecimal("90.00"));
+        assertThat(r3.getSalesEntries()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("Non-sales message (#сторителл) does NOT trigger AI sales fallback or add to existing hashtag sales")
+    void handleStudentMessage_nonSalesMessageDoesNotAddAiSalesToExistingHashtagSales() {
+        Student student = Student.builder()
+                .id(12L)
+                .fullName("Валерия Панкова")
+                .tgChatId(71010101L)
+                .currency("BYN")
+                .currentIncome(new BigDecimal("100.00"))
+                .build();
+
+        DailyReport existingReport = DailyReport.builder()
+                .id(36L)
+                .student(student)
+                .reportDate(LocalDate.now())
+                .status("PENDING")
+                .salesTotal(new BigDecimal("100.00"))
+                .contentDrafts(new ArrayList<>())
+                .reelSubmissions(new ArrayList<>())
+                .salesEntries(new ArrayList<SalesEntry>(List.of(
+                        SalesEntry.builder().amount(new BigDecimal("55.00")).description("[msg 1] #продажа 55").build(),
+                        SalesEntry.builder().amount(new BigDecimal("45.00")).description("[msg 2] #продажа 45").build()
+                )))
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(12L), any(LocalDate.class)))
+                .thenReturn(Optional.of(existingReport));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(false).build()));
+
+        SpringAiReportExtractor hallucinatingExtractor = new SpringAiReportExtractor(deterministicAiFallbackService, null, null, "mock-key") {
+            @Override
+            public ExtractedReportDto extractFacts(String rawMessage, String studentName, String currency) {
+                return new ExtractedReportDto(List.of(), new BigDecimal("100000.00"), 0, 0, null, "NORMAL", "AI Summary", null, null);
+            }
+        };
+        TelegramReportHandler customHandler = new TelegramReportHandler(
+                dailyReportRepository,
+                studentRepository,
+                mentorSettingRepository,
+                zoomMeetingRepository,
+                reelSubmissionRepository,
+                contentDraftRepository,
+                salesEntryRepository,
+                reelsAntiFraudEngine,
+                hallucinatingExtractor,
+                deterministicAiFallbackService,
+                stubSenderService
+        );
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+        Message storytellMsg = Message.builder().messageId(803).chat(chat).text("#сторителл прогрев").build();
+
+        DailyReport report = customHandler.handleStudentMessage(student, storytellMsg);
+
+        // Sales total must remain exactly 100.00, NOT 100045 or 100100
+        assertThat(report.getSalesTotal()).isEqualByComparingTo(new BigDecimal("100.00"));
+        assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("100.00"));
+        assertThat(report.getSalesEntries()).hasSize(2);
     }
 
     @Test

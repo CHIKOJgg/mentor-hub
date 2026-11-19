@@ -262,7 +262,9 @@ public class TelegramReportHandler {
                         || rawContent.contains("#чек") || rawContent.toLowerCase(java.util.Locale.ROOT).contains("продаж"));
         BigDecimal salesAmount = hasSalesTag ? deterministicAiFallbackService.extractSalesAmount(rawContent) : null;
         if (hasSalesTag && salesAmount != null && salesAmount.compareTo(BigDecimal.ZERO) > 0) {
-            String entryDesc = rawContent.length() > 200 ? rawContent.substring(0, 200) : rawContent;
+            Integer msgId = message != null ? message.getMessageId() : null;
+            String msgPrefix = msgId != null ? "[msg " + msgId + "] " : "";
+            String entryDesc = msgPrefix + (rawContent.length() > 200 ? rawContent.substring(0, 200) : rawContent);
             String lowerContent = rawContent.toLowerCase(java.util.Locale.ROOT);
             boolean isPluralSnapshot = lowerContent.contains("#продажи") || lowerContent.contains("#отчет") || lowerContent.contains("#отчёт");
             boolean isIndividualSale = !isPluralSnapshot && (lowerContent.contains("#продажа") || lowerContent.contains("#оплата")
@@ -276,9 +278,10 @@ public class TelegramReportHandler {
 
             if (isIndividualSale) {
                 // Individual sale event (#продажа 50BYN, #оплата 100):
-                // Deduplicate if identical message text already recorded
-                boolean isDuplicateSale = report.getSalesEntries().stream()
-                        .anyMatch(se -> entryDesc.equals(se.getDescription()));
+                // Deduplicate only if exact Telegram messageId was already recorded
+                boolean isDuplicateSale = msgId != null
+                        ? report.getSalesEntries().stream().anyMatch(se -> se.getDescription() != null && se.getDescription().startsWith("[msg " + msgId + "]"))
+                        : report.getSalesEntries().stream().anyMatch(se -> entryDesc.equals(se.getDescription()));
                 if (!isDuplicateSale) {
                     BigDecimal newTotal = currentTotal.add(salesAmount);
                     report.setSalesTotal(newTotal);
@@ -411,13 +414,19 @@ public class TelegramReportHandler {
             }
 
             // Natural language sales fallback if hashtag was omitted
-            if ((salesAmount == null || salesAmount.compareTo(BigDecimal.ZERO) == 0) &&
+            boolean currentMessageMentionsSales = StringUtils.hasText(rawContent) &&
+                    (rawContent.toLowerCase(java.util.Locale.ROOT).matches(".*(?ui)(?:прода[лаже]|оплат[ила]|чек|купил[аи]|перевел[аи]|перечисл|предоплат|выручк|доход|руб|byn|usd|eur|\\$|€).*")
+                            || (message != null && (message.hasVoice() || message.hasVideoNote())));
+
+            boolean hasExplicitSalesEntries = report.getSalesEntries() != null && report.getSalesEntries().stream()
+                    .anyMatch(se -> se.getDescription() != null && !se.getDescription().startsWith("AI:"));
+
+            if (!hasExplicitSalesEntries && currentMessageMentionsSales &&
+                    (salesAmount == null || salesAmount.compareTo(BigDecimal.ZERO) == 0) &&
                     aiFacts.salesAmount() != null && aiFacts.salesAmount().compareTo(BigDecimal.ZERO) > 0) {
-                boolean isDuplicateAiSale = report.getSalesEntries() != null && report.getSalesEntries().stream()
-                        .anyMatch(se -> se.getAmount() != null && se.getAmount().compareTo(aiFacts.salesAmount()) == 0);
-                if (!isDuplicateAiSale) {
-                    BigDecimal currentSales = report.getSalesTotal() != null ? report.getSalesTotal() : BigDecimal.ZERO;
-                    report.setSalesTotal(currentSales.add(aiFacts.salesAmount()));
+                BigDecimal currentSales = report.getSalesTotal() != null ? report.getSalesTotal() : BigDecimal.ZERO;
+                if (currentSales.compareTo(BigDecimal.ZERO) == 0) {
+                    report.setSalesTotal(aiFacts.salesAmount());
                     SalesEntry entry = SalesEntry.builder()
                             .report(report)
                             .student(student)

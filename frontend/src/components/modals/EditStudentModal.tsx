@@ -378,7 +378,7 @@ export const EditStudentModal = ({
           </section>
 
           <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1">Финансовая цель потока (₽):</label>
+            <label className="text-xs font-semibold text-slate-600 block mb-1">Финансовая цель потока ({currSymbol}):</label>
             <input
               type="number"
               value={student.portalData?.targetIncome ?? student.initialIncome * 2}

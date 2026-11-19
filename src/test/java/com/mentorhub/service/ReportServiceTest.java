@@ -150,13 +150,26 @@ class ReportServiceTest {
     }
 
     @Test
-    @DisplayName("cleanQuestionText returns null for 'null', 'none', 'нет', '[12:00] null'")
+    @DisplayName("cleanQuestionText returns null for 'null', 'none', 'нет', '[12:00] null', '---', quotes, and phrases like 'все понятно'")
     void testCleanQuestionText() {
         assertThat(reportService.cleanQuestionText("null")).isNull();
         assertThat(reportService.cleanQuestionText("NULL")).isNull();
+        assertThat(reportService.cleanQuestionText("\"null\"")).isNull();
+        assertThat(reportService.cleanQuestionText("'null'")).isNull();
+        assertThat(reportService.cleanQuestionText("[null]")).isNull();
         assertThat(reportService.cleanQuestionText("none")).isNull();
         assertThat(reportService.cleanQuestionText("нет")).isNull();
+        assertThat(reportService.cleanQuestionText("нету")).isNull();
+        assertThat(reportService.cleanQuestionText("нема")).isNull();
+        assertThat(reportService.cleanQuestionText("---")).isNull();
+        assertThat(reportService.cleanQuestionText("--")).isNull();
+        assertThat(reportService.cleanQuestionText("[22:40] ---")).isNull();
         assertThat(reportService.cleanQuestionText("[15:47] null")).isNull();
+        assertThat(reportService.cleanQuestionText("все понятно")).isNull();
+        assertThat(reportService.cleanQuestionText("всё понятно")).isNull();
+        assertThat(reportService.cleanQuestionText("нет вопросов")).isNull();
+        assertThat(reportService.cleanQuestionText("вопросов нет")).isNull();
+        assertThat(reportService.cleanQuestionText("затыков нет")).isNull();
         assertThat(reportService.cleanQuestionText("Как закрыть клиента на 50к?")).isEqualTo("Как закрыть клиента на 50к?");
     }
 }

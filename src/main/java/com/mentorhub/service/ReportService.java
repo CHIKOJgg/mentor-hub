@@ -20,6 +20,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Slf4j
 @Service
@@ -296,14 +297,21 @@ public class ReportService {
 
     public String cleanQuestionText(String q) {
         if (!StringUtils.hasText(q)) return null;
-        String trimmed = q.trim();
-        String lower = trimmed.toLowerCase();
+        String rawTrimmed = q.trim();
+        String withoutTimestamp = rawTrimmed.replaceFirst("^\\[\\d{1,2}:\\d{2}\\]\\s*", "").trim();
+        String trimmed = withoutTimestamp.replaceAll("^[\\\"'«»\\[\\(]+|[\\\"'»\\]\\).!?,—\\-]+$", "").trim();
+        if (trimmed.isEmpty()) return null;
+        String lower = trimmed.toLowerCase(Locale.ROOT);
         if (lower.equals("null") || lower.equals("none") || lower.equals("nil") ||
-            lower.equals("нет") || lower.equals("нет вопросов") || lower.equals("вопросов нет") ||
-            lower.equals("n/a") || lower.equals("undefined") || lower.equals("-") ||
-            lower.matches("^\\[\\d{2}:\\d{2}\\]\\s*(null|none|нет|n/a|undefined|-)$")) {
+            lower.equals("нет") || lower.equals("нету") || lower.equals("нема") ||
+            lower.equals("нет вопросов") || lower.equals("вопросов нет") || lower.equals("нет затыков") ||
+            lower.equals("затыков нет") || lower.equals("все понятно") || lower.equals("всё понятно") ||
+            lower.equals("все ясно") || lower.equals("всё ясно") || lower.equals("все ок") || lower.equals("всё ок") ||
+            lower.equals("без вопросов") || lower.equals("ничего") ||
+            lower.equals("n/a") || lower.equals("undefined") || lower.equals("-") || lower.equals("—") ||
+            lower.matches("^[-—_~]+$")) {
             return null;
         }
-        return trimmed;
+        return withoutTimestamp;
     }
 }

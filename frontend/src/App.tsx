@@ -367,15 +367,23 @@ function getCurrencySymbol(currency?: string): string {
   return 'BYN';
 }
 
-const INVALID_Q_REGEX = new RegExp('^\\[\\d{2}:\\d{2}\\]\\s*(null|none|нет|n/a|undefined|-)$', 'i');
-const INVALID_Q_SET = new Set(['null', 'none', 'nil', 'нет', 'нет вопросов', 'вопросов нет', 'n/a', 'undefined', '-', '—']);
+const INVALID_Q_REGEX = new RegExp('^\\[\\d{2}:\\d{2}\\]\\s*(null|none|nil|нет|нету|нема|n/a|undefined|[-—_~]+)$', 'i');
+const INVALID_Q_SET = new Set([
+  'null', 'none', 'nil', 'нет', 'нету', 'нема',
+  'нет вопросов', 'вопросов нет', 'нет затыков', 'затыков нет',
+  'все понятно', 'всё понятно', 'все ясно', 'всё ясно',
+  'все ок', 'всё ок', 'без вопросов', 'ничего',
+  'n/a', 'undefined', '-', '—', '---', '--'
+]);
 
 function isInvalidQuestionText(q?: string): boolean {
   if (!q) return true;
-  const trimmed = q.trim();
+  const trimmed = q.trim().replace(/^["'«»\[\(]+|["'»\]\).!?,—\-]+$/g, '').trim();
   if (!trimmed) return true;
   const lower = trimmed.toLowerCase();
   if (INVALID_Q_SET.has(lower)) return true;
+  if (/^[-—_~]+$/.test(lower)) return true;
+  if (/^(?:нет|нету|нема|вопросов нет|вопроса нет|нет вопросов|нет затыков|затыков нет|все понятно|всё понятно|все ясно|всё ясно|все ок|всё ок|без вопросов|ничего)$/i.test(lower)) return true;
   return INVALID_Q_REGEX.test(trimmed);
 }
 

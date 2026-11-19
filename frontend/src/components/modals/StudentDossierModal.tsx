@@ -14,6 +14,24 @@ interface StudentDossierModalProps {
   onToggleZoomCompleted: (studentId: string, callNumber: number) => void;
 }
 
+const INVALID_Q_SET = new Set([
+  'null', 'none', 'nil', 'нет', 'нету', 'нема',
+  'нет вопросов', 'вопросов нет', 'нет затыков', 'затыков нет',
+  'все понятно', 'всё понятно', 'все ясно', 'всё ясно',
+  'все ок', 'всё ок', 'без вопросов', 'ничего',
+  'n/a', 'undefined', '-', '—', '---', '--'
+]);
+
+function isInvalidQuestionText(q?: string): boolean {
+  if (!q) return true;
+  const trimmed = q.trim().replace(/^["'«»\[\(]+|["'»\]\).!?,—\-]+$/g, '').trim();
+  if (!trimmed) return true;
+  const lower = trimmed.toLowerCase();
+  if (INVALID_Q_SET.has(lower)) return true;
+  if (/^[-—_~]+$/.test(lower)) return true;
+  return /^(?:нет|нету|нема|вопросов нет|вопроса нет|нет вопросов|нет затыков|затыков нет|все понятно|всё понятно|все ясно|всё ясно|все ок|всё ок|без вопросов|ничего)$/i.test(lower);
+}
+
 export const StudentDossierModal = ({
   student,
   inspectingTab,
@@ -266,10 +284,7 @@ export const StudentDossierModal = ({
                     {r.reflectionSummary && (
                       <div className="text-xs text-slate-600 bg-white p-2.5 rounded-lg border border-slate-100 space-y-1">
                         <div><strong>Действия:</strong> {r.reflectionSummary.actions}</div>
-                        {r.reflectionSummary.questionToMentor &&
-                         r.reflectionSummary.questionToMentor !== 'null' &&
-                         r.reflectionSummary.questionToMentor !== 'undefined' &&
-                         r.reflectionSummary.questionToMentor !== 'None' && (
+                        {!isInvalidQuestionText(r.reflectionSummary.questionToMentor) && (
                           <div className="text-indigo-900 font-medium"><strong>Вопрос наставнику:</strong> {r.reflectionSummary.questionToMentor}</div>
                         )}
                       </div>

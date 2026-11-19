@@ -1016,7 +1016,7 @@ public class TelegramMessageRouter {
         if (telegramSenderService == null || chatId == null) return;
         StringBuilder welcome = new StringBuilder();
         welcome.append("Здравствуйте! Я бот-помощник платформы «Mentor Hub» наставника Ксении 🌸\n\n");
-        welcome.append("Я работаю в рабочих группах («Ксения + Катя + Ученица + Бот») и принимаю ежедневные отчёты с хэштегами:\n");
+        welcome.append("Я работаю в рабочих группах («Ксения + Ученица + Бот») и принимаю ежедневные отчёты с хэштегами:\n");
         appendRulesSummary(welcome);
         welcome.append("\nКоманды бота:\n");
         welcome.append("• /tasks или /задания — посмотреть регламент и выбрать фокус\n");
