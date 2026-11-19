@@ -359,19 +359,20 @@ public class TelegramReportHandler {
         }
 
         // 8. Spring AI 3-bullet reflection & Burnout Sentiment Detection
-        boolean isReportMessage = StringUtils.hasText(rawContent) &&
-                (rawContent.contains("#рассылки") || rawContent.contains("#продажи") || rawContent.contains("#рилс") || rawContent.contains("#карусель") || rawContent.contains("#сторителл") || rawContent.contains("#отчет") || rawContent.contains("#отчёт"));
-
+        String existingRawBefore = report.getRawMessageText();
+        Integer currentMsgId = message != null ? message.getMessageId() : null;
+        String currentMsgTag = currentMsgId != null ? "[msg " + currentMsgId + "]: " : "";
         String aiContext;
-        if (isReportMessage) {
-            aiContext = rawContent;
-            if (StringUtils.hasText(report.getVoiceTranscript()) && !rawContent.contains(report.getVoiceTranscript())) {
-                aiContext = aiContext + "\n[Голосовое сообщение]: " + report.getVoiceTranscript();
-            }
+        if (StringUtils.hasText(existingRawBefore)) {
+            boolean isDuplicateInContext = currentMsgId != null && existingRawBefore.contains("[msg " + currentMsgId + "]:");
+            aiContext = isDuplicateInContext
+                    ? existingRawBefore
+                    : existingRawBefore + "\n---\n" + currentMsgTag + rawContent;
         } else {
-            aiContext = StringUtils.hasText(report.getRawMessageText())
-                    ? report.getRawMessageText() + (StringUtils.hasText(rawContent) && !report.getRawMessageText().contains(rawContent) ? "\n---\n" + rawContent : "")
-                    : rawContent;
+            aiContext = currentMsgTag + rawContent;
+        }
+        if (StringUtils.hasText(report.getVoiceTranscript()) && !aiContext.contains(report.getVoiceTranscript())) {
+            aiContext = aiContext + "\n[Голосовые/кружочки]: " + report.getVoiceTranscript();
         }
 
         ExtractedReportDto aiFacts = settings == null || Boolean.TRUE.equals(settings.getAiSummaryEnabled())
@@ -387,6 +388,9 @@ public class TelegramReportHandler {
                 String aiActions = aiFacts.reflectionSummary().actions();
                 if (StringUtils.hasText(aiActions)) {
                     String cleanAiActions = aiActions.trim().replaceFirst("^✅\\s*Факт:\\s*", "");
+                    if ("BYN".equalsIgnoreCase(student.getCurrency())) {
+                        cleanAiActions = cleanAiActions.replaceAll("(?ui)(\\d+)\\s*тыс(?:яч)?\\.?\\s*(?:руб(?:лей)?|р\\.?)", "$1 BYN");
+                    }
                     String focusLine = extractFocusLine(currentActions);
                     if (StringUtils.hasText(focusLine)) {
                         report.setReflectionActions(focusLine + "\n✅ Факт: " + cleanAiActions);
@@ -454,15 +458,17 @@ public class TelegramReportHandler {
             }
         }
 
-        // 9. Accumulate Raw message text without duplicating identical blocks
+        // 9. Accumulate Raw message text without dropping distinct messages with identical text
         String existingRaw = report.getRawMessageText();
-        String trimmedRaw = rawContent.trim();
+        Integer msgId = message != null ? message.getMessageId() : null;
+        String msgTag = msgId != null ? "[msg " + msgId + "]: " : "";
         if (StringUtils.hasText(existingRaw)) {
-            if (!existingRaw.trim().endsWith(trimmedRaw) && !existingRaw.contains(trimmedRaw)) {
-                report.setRawMessageText(existingRaw + "\n---\n" + rawContent);
+            boolean isDuplicateMsg = msgId != null && existingRaw.contains("[msg " + msgId + "]:");
+            if (!isDuplicateMsg) {
+                report.setRawMessageText(existingRaw + "\n---\n" + msgTag + rawContent);
             }
         } else {
-            report.setRawMessageText(rawContent);
+            report.setRawMessageText(msgTag + rawContent);
         }
 
         int newDraftsAdded = (report.getContentDrafts() != null ? report.getContentDrafts().size() : 0) - initialDraftsCount;
