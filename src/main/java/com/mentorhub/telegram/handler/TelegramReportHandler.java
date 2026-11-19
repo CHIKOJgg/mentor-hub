@@ -389,7 +389,7 @@ public class TelegramReportHandler {
                 if (StringUtils.hasText(aiActions)) {
                     String cleanAiActions = aiActions.trim().replaceFirst("^✅\\s*Факт:\\s*", "");
                     if ("BYN".equalsIgnoreCase(student.getCurrency())) {
-                        cleanAiActions = cleanAiActions.replaceAll("(?ui)(\\d+)\\s*тыс(?:яч)?\\.?\\s*(?:руб(?:лей)?|р\\.?)", "$1 BYN");
+                        cleanAiActions = cleanAiActions.replaceAll("(?ui)(\\d+)\\s*тыс(?:яч)?\\.?\\s*(?:руб(?:лей)?|р\\.?|бун|бел\\.?\\s*руб\\.?)", "$1 BYN");
                     }
                     String focusLine = extractFocusLine(currentActions);
                     if (StringUtils.hasText(focusLine)) {
@@ -419,7 +419,7 @@ public class TelegramReportHandler {
 
             // Natural language sales fallback if hashtag was omitted
             boolean currentMessageMentionsSales = StringUtils.hasText(rawContent) &&
-                    (rawContent.toLowerCase(java.util.Locale.ROOT).matches(".*(?ui)(?:прода[лаже]|оплат[ила]|чек|купил[аи]|перевел[аи]|перечисл|предоплат|выручк|доход|руб|byn|usd|eur|\\$|€).*")
+                    (rawContent.toLowerCase(java.util.Locale.ROOT).matches(".*(?ui)(?:прода[лаже]|оплат[ила]|чек|купил[аи]|перевел[аи]|перечисл|предоплат|выручк|доход|руб|byn|бун|бел\\.?\\s*руб|закрыл[аи]|\\$|€|₽).*")
                             || (message != null && (message.hasVoice() || message.hasVideoNote())));
 
             boolean hasExplicitSalesEntries = report.getSalesEntries() != null && report.getSalesEntries().stream()
