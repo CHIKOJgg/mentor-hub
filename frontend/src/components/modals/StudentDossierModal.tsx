@@ -32,7 +32,7 @@ export const StudentDossierModal = ({
 
   const targetIncome = student.portalData?.targetIncome ?? student.initialIncome * 2;
   const hasTargetIncome = targetIncome > 0;
-  const currSymbol = student.currency === 'RUB' ? '₽' : 'BYN';
+  const currSymbol = student.currency === 'RUB' ? '₽' : (student.currency === 'USD' ? '$' : (student.currency === 'EUR' ? '€' : (student.currency === 'KZT' ? '₸' : 'BYN')));
   const goalProgress = hasTargetIncome
     ? Math.min(100, Math.round((student.currentIncome / targetIncome) * 100))
     : null;

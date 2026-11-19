@@ -160,7 +160,7 @@ public class ReportService {
         String rawTariff = report.getStudent() != null ? report.getStudent().getTariff() : "STANDARD";
         String tariff = "VIP".equalsIgnoreCase(rawTariff) ? "VIP" : "Стандарт";
 
-        String submittedAtStr = formatSubmittedAt(report.getSubmittedAt(), report.getIsOnTime());
+        String submittedAtStr = formatSubmittedAt(report.getSubmittedAt(), report.getReportDate(), report.getIsOnTime());
 
         List<ContentDraftDto> drafts = report.getContentDrafts() != null
                 ? report.getContentDrafts().stream().map(this::mapDraftToDto).toList()
@@ -185,6 +185,10 @@ public class ReportService {
             );
         }
 
+        String currency = report.getStudent() != null && StringUtils.hasText(report.getStudent().getCurrency())
+                ? report.getStudent().getCurrency()
+                : "BYN";
+
         return new DailyReportResponse(
                 String.valueOf(report.getId()),
                 studentId,
@@ -205,17 +209,27 @@ public class ReportService {
                 mentorQuestion,
                 report.getVoiceTranscript(),
                 reflection,
-                report.getAiSummary() != null ? report.getAiSummary() : ""
+                report.getAiSummary() != null ? report.getAiSummary() : "",
+                currency
         );
     }
 
-    private String formatSubmittedAt(Instant submittedAt, Boolean isOnTime) {
+    private String formatSubmittedAt(Instant submittedAt, LocalDate reportDate, Boolean isOnTime) {
         if (submittedAt == null) return "только что";
         String timeStr = TIME_FORMATTER.format(submittedAt);
-        if (Boolean.FALSE.equals(isOnTime)) {
-            return timeStr + " (опоздание)";
+        LocalDate today = LocalDate.now(MINSK_ZONE);
+        String dateSuffix;
+        if (reportDate == null || reportDate.equals(today)) {
+            dateSuffix = " (сегодня)";
+        } else if (reportDate.equals(today.minusDays(1))) {
+            dateSuffix = " (вчера, " + reportDate.format(DateTimeFormatter.ofPattern("dd.MM")) + ")";
+        } else {
+            dateSuffix = " (" + reportDate.format(DateTimeFormatter.ofPattern("dd.MM")) + ")";
         }
-        return timeStr + " (сегодня)";
+        if (Boolean.FALSE.equals(isOnTime)) {
+            return timeStr + dateSuffix.replace(")", ", опоздание)");
+        }
+        return timeStr + dateSuffix;
     }
 
     private ContentDraftDto mapDraftToDto(ContentDraft draft) {
@@ -253,15 +267,20 @@ public class ReportService {
         if (!StringUtils.hasText(rawActions)) return "";
         String focusLine = null;
         String latestFact = null;
-        for (String line : rawActions.split("\n")) {
-            String trimmed = line.trim();
+        // Split on newlines OR on lookahead for bullet/emoji indicators (handles inline concatenation)
+        String[] chunks = rawActions.split("(?=(?:🎯|✅|\\n))");
+        for (String chunk : chunks) {
+            String trimmed = chunk.trim();
+            if (trimmed.isEmpty()) continue;
             if (trimmed.startsWith("🎯 Фокус дня:") || (focusLine == null && trimmed.startsWith("🎯"))) {
                 focusLine = trimmed;
             } else if (trimmed.startsWith("✅ Факт:")) {
                 latestFact = trimmed;
             } else if (trimmed.startsWith("✅")) {
                 latestFact = "✅ Факт: " + trimmed.substring(1).trim();
-            } else if (StringUtils.hasText(trimmed)) {
+            } else if (trimmed.contains("Обработано рассылок:") || trimmed.contains("Создан черновик") || trimmed.contains("запланирован") || trimmed.contains("выполняла") || trimmed.contains("предпринимала")) {
+                latestFact = "✅ Факт: " + trimmed.replaceFirst("^✅\\s*Факт:\\s*", "");
+            } else if (latestFact == null && StringUtils.hasText(trimmed)) {
                 latestFact = "✅ Факт: " + trimmed;
             }
         }

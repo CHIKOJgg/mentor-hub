@@ -308,6 +308,49 @@ class TelegramReportHandlerTest {
     }
 
     @Test
+    @DisplayName("Multiple individual sales (#продажа 100 and #продажа 150) accumulate cumulatively to 250 BYN")
+    void handleStudentMessage_accumulatesMultipleIndividualSales() {
+        Student student = Student.builder()
+                .id(1L)
+                .fullName("Даша")
+                .tgChatId(71010101L)
+                .currency("BYN")
+                .currentIncome(BigDecimal.ZERO)
+                .build();
+
+        DailyReport existingReport = DailyReport.builder()
+                .id(10L)
+                .student(student)
+                .reportDate(LocalDate.now())
+                .status("PENDING")
+                .salesTotal(BigDecimal.ZERO)
+                .contentDrafts(new ArrayList<>())
+                .reelSubmissions(new ArrayList<>())
+                .salesEntries(new ArrayList<>())
+                .build();
+
+        when(dailyReportRepository.findByStudentIdAndReportDate(eq(1L), any(LocalDate.class)))
+                .thenReturn(Optional.of(existingReport));
+        when(mentorSettingRepository.findFirstByOrderByIdAsc())
+                .thenReturn(Optional.of(MentorSetting.builder().reportAckEnabled(false).build()));
+
+        Chat chat = Chat.builder().id(-10071010101L).type("supergroup").build();
+
+        // Sale 1: 100 BYN
+        Message msg1 = Message.builder().messageId(701).chat(chat).text("#продажа 100 BYN").build();
+        DailyReport r1 = handler.handleStudentMessage(student, msg1);
+        assertThat(r1.getSalesTotal()).isEqualByComparingTo(new BigDecimal("100.00"));
+        assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("100.00"));
+
+        // Sale 2: 150 BYN
+        Message msg2 = Message.builder().messageId(702).chat(chat).text("#продажа 150 BYN").build();
+        DailyReport r2 = handler.handleStudentMessage(student, msg2);
+        assertThat(r2.getSalesTotal()).isEqualByComparingTo(new BigDecimal("250.00"));
+        assertThat(student.getCurrentIncome()).isEqualByComparingTo(new BigDecimal("250.00"));
+        assertThat(r2.getSalesEntries()).hasSize(2);
+    }
+
+    @Test
     @DisplayName("General chat conversation is scanned silently WITHOUT sending acknowledgment spam")
     void handleStudentMessage_chitChatScannedSilently() {
         Student student = Student.builder()

@@ -46,6 +46,7 @@ export interface DailyReport {
   voiceTranscript?: string;
   reflectionSummary?: ReflectionSummary;
   aiSummary: string;
+  currency?: string;
 }
 
 export type DayStatus =

@@ -39,6 +39,7 @@ export interface ApiDailyReport {
   voiceTranscript?: string;
   reflectionSummary?: { emotions: string; actions: string; questionToMentor?: string };
   aiSummary: string;
+  currency?: string;
 }
 
 export interface ApiStudent {

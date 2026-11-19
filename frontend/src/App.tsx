@@ -357,11 +357,34 @@ const defaultSystemSettings: SystemSettings = {
   reportAckEnabled: false,
 };
 
+function getCurrencySymbol(currency?: string): string {
+  if (!currency) return 'BYN';
+  const c = currency.toUpperCase().trim();
+  if (c === 'RUB' || c === '₽') return '₽';
+  if (c === 'USD' || c === '$') return '$';
+  if (c === 'EUR' || c === '€') return '€';
+  if (c === 'KZT' || c === '₸') return '₸';
+  return 'BYN';
+}
+
+const INVALID_Q_REGEX = new RegExp('^\\[\\d{2}:\\d{2}\\]\\s*(null|none|нет|n/a|undefined|-)$', 'i');
+const INVALID_Q_SET = new Set(['null', 'none', 'nil', 'нет', 'нет вопросов', 'вопросов нет', 'n/a', 'undefined', '-', '—']);
+
+function isInvalidQuestionText(q?: string): boolean {
+  if (!q) return true;
+  const trimmed = q.trim();
+  if (!trimmed) return true;
+  const lower = trimmed.toLowerCase();
+  if (INVALID_Q_SET.has(lower)) return true;
+  return INVALID_Q_REGEX.test(trimmed);
+}
+
 const mapApiReport = (report: ApiDailyReport): DailyReport => ({
   ...report,
   id: report.id.startsWith('rep-') ? report.id : `rep-${report.id}`,
   studentId: report.studentId.startsWith('st-') ? report.studentId : `st-${report.studentId}`,
   tariff: report.tariff.toUpperCase() === 'VIP' ? 'VIP' : 'Стандарт',
+  currency: report.currency || 'BYN',
   salesAmount: Number(report.salesAmount) || 0,
   contentDrafts: (report.contentDrafts ?? []).map(draft => ({
     ...draft,
@@ -458,6 +481,25 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('inbox');
   const [inboxView, setInboxView] = useState<'pending' | 'approved'>('pending');
   const [reports, setReports] = useState<DailyReport[]>(() => readPersisted('reports', []));
+  const [selectedReportByStudent, setSelectedReportByStudent] = useState<Record<string, string>>({});
+  const studentPendingGroups = useMemo(() => {
+    const map = new Map<string, DailyReport[]>();
+    for (const r of reports) {
+      const list = map.get(r.studentId) || [];
+      list.push(r);
+      map.set(r.studentId, list);
+    }
+    const groups: { studentId: string; reports: DailyReport[] }[] = [];
+    for (const [studentId, list] of map.entries()) {
+      list.sort((a, b) => {
+        const dateA = a.reportDate || '';
+        const dateB = b.reportDate || '';
+        return dateB.localeCompare(dateA);
+      });
+      groups.push({ studentId, reports: list });
+    }
+    return groups;
+  }, [reports]);
   const todayIso = getTodayIsoDate();
   const [allReports, setAllReports] = useState<DailyReport[]>(() => readPersisted('all-reports', []));
   const [students, setStudents] = useState<StudentDiscipline[]>(() =>
@@ -2093,8 +2135,19 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="space-y-5">
-                    {reports.map((r) => (
-                      <div key={r.id} className={`inbox-report-card inbox-report-card--pending ${r.isOnTime ? 'is-on-time' : 'is-late'} bg-white rounded-2xl border border-slate-200/60 overflow-hidden`}>
+                    {studentPendingGroups.map((group) => {
+                      const activeReportId = selectedReportByStudent[group.studentId] || group.reports[0].id;
+                      const r = group.reports.find(item => item.id === activeReportId) || group.reports[0];
+                      const reportCurrency = r.currency || students.find(s => s.id === r.studentId)?.currency;
+                      const currencySymbol = getCurrencySymbol(reportCurrency);
+                      const cleanQuestion = r.reflectionSummary?.questionToMentor?.trim();
+                      const isInvalidQuestion = isInvalidQuestionText(cleanQuestion);
+
+                      const cleanDirectQ = r.mentorQuestion?.trim();
+                      const isInvalidDirectQ = isInvalidQuestionText(cleanDirectQ);
+
+                      return (
+                      <div key={group.studentId} className={`inbox-report-card inbox-report-card--pending ${r.isOnTime ? 'is-on-time' : 'is-late'} bg-white rounded-2xl border border-slate-200/60 overflow-hidden`}>
                         {/* Header */}
                         <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100">
                           <div className="flex items-center gap-3.5">
@@ -2117,20 +2170,67 @@ export default function App() {
                                   {r.isOnTime ? 'в срок · до 21:00' : 'опоздание'}
                                 </span>
                               </div>
+                              {group.reports.length > 1 && (
+                                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                  <span className="text-xs text-slate-400 font-medium mr-1">Дни на проверку ({group.reports.length}):</span>
+                                  {group.reports.map((gr, idx) => {
+                                    const isSelected = gr.id === r.id;
+                                    return (
+                                      <button
+                                        key={gr.id}
+                                        type="button"
+                                        onClick={() => setSelectedReportByStudent(prev => ({ ...prev, [group.studentId]: gr.id }))}
+                                        className={`text-xs px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+                                          isSelected
+                                            ? 'bg-indigo-600 text-white shadow-xs'
+                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                        }`}
+                                      >
+                                        {gr.reportDate ? gr.reportDate.split('-').reverse().slice(0, 2).join('.') : (idx === 0 ? 'Сегодня' : 'Ранее')}
+                                        {idx === 0 ? ' (актуальный)' : ''}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                           </div>
 
-                          {r.tgUsername && (
-                            <a
-                              href={`https://t.me/${r.tgUsername.replace(/^@/, '')}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200/60 px-3.5 py-1.5 rounded-xl transition self-start sm:self-auto shrink-0"
-                            >
-                              <span>В Telegram</span>
-                              <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.8} />
-                            </a>
-                          )}
+                          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                            {group.reports.length > 1 && (
+                              <button
+                                type="button"
+                                disabled={group.reports.some(item => processingReportIds.includes(item.id))}
+                                onClick={() => requestConfirm({
+                                  title: `Одобрить все ${group.reports.length} отчёта для ${r.studentName}?`,
+                                  message: `Будут приняты все ${group.reports.length} накопившихся отчёта(ов) ученицы без необходимости открывать каждый день отдельно.`,
+                                  confirmLabel: 'Одобрить всё',
+                                  cancelLabel: 'Отмена',
+                                  isDanger: false,
+                                  onConfirm: () => {
+                                    for (const rep of group.reports) {
+                                      handleApprove(rep.id, rep.studentName);
+                                    }
+                                  },
+                                })}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/70 px-3 py-1.5 rounded-xl transition cursor-pointer"
+                              >
+                                <CheckCheck className="w-3.5 h-3.5" />
+                                <span>Одобрить все ({group.reports.length})</span>
+                              </button>
+                            )}
+                            {r.tgUsername && (
+                              <a
+                                href={`https://t.me/${r.tgUsername.replace(/^@/, '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200/60 px-3.5 py-1.5 rounded-xl transition"
+                              >
+                                <span>В Telegram</span>
+                                <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.8} />
+                              </a>
+                            )}
+                          </div>
                         </div>
 
                         {/* Content */}
@@ -2175,7 +2275,7 @@ export default function App() {
                             {r.salesAmount > 0 && (
                               <div>
                                 <span className="text-slate-400 block text-xs font-medium uppercase tracking-wider">Продажи</span>
-                                <span className="font-bold text-slate-900 text-lg">{r.salesAmount.toLocaleString('ru-RU')} ₽</span>
+                                <span className="font-bold text-slate-900 text-lg">{r.salesAmount.toLocaleString('ru-RU')} {currencySymbol}</span>
                               </div>
                             )}
                             <div>
@@ -2219,14 +2319,10 @@ export default function App() {
                                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 shrink-0"></span>
                                   <span><strong className="text-slate-900 font-semibold">Действия:</strong> {r.reflectionSummary.actions}</span>
                                 </div>
-                                {r.reflectionSummary.questionToMentor &&
-                                 r.reflectionSummary.questionToMentor !== 'null' &&
-                                 r.reflectionSummary.questionToMentor !== 'undefined' &&
-                                 r.reflectionSummary.questionToMentor !== 'None' &&
-                                 r.reflectionSummary.questionToMentor !== 'нет' && (
+                                {!isInvalidQuestion && (
                                   <div className="flex items-start gap-2.5 bg-indigo-50/80 border border-indigo-100 p-3 rounded-lg mt-2 text-indigo-950 font-medium">
                                     <HelpCircle className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" strokeWidth={1.8} />
-                                    <span>{r.reflectionSummary.questionToMentor}</span>
+                                    <span>{cleanQuestion}</span>
                                   </div>
                                 )}
                               </div>
@@ -2234,12 +2330,10 @@ export default function App() {
                           )}
 
                           {/* Mentor Question (Direct) */}
-                          {r.mentorQuestion && !r.reflectionSummary &&
-                            r.mentorQuestion !== 'null' &&
-                            r.mentorQuestion !== 'undefined' && (
+                          {!isInvalidDirectQ && !r.reflectionSummary && (
                             <div className="py-3 px-4 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-800 space-y-1">
                               <span className="text-slate-700 font-semibold block text-xs uppercase tracking-wider">Вопрос:</span>
-                              <p className="leading-relaxed">{r.mentorQuestion}</p>
+                              <p className="leading-relaxed">{cleanDirectQ}</p>
                             </div>
                           )}
 
@@ -2300,7 +2394,8 @@ export default function App() {
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )) : (
                   approvedReports.length === 0 ? (
@@ -2352,7 +2447,7 @@ export default function App() {
 
                             {/* Stats */}
                             <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-700 bg-slate-50/60 p-3 rounded-xl border border-slate-100">
-                              <span>Продажи: <strong className="text-emerald-700 text-sm">{r.salesAmount.toLocaleString('ru-RU')} ₽</strong></span>
+                              <span>Продажи: <strong className="text-emerald-700 text-sm">{r.salesAmount.toLocaleString('ru-RU')} {getCurrencySymbol(r.currency || students.find(s => s.id === r.studentId)?.currency)}</strong></span>
                               <span>·</span>
                               <span>Рассылки: <strong>{r.mailingsCount} шт</strong></span>
                               <span>·</span>
@@ -2959,7 +3054,7 @@ export default function App() {
                           <span className="analytics-kpi-icon"><TrendingUp className="w-4 h-4" strokeWidth={1.8} /></span>
                         </div>
                         <div className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">
-                          {analyticsRevenue.toLocaleString('ru-RU')} ₽
+                          {analyticsRevenue.toLocaleString('ru-RU')} {getCurrencySymbol(students[0]?.currency)}
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
                           {analyticsPeriod === 'week'
@@ -2993,7 +3088,7 @@ export default function App() {
                           <span className="analytics-kpi-icon"><BarChart3 className="w-4 h-4" strokeWidth={1.8} /></span>
                         </div>
                         <div className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">
-                          {averageTicket > 0 ? `${averageTicket.toLocaleString('ru-RU')} ₽` : '—'}
+                          {averageTicket > 0 ? `${averageTicket.toLocaleString('ru-RU')} ${getCurrencySymbol(students[0]?.currency)}` : '—'}
                         </div>
                         <div className="text-xs text-slate-500 mt-1">среднее по {students.length} ученицам</div>
                       </div>
@@ -3070,7 +3165,7 @@ export default function App() {
                           <tbody className="divide-y divide-slate-100">
                             {students.map(s => {
                               const period = getStudentPeriodStats(s);
-                              const sCurr = s.currency === 'RUB' ? '₽' : 'BYN';
+                              const sCurr = getCurrencySymbol(s.currency);
                               const incomeDisplay = analyticsPeriod === 'all'
                                 ? `${s.initialIncome.toLocaleString('ru-RU')} → ${s.currentIncome.toLocaleString('ru-RU')} ${sCurr}`
                                 : `${period.income.toLocaleString('ru-RU')} ${sCurr}`;
@@ -3220,7 +3315,7 @@ export default function App() {
 
                       {/* Financial Growth Grid (Point A -> Point B & Period Metrics) */}
                       {(() => {
-                        const selCurr = selectedStudent.currency === 'RUB' ? '₽' : 'BYN';
+                        const selCurr = getCurrencySymbol(selectedStudent.currency);
                         return (
                           <div className="analytics-financial-grid grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
                             <div className="analytics-financial-metric px-6 py-5">

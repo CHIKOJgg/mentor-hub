@@ -24,5 +24,6 @@ public record DailyReportResponse(
     String mentorQuestion,
     String voiceTranscript,
     ReflectionSummaryDto reflectionSummary,
-    String aiSummary
+    String aiSummary,
+    String currency
 ) {}

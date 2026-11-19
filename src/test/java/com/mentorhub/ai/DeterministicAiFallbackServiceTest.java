@@ -38,14 +38,28 @@ class DeterministicAiFallbackServiceTest {
     }
 
     @Test
-    @DisplayName("Extracts mailings count correctly from hashtag")
+    @DisplayName("Extracts mailings count correctly from hashtag and natural report text")
     void extractMailingsCount() {
         assertThat(fallbackService.extractMailingsCount("Сегодня сделала #рассылки 25 по теплой базе"))
                 .isEqualTo(25);
         assertThat(fallbackService.extractMailingsCount("#рассылка 40"))
                 .isEqualTo(40);
+        assertThat(fallbackService.extractMailingsCount("#отчет 10 рассылок 3 рилса 5 публикаций"))
+                .isEqualTo(10);
         assertThat(fallbackService.extractMailingsCount("просто текст без рассылок"))
                 .isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("Extracts reels and posts count from summary report #отчет")
+    void extractCountsFromSummaryReport() {
+        String report = "#отчет 10 рассылок 3 рилса 5 публикаций";
+        assertThat(fallbackService.extractMailingsCount(report)).isEqualTo(10);
+        assertThat(fallbackService.extractReelsCount(report)).isEqualTo(3);
+        assertThat(fallbackService.extractPostsCount(report)).isEqualTo(5);
+
+        String saleMsg = "#продажа 50BYN";
+        assertThat(fallbackService.extractSalesAmount(saleMsg)).isEqualByComparingTo(new BigDecimal("50.00"));
     }
 
     @Test

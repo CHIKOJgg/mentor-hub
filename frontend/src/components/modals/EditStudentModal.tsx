@@ -34,7 +34,7 @@ export const EditStudentModal = ({
   const requestClose = useModalDismiss(closeDialog, hasUnsavedChanges);
 
   if (!student) return null;
-  const currSymbol = student.currency === 'RUB' ? '₽' : 'BYN';
+  const currSymbol = student.currency === 'RUB' ? '₽' : (student.currency === 'USD' ? '$' : (student.currency === 'EUR' ? '€' : (student.currency === 'KZT' ? '₸' : 'BYN')));
   const updateEditingStudent = (updated: StudentDiscipline) => {
     setHasUnsavedChanges(true);
     setEditingStudent(updated);

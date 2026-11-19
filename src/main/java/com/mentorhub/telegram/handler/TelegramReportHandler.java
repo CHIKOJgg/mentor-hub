@@ -243,56 +243,79 @@ public class TelegramReportHandler {
         // 3. Process Instagram Reels with Anti-Fraud (SHA-256 deduplication & accessibility)
         processReelsAntiFraud(report, student, rawContent, deduplicationEnabled);
 
-        // 4. Sales amount normalization (#продажи 60000) - latest report snapshot with delta tracking
+        // 4. Sales amount normalization (#продажи 60000 vs #продажа 50BYN, #оплата 100)
         boolean hasSalesTag = StringUtils.hasText(rawContent) &&
-                (rawContent.contains("#продажи") || rawContent.contains("#продажа") || rawContent.toLowerCase(java.util.Locale.ROOT).contains("продажи"));
+                (rawContent.contains("#продажи") || rawContent.contains("#продажа") || rawContent.contains("#оплата") || rawContent.toLowerCase(java.util.Locale.ROOT).contains("продаж"));
         BigDecimal salesAmount = hasSalesTag ? deterministicAiFallbackService.extractSalesAmount(rawContent) : null;
-        if (hasSalesTag && salesAmount != null && salesAmount.compareTo(BigDecimal.ZERO) >= 0) {
+        if (hasSalesTag && salesAmount != null && salesAmount.compareTo(BigDecimal.ZERO) > 0) {
             String entryDesc = rawContent.length() > 200 ? rawContent.substring(0, 200) : rawContent;
-            BigDecimal prevSales = report.getSalesTotal() != null ? report.getSalesTotal() : BigDecimal.ZERO;
-            BigDecimal deltaSales = salesAmount.subtract(prevSales);
+            String lowerContent = rawContent.toLowerCase(java.util.Locale.ROOT);
+            boolean isPluralSnapshot = lowerContent.contains("#продажи") || lowerContent.contains("#отчет") || lowerContent.contains("#отчёт");
+            boolean isIndividualSale = !isPluralSnapshot && (lowerContent.contains("#продажа") || lowerContent.contains("#оплата") || lowerContent.contains("#чек"));
 
-            report.setSalesTotal(salesAmount);
-
-            BigDecimal currentIncome = student.getCurrentIncome() != null ? student.getCurrentIncome() : BigDecimal.ZERO;
-            student.setCurrentIncome(currentIncome.add(deltaSales));
-
-            // In draft unapproved report (PENDING or REJECTED), keep only the single latest sales entry
-            if (report.getSalesEntries() != null && !report.getSalesEntries().isEmpty()) {
-                salesEntryRepository.deleteAll(report.getSalesEntries());
-                report.getSalesEntries().clear();
-            } else if (report.getSalesEntries() == null) {
+            if (report.getSalesEntries() == null) {
                 report.setSalesEntries(new ArrayList<>());
             }
 
-            if (salesAmount.compareTo(BigDecimal.ZERO) > 0) {
-                SalesEntry entry = SalesEntry.builder()
-                        .report(report)
-                        .student(student)
-                        .amount(salesAmount)
-                        .description(entryDesc)
-                        .createdAt(Instant.now())
-                        .build();
-                salesEntryRepository.save(entry);
-                report.getSalesEntries().add(entry);
+            BigDecimal currentTotal = report.getSalesTotal() != null ? report.getSalesTotal() : BigDecimal.ZERO;
+
+            if (isIndividualSale) {
+                // Individual sale event (#продажа 50BYN, #оплата 100):
+                // Deduplicate if identical message text already recorded
+                boolean isDuplicateSale = report.getSalesEntries().stream()
+                        .anyMatch(se -> entryDesc.equals(se.getDescription()));
+                if (!isDuplicateSale) {
+                    BigDecimal newTotal = currentTotal.add(salesAmount);
+                    report.setSalesTotal(newTotal);
+                    student.setCurrentIncome((student.getCurrentIncome() != null ? student.getCurrentIncome() : BigDecimal.ZERO).add(salesAmount));
+                    SalesEntry entry = SalesEntry.builder()
+                            .report(report)
+                            .student(student)
+                            .amount(salesAmount)
+                            .description(entryDesc)
+                            .createdAt(Instant.now())
+                            .build();
+                    salesEntryRepository.save(entry);
+                    report.getSalesEntries().add(entry);
+                    log.info("Recorded individual sale: +{} (total now={}) for student '{}'",
+                            salesAmount, newTotal, student.getFullName());
+                }
+            } else {
+                // Daily total snapshot (#продажи 60000 or summary #отчет):
+                // If salesAmount exceeds current total, update to salesAmount and add delta
+                if (salesAmount.compareTo(currentTotal) > 0) {
+                    BigDecimal delta = salesAmount.subtract(currentTotal);
+                    report.setSalesTotal(salesAmount);
+                    student.setCurrentIncome((student.getCurrentIncome() != null ? student.getCurrentIncome() : BigDecimal.ZERO).add(delta));
+                    SalesEntry entry = SalesEntry.builder()
+                            .report(report)
+                            .student(student)
+                            .amount(delta)
+                            .description(entryDesc)
+                            .createdAt(Instant.now())
+                            .build();
+                    salesEntryRepository.save(entry);
+                    report.getSalesEntries().add(entry);
+                    log.info("Report sales snapshot updated total to {}: +{} for student '{}'",
+                            salesAmount, delta, student.getFullName());
+                }
             }
-            log.info("Report sales updated to latest snapshot: prev={}, new={}, delta={} for student '{}'",
-                    prevSales, salesAmount, deltaSales, student.getFullName());
         }
 
-        // 5. Mailings / Outreach count (#рассылки 40) - latest report snapshot with delta tracking
+        // 5. Mailings / Outreach count (#рассылки 40 or #отчет 10 рассылок)
         boolean hasMailingsTag = StringUtils.hasText(rawContent) &&
-                (rawContent.contains("#рассылки") || rawContent.contains("#рассылка") || rawContent.toLowerCase(java.util.Locale.ROOT).contains("рассыл"));
+                (rawContent.contains("#рассылки") || rawContent.contains("#рассылка") || rawContent.toLowerCase(java.util.Locale.ROOT).contains("рассыл") || rawContent.contains("#отчет") || rawContent.contains("#отчёт"));
         Integer mailings = hasMailingsTag ? deterministicAiFallbackService.extractMailingsCount(rawContent) : null;
         if (hasMailingsTag && mailings != null && mailings >= 0) {
             int prevMailings = report.getMailingsCount() != null ? report.getMailingsCount() : 0;
-            int deltaMailings = mailings - prevMailings;
-            report.setMailingsCount(mailings);
+            int targetMailings = Math.max(prevMailings, mailings);
+            int deltaMailings = targetMailings - prevMailings;
+            report.setMailingsCount(targetMailings);
 
             int totalMailings = student.getTotalMailings() != null ? student.getTotalMailings() : 0;
             student.setTotalMailings(totalMailings + deltaMailings);
-            log.info("Report mailings updated to latest snapshot: prev={}, new={}, delta={} for student '{}'",
-                    prevMailings, mailings, deltaMailings, student.getFullName());
+            log.info("Report mailings updated: prev={}, new={}, delta={} for student '{}'",
+                    prevMailings, targetMailings, deltaMailings, student.getFullName());
         }
 
         // 6. Saturday Survey Clients (#клиенты 2)
@@ -331,7 +354,7 @@ public class TelegramReportHandler {
         }
 
         ExtractedReportDto aiFacts = settings == null || Boolean.TRUE.equals(settings.getAiSummaryEnabled())
-                ? springAiReportExtractor.extractFacts(aiContext, student.getFullName())
+                ? springAiReportExtractor.extractFacts(aiContext, student.getFullName(), student.getCurrency())
                 : null;
         if (aiFacts != null) {
             if (aiFacts.reflectionSummary() != null) {
@@ -657,6 +680,27 @@ public class TelegramReportHandler {
                         student.setTotalCarousels((student.getTotalCarousels() != null ? student.getTotalCarousels() : 0) + 1);
                     } else {
                         student.setTotalStorytells((student.getTotalStorytells() != null ? student.getTotalStorytells() : 0) + 1);
+                    }
+                }
+            }
+
+            // Natural language content counts in summary report (e.g. #отчет 10 рассылок 3 рилса 5 публикаций)
+            String lower = rawContent.toLowerCase(java.util.Locale.ROOT);
+            if (lower.contains("#отчет") || lower.contains("#отчёт") || lower.startsWith("отчет") || lower.startsWith("отчёт")) {
+                Integer reelsCount = deterministicAiFallbackService.extractReelsCount(rawContent);
+                if (reelsCount != null && reelsCount > 0) {
+                    String label = "Отчёт: " + reelsCount + " Reels";
+                    boolean added = createOrUpdateDraft(report, student, "REEL", label, null, null, null, deduplicationEnabled);
+                    if (added) {
+                        student.setTotalReels((student.getTotalReels() != null ? student.getTotalReels() : 0) + reelsCount);
+                    }
+                }
+                Integer postsCount = deterministicAiFallbackService.extractPostsCount(rawContent);
+                if (postsCount != null && postsCount > 0) {
+                    String label = "Отчёт: " + postsCount + " публикаций";
+                    boolean added = createOrUpdateDraft(report, student, "CAROUSEL", label, null, null, null, deduplicationEnabled);
+                    if (added) {
+                        student.setTotalCarousels((student.getTotalCarousels() != null ? student.getTotalCarousels() : 0) + postsCount);
                     }
                 }
             }

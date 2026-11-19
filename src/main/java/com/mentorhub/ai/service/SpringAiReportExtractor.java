@@ -134,28 +134,32 @@ public class SpringAiReportExtractor {
      * Guaranteed 0 report loss via automatic fallback to DeterministicAiFallbackService.
      */
     public ExtractedReportDto extractFacts(String rawMessage, String studentName) {
+        return extractFacts(rawMessage, studentName, "BYN");
+    }
+
+    public ExtractedReportDto extractFacts(String rawMessage, String studentName, String currency) {
         if (!isAiConfigured()) {
             log.debug("Using deterministic AI fallback for student '{}' (API key is mock/disabled)", studentName);
-            return fallbackService.extractFacts(rawMessage, studentName);
+            return fallbackService.extractFacts(rawMessage, studentName, currency);
         }
 
         Future<ExtractedReportDto> future = null;
         try {
-            future = aiExecutor.submit(() -> callChatClient(rawMessage, studentName));
+            future = aiExecutor.submit(() -> callChatClient(rawMessage, studentName, currency));
             return future.get(AI_CHAT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (TimeoutException te) {
             if (future != null) future.cancel(true);
             log.warn("Spring AI ChatClient timed out (>{} ms) for student '{}'. Falling back to deterministic parser.",
                     AI_CHAT_TIMEOUT_MS, studentName);
-            return fallbackService.extractFacts(rawMessage, studentName);
+            return fallbackService.extractFacts(rawMessage, studentName, currency);
         } catch (Exception ex) {
             log.warn("Spring AI ChatClient error for student '{}': {}. Falling back to deterministic parser.",
                     studentName, ex.getMessage());
-            return fallbackService.extractFacts(rawMessage, studentName);
+            return fallbackService.extractFacts(rawMessage, studentName, currency);
         }
     }
 
-    private ExtractedReportDto callChatClient(String rawMessage, String studentName) {
+    private ExtractedReportDto callChatClient(String rawMessage, String studentName, String currency) {
         String systemPrompt = """
             Ты — высококвалифицированный бизнес-ассистент наставника предпринимателей Ксении.
             Твоя задача — строго и объективно разобрать входящее сообщение ученицы (%s).
@@ -169,7 +173,7 @@ public class SpringAiReportExtractor {
                Если в тексте присутствуют фразы апатии, бессилия или слез ("рыдала", "не могу встать", "все бросить", "нет сил"),
                выстави emotionalStatus = "BURNOUT_ALERT". В обычном состоянии — "NORMAL".
             3. ИЗВЛЕЧЕНИЕ ЦИФР И ЧЕРНОВИКОВ:
-               - Сумма продаж (в рублях). При суммах "45 000" или "80к" нормализуй в число.
+               - Сумма продаж (число, в валюте ученицы: %s). При суммах "45 000" или "80к" нормализуй в число.
                - Число отправленных рассылок Direct.
                - Черновики контента (#контент, #рилс, #карусель, #сторителл).
             4. ОТСЕЧЕНИЕ ФЛУДА:
@@ -178,7 +182,7 @@ public class SpringAiReportExtractor {
                Сформируй 1-2 емких предложения для быстрого просмотра Ксенией на iPad.
 
             Верни результат строго в формате JSON, соответствующем схеме ExtractedReportDto.
-            """.formatted(studentName);
+            """.formatted(studentName, StringUtils.hasText(currency) ? currency.trim() : "BYN");
 
         try {
             ExtractedReportDto result = chatClient.prompt()

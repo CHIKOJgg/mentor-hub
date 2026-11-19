@@ -18,12 +18,29 @@ import java.util.regex.Pattern;
 @Service
 public class DeterministicAiFallbackService {
 
-    private static final Pattern MAILINGS_PATTERN = Pattern.compile(
-            "#(?i)(?:рассылки|рассылка)[:\\s]*(\\d+)"
+    private static final Pattern MAILINGS_PATTERN_AFTER = Pattern.compile(
+            "(?:#(?:рассылки|рассылка|рассылок|директ|direct)[:\\s]*|(?:рассылки|рассылка|директ|direct)[:\\s-]+)(\\d+)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
+    private static final Pattern MAILINGS_PATTERN_BEFORE = Pattern.compile(
+            "(\\d+)\\s*(?:рассылки|рассылка|рассылок|рассылочек|директ|диалогов)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
 
     private static final Pattern SALES_PATTERN = Pattern.compile(
-            "#(?i)(?:продажи|продажа|оплата)[:\\s]*([0-9\\s.,kк]+)"
+            "(?:#?(?:продажи|продажа|оплата|продано|чек))[:\\s]*([0-9\\s.,kк]+)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
+    private static final Pattern REELS_COUNT_PATTERN = Pattern.compile(
+            "(\\d+)\\s*(?:рилс|рилса|рилсов|reels)|(?:#?(?:рилс|reels))[:\\s]*(\\d+)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
+    private static final Pattern POSTS_COUNT_PATTERN = Pattern.compile(
+            "(\\d+)\\s*(?:пост|поста|постов|публикаци|публикаций|карусел|карусели)|(?:#?(?:пост|карусель))[:\\s]*(\\d+)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
 
     private static final Pattern HASHTAG_QUESTION_PATTERN = Pattern.compile(
@@ -45,6 +62,10 @@ public class DeterministicAiFallbackService {
     );
 
     public ExtractedReportDto extractFacts(String rawMessage, String studentName) {
+        return extractFacts(rawMessage, studentName, "BYN");
+    }
+
+    public ExtractedReportDto extractFacts(String rawMessage, String studentName, String currency) {
         if (!StringUtils.hasText(rawMessage)) {
             return new ExtractedReportDto(
                     List.of(),
@@ -72,10 +93,12 @@ public class DeterministicAiFallbackService {
             emotionsBullet = "Состояние рабочее";
         }
 
+        String curStr = StringUtils.hasText(currency) ? " " + currency.trim() : " BYN";
         String actionsBullet = String.format(Locale.ROOT,
-                "Обработано рассылок: %d, сумма продаж: %s ₽",
+                "Обработано рассылок: %d, сумма продаж: %s%s",
                 mailings != null ? mailings : 0,
-                sales != null ? sales.setScale(2, RoundingMode.HALF_UP).toPlainString() : "0.00"
+                sales != null ? sales.setScale(2, RoundingMode.HALF_UP).toPlainString() : "0.00",
+                curStr
         );
 
         ReflectionSummaryDto reflectionSummary = new ReflectionSummaryDto(
@@ -85,9 +108,10 @@ public class DeterministicAiFallbackService {
         );
 
         String aiSummary = String.format(Locale.ROOT,
-                "Сдано по отчёту: %d рассылок, продажи %s ₽.%s",
+                "Сдано по отчёту: %d рассылок, продажи %s%s.%s",
                 mailings != null ? mailings : 0,
                 sales != null ? sales.setScale(2, RoundingMode.HALF_UP).toPlainString() : "0.00",
+                curStr,
                 "BURNOUT_ALERT".equals(emotionalStatus) ? " ⚠️ Сигнал выгорания в тексте." : ""
         );
 
@@ -109,12 +133,44 @@ public class DeterministicAiFallbackService {
 
     public Integer extractMailingsCount(String text) {
         if (!StringUtils.hasText(text)) return 0;
-        Matcher m = MAILINGS_PATTERN.matcher(text);
-        if (m.find()) {
+        Matcher mBefore = MAILINGS_PATTERN_BEFORE.matcher(text);
+        if (mBefore.find()) {
             try {
-                return Integer.parseInt(m.group(1).trim());
-            } catch (NumberFormatException e) {
-                return 0;
+                return Integer.parseInt(mBefore.group(1).trim());
+            } catch (NumberFormatException ignored) {}
+        }
+        Matcher mAfter = MAILINGS_PATTERN_AFTER.matcher(text);
+        if (mAfter.find()) {
+            try {
+                return Integer.parseInt(mAfter.group(1).trim());
+            } catch (NumberFormatException ignored) {}
+        }
+        return 0;
+    }
+
+    public Integer extractReelsCount(String text) {
+        if (!StringUtils.hasText(text)) return 0;
+        Matcher m = REELS_COUNT_PATTERN.matcher(text);
+        if (m.find()) {
+            String num = m.group(1) != null ? m.group(1) : m.group(2);
+            if (num != null) {
+                try {
+                    return Integer.parseInt(num.trim());
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        return 0;
+    }
+
+    public Integer extractPostsCount(String text) {
+        if (!StringUtils.hasText(text)) return 0;
+        Matcher m = POSTS_COUNT_PATTERN.matcher(text);
+        if (m.find()) {
+            String num = m.group(1) != null ? m.group(1) : m.group(2);
+            if (num != null) {
+                try {
+                    return Integer.parseInt(num.trim());
+                } catch (NumberFormatException ignored) {}
             }
         }
         return 0;
